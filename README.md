@@ -76,12 +76,34 @@ Três bugs que só apareceram porque o arnês existe:
 3. **A seed não fazia nada.** Nada na simulação consumia RNG, então as 40 seeds rodavam
    a mesma partida idêntica. Adicionado ruído de largada (posição e velocidade).
 
-## O que ainda não foi verificado
+## Verificação no navegador
 
-**Não consegui abrir o jogo no navegador** (extensão do Chrome não conectada nesta
-sessão). Verificado: tipagem, build de produção, todos os módulos servidos pelo Vite,
-e a simulação inteira via arnês headless. **Não verificado: o desenho no canvas e a mira
-por arrasto rodando de fato.** Abra e me diga o que quebra.
+Verificado ao vivo no Chrome (desktop, janela 844×390 simulando paisagem de celular):
+
+- tela de seleção monta os cards de Golem e Vex, escolha de ativa/passiva funciona
+- "Iniciar rodada" transiciona para a arena
+- física roda: bolas colidem, HUD de vida por bola, anel de cooldown nos botões
+- relógio da rodada e contagem regressiva de morte súbita aparecem
+- mira por arrasto nos botões das duas mãos, sem erro de console
+- `R` reinicia, tela de fim de rodada aparece na hora certa
+
+**Um quarto bug apareceu aqui, e o arnês não pegaria:** `let world = novaRodada()` era
+executado antes das declarações `let pendentes` e `let flutuantes`. A função é hoisted,
+as variáveis `let` não — TDZ. Isso derrubava o módulo inteiro na inicialização: o
+overlay aparecia (é HTML estático) mas nada de JS rodava. Corrigido reordenando as
+declarações. Lição: arnês headless prova a simulação, não prova o cliente.
+
+### Ainda não verificado: celular real
+
+O acesso pela rede local **não funcionou** ("resposta inválida" no navegador do celular).
+Descartados: firewall (o log do servidor mostra o celular conectando), HTTPS forçado,
+navegador embutido de app, e antivírus de terceiros. A resposta HTTP é válida — headers
+corretos e bytes conferem com o `Content-Length` em todos os arquivos. A interferência
+está entre o roteador e o aparelho. Testar via hotspot do próprio computador ou em
+outra rede é o próximo passo.
+
+**Consequência para o portão:** a sensação do arrasto com o polegar de verdade continua
+não medida. O que já dá para afirmar é que o jogo roda e responde a arrasto.
 
 ## Pontos de atenção para o teste
 

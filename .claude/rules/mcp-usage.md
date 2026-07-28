@@ -2,175 +2,80 @@
 paths: **/*
 ---
 
-# MCP Server Usage Rules - AIOX Architecture
+# Regras de uso de MCP — projeto Battle Balls
 
-## MCP Governance
+> **Este arquivo foi reescrito para refletir a máquina real.** A versão que veio com o
+> instalador do AIOX descrevia Docker MCP Toolkit, desktop-commander, Playwright, EXA,
+> Context7 e Apify. Nenhum deles está configurado aqui — verificado em `.mcp.json`,
+> `.claude/settings.json`, `.claude/settings.local.json` e `~/.claude.json`: **zero
+> servidores MCP registrados**. Um agente que seguisse aquelas regras chamaria
+> ferramenta inexistente e falharia.
 
-**IMPORTANT:** All MCP infrastructure management is handled EXCLUSIVELY by the **DevOps Agent (@devops / Gage)**.
+## Inventário real
 
-| Operation | Agent | Command |
-|-----------|-------|---------|
-| Search MCP catalog | DevOps | `*search-mcp` |
-| Add MCP server | DevOps | `*add-mcp` |
-| List enabled MCPs | DevOps | `*list-mcps` |
-| Remove MCP server | DevOps | `*remove-mcp` |
-| Setup Docker MCP | DevOps | `*setup-mcp-docker` |
+### Servidores MCP registrados
+**Nenhum.** Não existe `mcpServers` configurado em nenhum escopo.
 
-Other agents (Dev, Architect, etc.) are MCP **consumers**, not administrators. If MCP management is needed, delegate to @devops.
+### Capacidades disponíveis que NÃO são MCP registrado
 
----
+| Capacidade | Ferramentas | Observação |
+|---|---|---|
+| Automação de navegador | `mcp__claude-in-chrome__*` | Extensão Claude in Chrome. Requer o Chrome aberto e a extensão conectada — pode cair entre sessões. |
+| Busca na web | `WebSearch` | Nativa do Claude Code. |
+| Leitura de página | `WebFetch` | Nativa. Falha em URL autenticada. |
 
-## MCP Configuration Architecture
+## Prioridade de ferramentas
 
-AIOX uses Docker MCP Toolkit as the primary MCP infrastructure:
+Prefira sempre a ferramenta nativa. Ela executa no sistema local (Windows), é mais
+rápida e não depende de nada externo estar de pé.
 
-### Direct in Claude Code (global ~/.claude.json)
-| MCP | Purpose |
-|-----|---------|
-| **playwright** | Browser automation, screenshots, web testing |
-| **desktop-commander** | Docker container operations via docker-gateway |
+| Tarefa | Use | Não use |
+|---|---|---|
+| Ler arquivo | `Read` | `Bash(cat)` |
+| Escrever/editar | `Write` / `Edit` | `Bash(echo >)` |
+| Buscar arquivo por nome | `Glob` | `Bash(find)` |
+| Buscar conteúdo | `Grep` | `Bash(grep)` / `Bash(rg)` |
+| Rodar comando | `Bash` ou `PowerShell` | — |
+| Pesquisar na web | `WebSearch` | — |
+| Ler uma URL | `WebFetch` | `Bash(curl)` para conteúdo |
 
-### Inside Docker Desktop (via docker-gateway)
+`Bash(curl)` continua válido para **verificar** um endpoint (status HTTP, headers),
+não para ler conteúdo destinado a leitura humana.
 
-| MCP | Purpose |
-|-----|---------|
-| **EXA** | Web search, research, company/competitor analysis |
-| **Context7** | Library documentation lookup |
-| **Apify** | Web scraping, Actors, social media data extraction |
+## Automação de navegador
 
-## CRITICAL: Tool Selection Priority
+Use `mcp__claude-in-chrome__*` quando precisar ver o jogo rodando de verdade:
+validar render no canvas, testar mira por arrasto, ler erro de console.
 
-ALWAYS prefer native Claude Code tools over MCP servers:
+Regras:
+1. Chame `tabs_context_mcp` **antes** de qualquer outra ferramenta de browser.
+2. Crie aba nova (`tabs_create_mcp`) em vez de reaproveitar aba do usuário.
+3. Carregue os schemas em **uma única** chamada de `ToolSearch` — uma por ferramenta
+   desperdiça ida e volta.
+4. Se a extensão não responder após 2-3 tentativas, **pare e avise**. Não insista.
+5. Nunca dispare `alert()`, `confirm()` ou `prompt()` na página: dialog modal trava a
+   extensão inteira e exige intervenção manual do usuário.
 
-| Task | USE THIS | NOT THIS |
-|------|----------|----------|
-| Read files | `Read` tool | docker-gateway |
-| Write files | `Write` / `Edit` tools | docker-gateway |
-| Run commands | `Bash` tool | docker-gateway |
-| Search files | `Glob` tool | docker-gateway |
-| Search content | `Grep` tool | docker-gateway |
-| List directories | `Bash(ls)` or `Glob` | docker-gateway |
+Para este projeto especificamente, o alvo de verificação é
+`http://localhost:5177` (dev) ou `http://localhost:5178` (build de produção).
 
-## desktop-commander (docker-gateway) Usage
+## Se quiser adicionar um MCP
 
-### ONLY use docker-gateway when:
-1. User explicitly says "use docker" or "use container"
-2. User explicitly mentions "Desktop Commander"
-3. Task specifically requires Docker container operations
-4. Accessing MCPs running inside Docker (EXA, Context7)
-5. User asks to run something inside a Docker container
+Não adicione por conta própria. Um servidor MCP é dependência externa nova, com
+credenciais e superfície de falha próprias. Traga a proposta ao usuário antes,
+justificando qual limitação concreta ele resolve.
 
-### NEVER use docker-gateway for:
-- Reading local files (use `Read` tool)
-- Writing local files (use `Write` or `Edit` tools)
-- Running shell commands on host (use `Bash` tool)
-- Searching files (use `Glob` or `Grep` tools)
-- Listing directories (use `Bash(ls)` or `Glob`)
-- Running Node.js or Python scripts on host (use `Bash` tool)
+Se aprovado, a operação é do agente **@devops** (`*add-mcp`), conforme a matriz de
+autoridade do AIOX em `.claude/rules/agent-authority.md`.
 
-## playwright MCP Usage
+## Governança (mantida do AIOX)
 
-### ONLY use playwright when:
-1. User explicitly asks for browser automation
-2. User wants to take screenshots of web pages
-3. User needs to interact with a website
-4. Task requires web scraping or testing
-5. Filling forms or clicking elements on web pages
+Gestão de infraestrutura MCP é exclusiva do agente **DevOps (@devops / Gage)**.
+Os demais agentes são **consumidores**, não administradores.
 
-### NEVER use playwright for:
-- General file operations
-- Running commands
-- Anything not related to web browsers
-
-## EXA MCP Usage (via Docker)
-
-### Use EXA (mcp__docker-gateway__web_search_exa) for:
-1. Web searches for current information
-2. Research and documentation lookup
-3. Company and competitor research
-4. Finding code examples online
-
-### Access pattern:
-```
-mcp__docker-gateway__web_search_exa
-```
-
-## Context7 MCP Usage (via Docker)
-
-### Use Context7 for:
-1. Library documentation lookup
-2. API reference for packages/frameworks
-3. Getting up-to-date docs for dependencies
-
-### Access pattern:
-```
-mcp__docker-gateway__resolve-library-id
-mcp__docker-gateway__get-library-docs
-```
-
-## Apify MCP Usage (via Docker)
-
-### Use Apify for:
-1. Searching Actors in Apify Store (web scrapers, automation tools)
-2. Running web scrapers for social media (Instagram, TikTok, LinkedIn, etc.)
-3. Extracting data from e-commerce sites
-4. Automated data collection from any website
-5. RAG-enabled web browsing for AI context
-
-### Access pattern (7 tools available):
-
-```text
-mcp__docker-gateway__apify-slash-rag-web-browser  # RAG-enabled web browsing
-mcp__docker-gateway__search-actors                 # Search for Actors
-mcp__docker-gateway__call-actor                    # Run an Actor
-mcp__docker-gateway__fetch-actor-details           # Get Actor info/schema
-mcp__docker-gateway__get-actor-output              # Get results from Actor run
-mcp__docker-gateway__search-apify-docs             # Search Apify documentation
-mcp__docker-gateway__fetch-apify-docs              # Fetch documentation page
-```
-
-### When to use Apify vs other tools:
-| Task | Tool |
-|------|------|
-| General web search | EXA (`web_search_exa`) |
-| Scrape specific website | Apify (`call-actor`) |
-| Social media data extraction | Apify (use specialized Actors) |
-| Library documentation | Context7 |
-
----
-
-## Rationale
-
-- **Native tools** execute on the LOCAL system (Windows/Mac/Linux)
-- **docker-gateway** executes inside Docker containers (Linux)
-- Using docker-gateway for local operations causes path mismatches and failures
-- Native tools are faster and more reliable for local file operations
-- EXA, Context7, and Apify run inside Docker for isolation and consistent environment
-- playwright runs directly for better browser integration with host system
-
----
-
-## Known Issues
-
-### Docker MCP Secrets Bug (Dec 2025)
-
-**Issue:** Docker MCP Toolkit's secrets store and template interpolation do not work properly. Credentials set via `docker mcp secret set` are NOT passed to containers.
-
-**Symptoms:**
-- `docker mcp tools ls` shows "(N prompts)" instead of "(N tools)"
-- MCP server starts but fails authentication
-- Verbose output shows `-e ENV_VAR` without values
-
-**Workaround:** Edit `~/.docker/mcp/catalogs/docker-mcp.yaml` directly with hardcoded env values:
-```yaml
-{mcp-name}:
-  env:
-    - name: API_TOKEN
-      value: 'actual-token-value'
-```
-
-**Affected MCPs:** Any MCP requiring authentication (Apify, Notion, Slack, etc.)
-
-**Working MCPs:** EXA works because its key is in `~/.docker/mcp/config.yaml` under `apiKeys`
-
-For detailed instructions, see `*add-mcp` task or ask @devops for assistance.
+| Operação | Agente | Comando |
+|---|---|---|
+| Buscar no catálogo | DevOps | `*search-mcp` |
+| Adicionar servidor | DevOps | `*add-mcp` |
+| Listar habilitados | DevOps | `*list-mcps` |
+| Remover servidor | DevOps | `*remove-mcp` |
