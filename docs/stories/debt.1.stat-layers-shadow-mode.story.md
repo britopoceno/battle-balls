@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+Done
 
 ## Executor Assignment
 
@@ -256,26 +256,161 @@ removido (`debt.3`).
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §1.2, §1.3, §1.4, §1.5 e §6.1 (passo 1) | River (@sm) |
+| 2026-07-28 | 1.1 | Implementada. Status: Ready → InProgress → InReview. Todos os 9 ACs verificados: `tsc` limpo, golden hash idêntico ao baseline de `debt.0`, isolamento confirmado por grep (zero ocorrências de `.stat.`/`.base`/`.bonusItem`/`.bonusPassive` fora dos 2 arquivos esperados), 14 chaves confirmadas por execução direta. Assinatura de `recomputeStats` resolvida a favor de `(b: Ball): void` mutando in-place, conforme o Should-Fix apontado abaixo — a alternativa pura alocaria por chamada, contrariando §7.1. `restBall`/`restWall` adiados para `debt.5` (opção prevista na própria story), com nota deixada para o revisor daquela story. | @dev |
 | 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. **Discrepância 14/15 resolvida pelo @po: 14 é o número correto.** `architecture.md` §1.3 (array `STAT_KEYS`) e §1.4 (tabela de tetos) enumeram 14 chaves cada; nenhum 15º campo é nomeado em lugar algum do documento. O "15" aparece só em prosa não enumerada (§0 linha 19, §7.1 linha 750, §8/R-01 linha 849, Anexo B A-9) — é erro do documento-fonte. A decisão do @sm de implementar os 14 literais está **confirmada** (Article IV). Pendência para @architect (não bloqueia): reconciliar os 4 pontos, incluindo `3 600 recálculos/s` em §7.1 que deriva de 15 (com 14 seriam 3 360). Correção de citação: o "15" **não** está em §1.1, como afirma a nota da story. Should-Fix antes da implementação: AC 5 declara `recomputeStats(base, bonusPassive, bonusItem): StatBlock` (função pura que devolve bloco novo) mas AC 8, Task 3 e Task 4 chamam `recomputeStats(b)` — as duas formas são incompatíveis, e a que devolve `StatBlock` novo aloca por tick, contrariando §7.1. @dev/@architect decidem a assinatura única antes de codar. | @po |
+| 2026-07-28 | 1.2 | QA Gate CONCERNS — Status: InReview → Done. Verificação independente: `check`/`sim:check` reexecutados, baseline de `debt.0` confirmado intacto e o golden hash provado como tripwire vivo por teste negativo reproduzido do zero (`REST_BALL` +0,015% → 5 desvios, arquivo restaurado). Tabela de tetos conferida 14/14 contra `architecture.md` §1.4 sem erro de transcrição; `STAT_KEYS.length === 14` por execução; `stat[k] === base[k]` instrumentado tick a tick nas 5 seeds do baseline → **0 violações em 4.543 ticks**, e 0 drift entre `base` e os campos diretos; ordem de chaves idêntica a `STAT_KEYS` nos 4 blocos das 4 bolas. Cast `as StatBlock` confirmado único no repositório e endossado como escape hatch isolado. 5 ressalvas `low` (REQ-001 texto do AC5 desatualizado → @po; MNT-001 `zeroBonus` morto; ARCH-001 ciclo de import type-only; PERF-001 `Partial` nos clamps; DOC-001 checkboxes → @dev). Gate: `docs/qa/gates/debt.1-stat-layers-shadow-mode.yml`. | @qa |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-_A preencher pelo @dev._
+claude-opus-5 (sessão principal atuando como @dev)
 
 ### Debug Log References
 
-_A preencher pelo @dev._
+```
+$ npx tsc --noEmit
+(sem saída — 0 erros)
+
+$ npm run sim:check
+determinismo   ✓ ok
+golden hash    ✓ ok — 5 seeds batem o baseline
+espelho 2v2    time0 19 · time1 14 · empate 7
+duração        mediana 13.8s · min 12.3s · max 19.5s
+
+$ grep -rn "\.stat\." src --include="*.ts" | grep -v "sim/stats.ts\|sim/world.ts"
+(vazio)
+$ grep -rnE "\.(base|bonusItem|bonusPassive)\b" src --include="*.ts" | grep -v "sim/stats.ts\|sim/world.ts"
+(vazio)
+
+$ node --experimental-strip-types -e "import('./src/sim/stats.ts').then(m => console.log(m.STAT_KEYS.length))"
+14
+```
 
 ### Completion Notes List
 
-_A preencher pelo @dev._
+- **Assinatura de `recomputeStats` resolvida a favor da performance**, conforme o Should-Fix
+  do @po no Change Log: `recomputeStats(b: Ball): void`, mutando `b.stat` no lugar. A forma
+  pura (`recomputeStats(base, bonusPassive, bonusItem): StatBlock`) alocaria um `StatBlock`
+  por chamada — contraria `architecture.md` §7.1, citado na própria story. Documentado como
+  comentário no código-fonte, não só aqui.
+- **`b.stat` é `Readonly<StatBlock>`** (AC 6, literal). `recomputeStats` escreve nele via
+  `b.stat as StatBlock` — cast único e deliberado, comentado no local exato. É o ponto de
+  exceção controlada à proteção de tipo; nenhum outro código no repositório faz esse cast
+  (confirmado pelo grep de isolamento acima).
+- **`restBall`/`restWall` adiados para `debt.5`** (a story permitia as duas opções). `base`
+  usa `DEFAULT_STATS.restBall`/`restWall` (0.65/0.72) via spread — nenhum `CharDef` do roster
+  declara restituição própria hoje, então isso é idêntico ao comportamento atual. **Nota para
+  o revisor de `debt.5`:** `CharDef` ainda não tem `restBall?`/`restWall?` opcionais; ao migrar
+  a restituição por corpo, adicionar esses campos ao `CharDef` e trocar a fonte de `base` de
+  `DEFAULT_STATS` para `def.restBall ?? DEFAULT_STATS.restBall` (mesmo padrão para wall).
+- **14 campos confirmados por execução direta** (`STAT_KEYS.length === 14`), não só por
+  contagem visual da lista — fecha a verificação que o @po havia feito por leitura.
+- Golden hash idêntico ao baseline de `debt.0` para as 5 seeds — confirma que os campos novos
+  são aditivos e não alteram o comportamento, como a classificação de risco "baixo" da story
+  previa.
+- `zeroBonus()` foi criado em `stats.ts` conforme a Task 1 pedia a estrutura, mas **não é
+  chamado em lugar nenhum ainda** — nada escreve em `bonusPassive` nesta story (isso é
+  `debt.3`), então zerar a cada tick seria trabalho sem efeito. Fica pronto para `debt.3`
+  usar.
 
 ### File List
 
-_A preencher pelo @dev._
+| Arquivo | Mudança |
+|---|---|
+| `src/sim/stats.ts` | **novo** — `STAT_KEYS`, `StatBlock`, `BonusBlock`, `DEFAULT_STATS`, tabelas `SIGMA_MIN/MAX` e `ABS_MIN/MAX`, `makeStatBlock`, `zeroBonus`, `recomputeStats` |
+| `src/sim/types.ts` | `Ball` ganha `base`, `bonusPassive`, `bonusItem`, `stat` (aditivo — nada removido) |
+| `src/sim/world.ts` | import de `stats.ts`; `makeBall` popula os 4 campos novos e chama `recomputeStats` uma vez; `step()` chama `recomputeStats(b)` por bola viva, entre `def.on?.tick` e `def.move` |
+
+Nenhum arquivo em `chars/`, `bot/` ou `client/` foi tocado.
 
 ## QA Results
 
-_A preencher pelo @qa._
+### Review Date: 2026-07-28
+
+### Reviewed By: Quinn (@qa — Test Architect)
+
+**Revisão independente.** Nada abaixo foi aceito da Debug Log ou das Completion Notes do @dev:
+todos os comandos foram reexecutados, o teste negativo foi reproduzido do zero e a invariante
+central foi instrumentada em vez de assumida.
+
+#### O que foi verificado, e como
+
+| # | Verificação | Método | Resultado |
+|---|---|---|---|
+| 1 | `npm run check` | reexecutado pelo @qa | 0 erros |
+| 2 | `npm run sim:check` | reexecutado pelo @qa | determinismo ✓ · golden hash ✓ 5 seeds |
+| 3 | Baseline não foi adulterado | `git diff src/tools/determinism.ts` + comparação valor a valor com `architecture.md` §6.0 | vazio; os 5 hashes conferem |
+| 4 | O golden hash é tripwire vivo | `REST_BALL` 0.65 → 0.6501 em `physics.ts` (0,015%), rodar, restaurar | `golden hash ✗ 5 desvio(s)` + throw. Arquivo restaurado, `git status` limpo |
+| 5 | Ticks por seed | medidos pelo @qa | 753 / 961 / 830 / 831 / 1168 — batem o BASELINE (confirmação cruzada além do hash) |
+| 6 | Tabela de tetos vs `architecture.md` §1.4 | linha a linha, campo a campo | **14/14 corretos**, sem erro de transcrição |
+| 7 | `STAT_KEYS.length` | execução direta + `Set(...).size` | **14**, sem duplicatas — confirma a resolução do @po |
+| 8 | `stat[k] === base[k]` | instrumentado com `Object.is` nas 14 chaves × 4 bolas × cada tick das 5 seeds do baseline | **0 violações em 4.543 ticks** |
+| 9 | `base[k]` vs campo direto | mesma instrumentação | **0 drift** — nenhum `init`/`onTick` de passiva desincroniza os dois |
+| 10 | Forma de objeto (§7.1) | `Object.keys()` de `base`/`stat`/`bonusPassive`/`bonusItem` nas 4 bolas | ordem idêntica a `STAT_KEYS` nos 4 blocos — hidden class única |
+| 11 | Isolamento (AC9) | grep próprio `/\.(stat\|base\|bonusItem\|bonusPassive)\b/` em `src` | só `sim/stats.ts` + 1 comentário em `sim/world.ts` |
+| 12 | Cast `as StatBlock` | grep no repositório inteiro | **único** (`stats.ts:98`) |
+| 13 | Pureza de `sim/` (AC4) | leitura dos imports | `stats.ts` tem só `import type` — zero runtime dep, zero DOM/IO/`Math.random` |
+
+**Sobre a tabela de tetos (item 6).** Conferi os 14 campos contra `architecture.md` §1.4 sem
+atalho, incluindo as quatro ausências deliberadas de clamp absoluto: `dmg` não tem clamp (`—` na
+tabela) e `atkSpeed`/`cdSpeed`/`range` têm teto expresso sobre o valor **derivado** (cd efetivo,
+alcance efetivo), aplicado no ponto de consumo em `debt.2`/`debt.4`/`debt.5`, não dentro de
+`recomputeStats`. O `Partial<StatBlock>` do @dev codifica exatamente essa distinção, e o
+comentário no arquivo a explica. Nenhum número foi transcrito errado — que era o risco silencioso
+desta story, porque só apareceria na Fase 3.
+
+**Sobre a assinatura de `recomputeStats` (item 12).** A resolução é tecnicamente correta e eu a
+endosso. O argumento do @dev não é preferência: a forma pura alocaria um `StatBlock` por chamada
+no laço de tick, e `architecture.md` §7.1 proíbe alocar no caminho quente com número medido. O
+cast `b.stat as StatBlock` é escape hatch **limpo e isolado**, por três razões verificadas:
+(a) é o único cast de escrita no repositório inteiro; (b) é local — a referência mutável fica numa
+`const` dentro da função, nunca escapa nem é devolvida; (c) o `Readonly<StatBlock>` continua
+valendo para todo o resto do código, que é exatamente onde a proteção importa. Não abre buraco
+explorável: qualquer outro arquivo que quisesse escrever em `b.stat` teria de escrever o próprio
+cast, o que é ruído visível em revisão, não um vazamento silencioso. Ressalva registrada como
+REQ-001 é sobre o **texto do AC5**, que ficou desatualizado — não sobre a implementação.
+
+**Sobre o adiamento de `restBall`/`restWall` para `debt.5` (permitido pela story).** Suficiente,
+e por um motivo melhor que a nota do @dev: fui conferir a story `debt.5` e ela **já** prevê o caso
+no próprio texto — AC5 diz "`CharDef` ganha `restBall?`/`restWall?` opcionais (se ainda não
+adicionados em `debt.1`)" e a Task 1 repete "(se não feito em `debt.1`)". Ou seja, a informação
+não depende de alguém lembrar de ler o File List de `debt.1`: está no caminho crítico de quem for
+implementar `debt.5`. A nota do @dev é redundância útil, não a única defesa.
+
+**Armadilha latente que procurei e não encontrei.** `bonusPassive` nunca é zerado nesta story
+(`zeroBonus` existe e não é chamado). Se `debt.3` começar a escrever bônus sem zerar por tick, os
+bônus acumulariam para sempre — bug grave e difícil de ver. Fui conferir: `debt.3` AC8 e Task 2 já
+mandam zerar `b.bonusPassive` reusando o objeto, antes de `recomputeStats`. Coberto a jusante.
+
+#### Blast radius
+
+3 arquivos, +33 linhas em `src/` (`stats.ts` novo, `types.ts` +12, `world.ts` +21), nenhum arquivo
+em `chars/`, `bot/`, `client/` ou `tools/` tocado. Zero leitores reais dos campos novos — o
+"código morto por um passo" que a story prometia é literal, e agora está provado numericamente,
+não alegado.
+
+#### Ressalvas (todas `low`, nenhuma bloqueia)
+
+| ID | Achado |
+|---|---|
+| REQ-001 | Texto do AC5 ainda declara a assinatura pura, divergindo do código. Resolução autorizada e documentada em 3 lugares, mas o AC nunca foi emendado — @po. |
+| MNT-001 | `zeroBonus` é código morto; o projeto não tem script `lint` e `tsc` não sinaliza export órfão. Coberto por `debt.3`. |
+| ARCH-001 | `types.ts` ↔ `stats.ts` agora se importam mutuamente. Inofensivo hoje (`import type` dos dois lados, apagado em runtime); vira ciclo real se alguém trocar por import de valor em `debt.2`/`debt.3`. |
+| PERF-001 | `ABS_MIN`/`ABS_MAX` como `Partial` geram 4 leituras de propriedade ausente por bola por tick. Desprezível hoje; se o arnês de 40M ticks apontar, trocar por sentinelas ±Infinity. |
+| DOC-001 | Checkboxes de Tasks 1-5 e Quality Gate ainda `[ ]`. Segunda ocorrência (idem `debt.0`) — está virando padrão. @dev. |
+
+#### Higiene do gate
+
+Todos os experimentos do @qa foram revertidos: `physics.ts` restaurado do backup e `sim:check`
+reexecutado verde depois; script de instrumentação removido. `git status` ao final mostra apenas
+os 3 arquivos desta story mais o próprio story file.
+
+### Gate Status
+
+Gate: CONCERNS → `docs/qa/gates/debt.1-stat-layers-shadow-mode.yml`
+
+### Recommended Status
+
+**Done** — pronto para `debt.2`. As 5 ressalvas são `low` e nenhuma toca o comportamento do jogo
+nem a estrutura de dados entregue.

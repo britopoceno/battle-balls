@@ -1,6 +1,7 @@
 // Tipos do simulador. Puro: nada aqui conhece DOM, rede ou renderizador.
 
 import type { EffectSpec } from './effects.ts'
+import type { StatBlock, BonusBlock } from './stats.ts'
 
 export type Team = 0 | 1
 
@@ -58,6 +59,17 @@ export interface Ball {
   mods: Mods
   /** rascunho livre por personagem (contadores, cooldowns internos) */
   memory: Record<string, number>
+
+  // --- camada de stats (debt.1 — aditivo; mods e os campos diretos acima ainda são os
+  // únicos lidos até debt.3. Ver sim/stats.ts e architecture.md §1.
+  /** valores do CharDef, congelados na criação da bola */
+  base: StatBlock
+  /** bônus de passiva — aditivo, zerado e reescrito por tick */
+  bonusPassive: BonusBlock
+  /** bônus de item — aditivo, congelado durante a rodada */
+  bonusItem: BonusBlock
+  /** derivado: recomputeStats(base, bonusPassive, bonusItem). Não escrever direto. */
+  stat: Readonly<StatBlock>
 }
 
 export interface Projectile {

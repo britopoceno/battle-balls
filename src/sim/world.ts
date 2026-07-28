@@ -1,6 +1,7 @@
 import { mulberry32 } from './rng.ts'
 import { sumEffects, type EffectSpec } from './effects.ts'
 import { integrate, collideBalls, collideWalls, collideZoneWalls } from './physics.ts'
+import { DEFAULT_STATS, makeStatBlock, recomputeStats } from './stats.ts'
 import type {
   Aim,
   Ball,
@@ -106,8 +107,24 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     passiveIndex: pick.passiveIndex,
     mods: { dmg: 1, atkSpeed: 1, range: 1, speed: 1, knockbackResist: 0 },
     memory: {},
+
+    // camada de stats (debt.1) — base congela os valores do CharDef; restBall/restWall
+    // ainda não têm fonte própria no CharDef (isso é debt.5), usam DEFAULT_STATS por ora.
+    base: {
+      maxHp: def.maxHp,
+      radius: def.radius,
+      mass: def.mass,
+      maxSpeed: def.maxSpeed,
+      steer: def.steer,
+      drag: def.drag,
+      ...DEFAULT_STATS,
+    },
+    bonusPassive: makeStatBlock(0),
+    bonusItem: makeStatBlock(0),
+    stat: makeStatBlock(0), // populado abaixo, nunca lido não-inicializado
   }
   def.passives[pick.passiveIndex].init?.(b)
+  recomputeStats(b)
   return b
 }
 
@@ -488,6 +505,10 @@ export function step(world: World, commands: Command[] = []): void {
     const def = charOf(world, b)
     def.passives[b.passiveIndex].onTick?.(ctx, b)
     def.on?.tick?.(ctx, b)
+    // ponto único de recálculo de stats (debt.1, architecture.md §1.5). bonusPassive/
+    // bonusItem seguem sempre zerados nesta story — nenhum leitor real consome b.stat
+    // ainda (isso é debt.2) — então stat[k] === base[k] sempre, sem mudar o hash.
+    recomputeStats(b)
     def.move(ctx, b)
     if (def.ult.charge === 'time') addCharge(world, b, 'time', world.dt * 1000)
   }

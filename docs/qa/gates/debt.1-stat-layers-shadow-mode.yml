@@ -1,0 +1,72 @@
+schema: 1
+story: 'debt.1'
+gate: CONCERNS
+status_reason: 'Os 9 ACs foram verificados de forma independente: tsc limpo, golden hash idêntico ao baseline de debt.0 nas 5 seeds (com teste negativo reproduzido do zero para provar que o tripwire está vivo), tabela de tetos conferida número a número contra architecture.md §1.4, e a invariante central (stat[k] === base[k]) instrumentada tick a tick nas 5 seeds do baseline — zero violações em 4.543 ticks. As ressalvas são de texto de AC e higiene, nenhuma bloqueia a migração.'
+reviewer: 'Quinn (@qa)'
+reviewed_revision: 'worktree:uncommitted sobre 54a2dba — src/sim/stats.ts (novo), src/sim/types.ts, src/sim/world.ts'
+updated: '2026-07-28T00:00:00Z'
+
+verification_performed:
+  - 'npm run check → 0 erros de tsc (executado pelo @qa)'
+  - 'npm run sim:check → determinismo ✓ ok · golden hash ✓ ok — 5 seeds batem o baseline (executado pelo @qa)'
+  - 'BASELINE em determinism.ts confere com a tabela de architecture.md §6.0 valor a valor (96de1201/f66a7416/a8db9c28/cb77dbe0/6aede2d9); git diff em src/tools/determinism.ts vazio — o baseline NÃO foi tocado por esta story'
+  - 'TESTE NEGATIVO reproduzido do zero pelo @qa: REST_BALL 0.65 → 0.6501 em physics.ts (perturbação de 0,015%) → "golden hash ✗ 5 desvio(s)" + throw. Arquivo restaurado, git status limpo. Prova que o hash verde de AC3 é sinal, não no-op.'
+  - 'ticks por seed medidos independentemente pelo @qa (753/961/830/831/1168) batem os do BASELINE — confirmação cruzada além do hash'
+  - 'Tabela SIGMA_MIN/SIGMA_MAX/ABS_MIN/ABS_MAX conferida linha a linha contra architecture.md §1.4: 14/14 campos corretos, incluindo as 4 ausências deliberadas de clamp absoluto (dmg sem clamp; atkSpeed/cdSpeed/range com teto sobre o valor derivado, aplicado no ponto de consumo)'
+  - 'STAT_KEYS.length === 14 e Set(STAT_KEYS).size === 14 (execução direta, não contagem visual) — confirma a resolução 14-vs-15 do @po. DEFAULT_STATS tem exatamente as 8 chaves previstas.'
+  - 'INVARIANTE CENTRAL instrumentada: script temporário do @qa percorreu as 5 seeds do baseline (753+961+830+831+1168 = 4.543 ticks) verificando Object.is(b.stat[k], b.base[k]) para as 14 chaves × 4 bolas a cada tick → 0 violações. Idem base[k] vs campo direto (maxHp/radius/mass/maxSpeed/steer/drag) → 0 drift, provando que nenhum init/onTick de passiva desincroniza base do campo direto.'
+  - 'Ordem de chaves de base/stat/bonusPassive/bonusItem === ordem de STAT_KEYS nas 4 bolas → hidden class única no V8, como §7.1 exige. O literal de makeBall (6 campos + ...DEFAULT_STATS) produz a mesma ordem que makeStatBlock por construção.'
+  - 'Isolamento (AC9) confirmado por grep próprio: /\.(stat|base|bonusItem|bonusPassive)\b/ em src retorna apenas sim/stats.ts e um comentário em sim/world.ts — zero leitores reais fora dos 2 arquivos previstos'
+  - 'Cast `as StatBlock` de escrita: único no repositório (src/sim/stats.ts:98). O outro `{} as StatBlock` (linha 73) é inicializador de objeto vazio, não furo de proteção.'
+  - 'Pureza de sim/ (AC4): stats.ts importa apenas `import type { Ball } from ./types.ts` — zero dependência de runtime, zero DOM/IO/Math.random, zero import de chars//bot//client/'
+  - 'Deferimento de restBall/restWall verificado contra a story debt.5: os ACs 5 e a Task 1 dela já dizem "(se ainda não adicionados em debt.1)" / "(se não feito em debt.1)" — o revisor de debt.5 não pode redescobrir isso por acidente'
+  - 'Risco de esquecer zeroBonus verificado contra debt.3: AC8 e Task 2 daquela story já mandam zerar bonusPassive reusando o objeto antes de recomputeStats — armadilha latente já coberta a jusante'
+  - 'git status ao fim do gate: apenas os 3 arquivos desta story + o próprio story file. Nenhum resíduo de experimento do @qa.'
+
+acceptance_criteria:
+  AC1: PASS  # npm run check verde — reexecutado pelo @qa
+  AC2: PASS  # npm run sim:check verde — reexecutado pelo @qa
+  AC3: PASS  # golden hash idêntico nas 5 seeds, com teste negativo provando que o tripwire dispara
+  AC4: PASS  # sim/ continua puro; stats.ts só tem import type
+  AC5: CONCERNS  # arquivo e símbolos existem; a assinatura de recomputeStats diverge do texto literal do AC (ver REQ-001)
+  AC6: PASS  # 4 campos adicionados, nenhum removido
+  AC7: PASS  # base populado do CharDef + DEFAULT_STATS, bônus zerados, recomputeStats antes do return
+  AC8: PASS  # chamada única por bola viva entre def.on.tick e def.move; stat[k] === base[k] provado tick a tick
+  AC9: PASS  # isolamento confirmado por grep independente
+
+top_issues:
+  - id: 'REQ-001'
+    severity: low
+    finding: 'O texto do AC5 continua declarando `recomputeStats(base, bonusPassive, bonusItem): StatBlock` (função pura), enquanto o código entrega `recomputeStats(b: Ball): void`. A resolução é tecnicamente correta e foi autorizada pelo Should-Fix do @po no Change Log; está documentada em três lugares (Change Log, Completion Notes e comentário de 10 linhas no próprio stats.ts). Mas o AC nunca foi emendado — quem abrir a story daqui a três meses lê uma contradição entre AC5 e o código, e o rastro só se reconstrói lendo o Change Log inteiro.'
+    suggested_action: '@po emendar o texto do AC5 para a assinatura efetivamente entregue, mantendo a nota de que a mudança veio do Should-Fix. Território do @po — @qa não edita ACs.'
+
+  - id: 'MNT-001'
+    severity: low
+    finding: '`zeroBonus` é exportado e nunca chamado (código morto). O @dev documentou a escolha, e a story debt.3 já a consome (Task 2), então não é armadilha. Mas o projeto não tem script `lint` (package.json só tem dev/build/check/sim:check) e `tsc --noEmit` não sinaliza export não usado — nada no CI detectaria se debt.3 mudasse de ideia e a função ficasse órfã.'
+    suggested_action: 'Nenhuma ação nesta story. Se debt.3 não passar a chamar zeroBonus, remover a função em vez de deixá-la exportada.'
+
+  - id: 'ARCH-001'
+    severity: low
+    finding: 'sim/types.ts e sim/stats.ts agora se importam mutuamente. Hoje é inofensivo: os dois lados usam `import type`, apagado pelo type-stripping do Node e pelo bundler, então não existe ciclo em runtime (confirmado — sim:check roda). O risco é futuro: se alguém em debt.2/debt.3 trocar `import type` por import de valor em qualquer das duas pontas (ex.: importar STAT_KEYS em types.ts), o ciclo vira real e a ordem de inicialização passa a importar.'
+    suggested_action: 'Registrado para não ser redescoberto como surpresa. Se debt.3 precisar de STAT_KEYS em types.ts, mover os tipos compartilhados para um terceiro módulo em vez de fechar o ciclo.'
+
+  - id: 'PERF-001'
+    severity: low
+    finding: 'ABS_MIN/ABS_MAX são `Partial<StatBlock>`, então 4 das 14 chaves (dmg, atkSpeed, cdSpeed, range) são leituras de propriedade ausente dentro do laço de recomputeStats — miss de shape resolvido pela cadeia de protótipo, e um branch `!== undefined` por chave. Custo real hoje é desprezível (4 bolas × 60Hz × 14 chaves = 3.360 acessos/s) e a exigência de §7.1 que a story cita é sobre ALOCAÇÃO, que está atendida com zero alocação por chamada.'
+    suggested_action: 'Nenhuma agora. Se o arnês da Fase 2 (40M ticks) apontar recomputeStats no perfil, trocar por StatBlock completo com sentinelas ±Infinity — remove os dois branches e uniformiza o shape.'
+
+  - id: 'DOC-001'
+    severity: low
+    finding: 'Todos os checkboxes de Tasks/Subtasks (Task 1 a 5) e os de Quality Gate Tasks continuam `[ ]` com a story implementada e em InReview — mesma ocorrência já registrada no gate de debt.0 (DOC-001). Está virando padrão, não lapso isolado.'
+    suggested_action: '@dev marcar os checkboxes ao concluir cada task. Seção de Tasks é território do @dev — @qa não edita.'
+
+quality_checks:
+  code_review: PASS
+  tests: PASS
+  acceptance_criteria: CONCERNS  # 8/9 PASS; AC5 divergente no texto, não na substância
+  no_regressions: PASS
+  performance: PASS
+  security: PASS  # sim/ puro, sem I/O, sem rede, sem entrada externa; superfície de ataque inalterada
+  documentation: CONCERNS
+
+waiver: { active: false }
