@@ -60,8 +60,9 @@ export interface Ball {
   /** rascunho livre por personagem (contadores, cooldowns internos) */
   memory: Record<string, number>
 
-  // --- camada de stats (debt.1 — aditivo; mods e os campos diretos acima ainda são os
-  // únicos lidos até debt.3. Ver sim/stats.ts e architecture.md §1.
+  // --- camada de stats (debt.1). Desde debt.2, stat.* é lido por effectiveSpeed,
+  // dealDamage, autoAttack, integrate e collideBalls; knockback e os demais pontos que
+  // ainda leem os campos diretos acima fecham em debt.3. Ver sim/stats.ts e architecture.md §1.
   /** valores do CharDef, congelados na criação da bola */
   base: StatBlock
   /** bônus de passiva — aditivo, zerado e reescrito por tick */

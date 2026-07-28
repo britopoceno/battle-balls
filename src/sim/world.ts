@@ -134,7 +134,8 @@ const charOf = (w: World, b: Ball): CharDef => w.chars[b.charId]
 
 function effectiveSpeed(b: Ball): number {
   const slow = Math.min(MAX_SLOW, sumEffects(b.effects, 'slow'))
-  return b.maxSpeed * b.mods.speed * (1 - slow)
+  // debt.2 Task 1: maxSpeed migrado para stat.*; mods.speed intocado (migra em debt.3)
+  return b.stat.maxSpeed * b.mods.speed * (1 - slow)
 }
 
 /** empurra a bola na direção de uma velocidade desejada (steering) */
@@ -279,10 +280,13 @@ function dealDamage(
 
   let amt = amount
   if (source) {
-    amt *= source.mods.dmg
+    // debt.2 Task 2: dmg migrado para stat.*
+    amt *= source.stat.dmg
     amt *= 1 + sumEffects(source.effects, 'amp')
     amt *= charOf(world, source).passives[source.passiveIndex].onDamageDealt?.(ctx, source, target) ?? 1
   }
+  // dmgTaken é campo novo (debt.1), sempre 1.0 hoje — multiplicação é no-op até debt.3
+  amt *= target.stat.dmgTaken
   amt *= 1 + sumEffects(target.effects, 'vuln')
   amt *= charOf(world, target).passives[target.passiveIndex].onDamageTaken?.(ctx, target, source) ?? 1
 
@@ -358,7 +362,8 @@ function tickEffects(world: World, ctx: SimCtx, b: Ball): void {
 function autoAttack(world: World, ctx: SimCtx, b: Ball): void {
   if (!b.alive || world.time < b.atkReadyAt) return
   const def = charOf(world, b)
-  const range = def.atk.range * b.mods.range
+  // debt.2 Task 3: range migrado para stat.*
+  const range = def.atk.range * b.stat.range
 
   let target: Ball | null = null
   let bestD = Infinity
@@ -374,7 +379,8 @@ function autoAttack(world: World, ctx: SimCtx, b: Ball): void {
   }
   if (!target) return
 
-  b.atkReadyAt = world.time + def.atk.cd / b.mods.atkSpeed
+  // debt.2 Task 3: atkSpeed migrado para stat.*
+  b.atkReadyAt = world.time + def.atk.cd / b.stat.atkSpeed
   const dx = target.x - b.x
   const dy = target.y - b.y
   const d = Math.hypot(dx, dy) || 1
@@ -505,9 +511,11 @@ export function step(world: World, commands: Command[] = []): void {
     const def = charOf(world, b)
     def.passives[b.passiveIndex].onTick?.(ctx, b)
     def.on?.tick?.(ctx, b)
-    // ponto único de recálculo de stats (debt.1, architecture.md §1.5). bonusPassive/
-    // bonusItem seguem sempre zerados nesta story — nenhum leitor real consome b.stat
-    // ainda (isso é debt.2) — então stat[k] === base[k] sempre, sem mudar o hash.
+    // ponto único de recálculo de stats (architecture.md §1.5). Desde debt.2, 5 leitores
+    // reais consomem b.stat (effectiveSpeed, dealDamage, autoAttack, integrate,
+    // collideBalls); knockback ainda lê mods.knockbackResist direto (fecha em debt.3).
+    // bonusPassive/bonusItem seguem sempre zerados até debt.3 — então stat[k] === base[k]
+    // no roster atual, sem mudar o hash.
     recomputeStats(b)
     def.move(ctx, b)
     if (def.ult.charge === 'time') addCharge(world, b, 'time', world.dt * 1000)

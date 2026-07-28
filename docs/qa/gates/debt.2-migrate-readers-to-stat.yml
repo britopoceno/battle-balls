@@ -1,0 +1,128 @@
+schema: 1
+story: 'debt.2'
+gate: CONCERNS
+status_reason: >-
+  As 5 trocas estão corretas e cada uma foi verificada isoladamente pelo @qa (não
+  só pelo @dev): todas são hash-neutras individualmente. `SimCtx.knockback` está
+  intocado, confirmado por controle negativo. As ressalvas são dois comentários que
+  esta story tornou falsos e a ativação silenciosa dos clamps de `stats.ts`, que o
+  golden hash não consegue detectar com o roster de 2 personagens.
+reviewer: 'Quinn'
+reviewed_revision: 'working-tree sobre 291e2a9 (debt.1) — src/sim/world.ts, src/sim/physics.ts'
+updated: '2026-07-28T00:00:00Z'
+
+verification_performed:
+  independent_runs:
+    - 'npm run check → 0 erros (reexecutado pelo @qa)'
+    - 'npm run sim:check → determinismo ✓ · golden hash ✓ 5/5 seeds (reexecutado pelo @qa)'
+  baseline_integrity: >-
+    Tabela BASELINE de src/tools/determinism.ts idêntica byte a byte ao commit
+    d52c23d (debt.0) e ao HEAD. Nenhuma adulteração do critério de aprovação.
+  isolated_swap_reproduction: >-
+    As 5 trocas foram reconstruídas UMA A UMA a partir de HEAD(debt.1) numa cópia
+    isolada da árvore (scratchpad, working tree jamais tocada) e cada variante
+    rodou sim:check sozinha. Resultado: 5/5 hash-neutras. A alegação da Debug Log
+    do @dev foi verificada em substância, não aceita por confiança.
+  negative_control: >-
+    Migrar SimCtx.knockback para stat.knockbackTaken/stat.mass na mesma cópia
+    isolada produziu 11 desvios do baseline (hash quebra nas 5 seeds; vencedor
+    inverte nas seeds 3 e 7; seed 2 vai de 961 para 1102 ticks). Confirma que
+    (a) o arnês de verificação é sensível e (b) a determinação do @po na v1.0.1
+    era certeza, não hipótese.
+  working_tree_restored: >-
+    git status pós-experimentos idêntico ao pré: só os 3 arquivos desta story
+    modificados, zero arquivos não rastreados em src/.
+
+top_issues:
+  - id: 'MNT-001'
+    severity: medium
+    finding: >-
+      Dois comentários que esta story tornou factualmente FALSOS e não atualizou.
+      world.ts:515-516 afirma "nenhum leitor real consome b.stat ainda (isso é
+      debt.2)" — debt.2 é exatamente o que passou a consumir. types.ts:63-64
+      afirma "mods e os campos diretos acima ainda são os únicos lidos até
+      debt.3" — 5 deles deixaram de ser lidos. Ambos foram escritos em debt.1 e
+      eram verdadeiros lá. O leitor natural desses dois comentários é o dev de
+      debt.3, ou seja, exatamente quem mais precisa da informação correta.
+    suggested_action: >-
+      Corrigir os dois comentários em debt.3 (ou antes), refletindo quais leitores
+      já migraram e quais faltam.
+
+  - id: 'ARCH-001'
+    severity: medium
+    finding: >-
+      Esta story tornou os clamps ABS_MIN/ABS_MAX de stats.ts LOAD-BEARING sem que
+      nenhum teste cubra isso. Até debt.1 os clamps eram inertes (ninguém lia
+      stat.*). Agora radius é clampado em 8..40, maxSpeed em 20..420, drag em
+      0.05..0.6, mass em >=0.2, maxHp em >=20 no caminho de leitura real. Golem
+      (r24/d0.3/m3.2/v105/hp190) e Vex (r15/d0.22/m0.9/v250/hp100) estão todos
+      dentro das faixas — por isso o hash não muda. Mas um personagem novo fora
+      de faixa teria a física silenciosamente alterada, e o golden hash NÃO pode
+      detectar isso: o baseline roda um roster fixo de golem+vex.
+    suggested_action: >-
+      Adicionar em debt.3 (ou numa story de teste do épico) uma asserção que falhe
+      se algum CharDef do roster tiver base fora de ABS_MIN/ABS_MAX — é uma
+      verificação de 10 linhas que cobre um ponto cego estrutural do golden hash.
+
+  - id: 'PROC-001'
+    severity: low
+    finding: >-
+      AC 6 exige que cada troca seja seguida de sim:check isolado. A Debug Log
+      lista as 5 execuções, mas não existe artefato auditável: tudo chegou numa
+      única working tree, sem commits intermediários. A alegação de sequência é
+      inverificável a posteriori. O @qa supriu isso reconstruindo as 5 trocas
+      isoladamente, mas isso é auditoria de substância, não do processo.
+    suggested_action: >-
+      Nas stories restantes do épico (debt.3-debt.7), fazer um commit por troca
+      individual. Torna a evidência de AC 6 auditável por git log em vez de
+      depender de confiança na Debug Log.
+
+  - id: 'MNT-002'
+    severity: low
+    finding: >-
+      Os comentários "// debt.2 Task N: X migrado para stat.*" misturam sinal e
+      ruído. A parte substantiva é útil ("mods.speed intocado (migra em debt.3)",
+      "dmgTaken sempre 1.0 hoje — no-op até debt.3"): explica uma escolha que o
+      código não explica. A parte "Task N" é ruído — aponta para uma numeração de
+      tasks interna a uma story que será arquivada, e que foi REESCRITA no meio do
+      caminho (Change Log v1.0.2 renumerou as tasks). O restante ("drag migrado
+      para stat.*") só repete a linha abaixo, que git blame já explica melhor.
+      Adicionalmente, 5 desses comentários dizem "até debt.3"/"migra em debt.3" e
+      viram lixo no dia em que debt.3 fechar, sem que ninguém tenha registrado
+      essa obrigação de limpeza.
+    suggested_action: >-
+      Em debt.3, remover as referências "Task N" e os comentários que ficaram
+      obsoletos; preservar apenas as notas que explicam uma decisão.
+
+scope_judgments:
+  radius_readers_left_out:
+    verdict: ESCOPO CORRETO
+    reasoning: >-
+      physics.ts (collideWalls:77, collideZoneWalls:112) e world.ts (gap de
+      alcance:374, spawn de projétil:409-410, colisão de projétil:437, popup de
+      dano:297) continuam lendo b.radius direto, enquanto collideBalls passou a
+      ler stat.radius. Isso é uma inconsistência REAL, mas de janela fechada e
+      efeito nulo: stat.radius === base.radius === b.radius hoje (bônus sempre 0,
+      valores dentro dos clamps), e debt.3 remove os campos diretos de Ball —
+      momento em que o compilador aponta CADA um desses sites, porque Ball é
+      interface sem index signature. A rede de proteção é real, não esperança.
+      Migrá-los aqui seria estender AC 5 além do que o @po validou e além do que
+      architecture.md §6.1 define como passo 2. As leituras de z.radius não são
+      nem candidatas — Zone não tem camada de stats.
+  knockback_deferral:
+    verdict: DECISÃO CORRETA, COMPROVADA
+    reasoning: >-
+      Ver negative_control acima. A troca quebraria o hash nas 5 seeds e inverteria
+      o vencedor em 2 delas. A correção da story em v1.0.2 evitou um ciclo inteiro
+      gasto num experimento de resultado conhecido.
+
+acceptance_criteria:
+  AC1_tsc: PASS
+  AC2_sim_check: PASS
+  AC3_golden_hash: PASS
+  AC4_sim_purity: PASS
+  AC5_five_readers: PASS
+  AC6_isolated_verification: PASS (substância verificada pelo @qa; processo não auditável — PROC-001)
+  AC7_knockback_untouched: PASS
+
+waiver: { active: false }

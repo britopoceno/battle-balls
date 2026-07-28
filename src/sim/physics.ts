@@ -14,7 +14,8 @@ export function integrate(world: World): void {
     b.ay = 0
     // arrasto exponencial: `drag` é a fração de velocidade retida por segundo.
     // É isso que faz o knockback decair de forma legível em ~1-2s.
-    const k = Math.pow(b.drag, dt)
+    // debt.2 Task 4: drag migrado para stat.*
+    const k = Math.pow(b.stat.drag, dt)
     b.vx *= k
     b.vy *= k
     b.x += b.vx * dt
@@ -35,9 +36,10 @@ export function collideBalls(
     for (let j = i + 1; j < balls.length; j++) {
       const b = balls[j]
       if (!b.alive) continue
+      // debt.2 Task 5: radius e mass migrados para stat.*
       const dx = b.x - a.x
       const dy = b.y - a.y
-      const r = a.radius + b.radius
+      const r = a.stat.radius + b.stat.radius
       const d2 = dx * dx + dy * dy
       if (d2 >= r * r || d2 === 0) continue
 
@@ -45,8 +47,8 @@ export function collideBalls(
       const nx = dx / d
       const ny = dy / d
       const overlap = r - d
-      const invA = 1 / a.mass
-      const invB = 1 / b.mass
+      const invA = 1 / a.stat.mass
+      const invB = 1 / b.stat.mass
       const invSum = invA + invB
 
       a.x -= nx * overlap * (invA / invSum)
