@@ -59,7 +59,8 @@ batem exatamente com o `README.md`, sem divergência**:
 | Espelho 2v2 | time0 **19** · time1 **14** · empate **7** (40 seeds) | **Dentro do ruído.** 33 rodadas decisivas, 19-14 dá p≈0,38 bicaudal. n=40 tem margem de ±15pp — não prova simetria, só não a contradiz |
 | Duração da rodada | mediana **13,8s** · min 12,3s · max 19,5s | **4,3x abaixo** do teto de 60s do design |
 | Tipagem / build | `tsc --noEmit` e build de produção passam | — |
-| Render e mira por arrasto | **NÃO VERIFICADOS** rodando | Bloqueia o portão da Fase 0 (ver §6) |
+| Render e mira por arrasto | ✓ **verificados no Chrome** (844×390, paisagem) | Seleção de build, arena, física, HUD, cooldown, arrasto nas duas mãos, `R`, fim de rodada — todos funcionando |
+| Celular real | **NÃO verificado** — acesso pela rede local falha | Não é bug de código: HTTP válido, bytes conferem, celular conecta. Interferência entre roteador e aparelho. Bloqueia a medição de *sensação de polegar*, não o funcionamento |
 
 ### Os três bugs que só o arnês achou
 
@@ -75,6 +76,15 @@ Evidência de que medir cedo funciona — nenhum dos três é visível lendo o c
    intenção do design**: empurrar o alvo continua fazendo o tiro errar.
 3. **A seed não fazia nada.** Nada consumia RNG; as 40 seeds rodavam a mesma partida.
    Corrigido com ruído de largada em posição e velocidade (`src/sim/world.ts:68-71`).
+
+### O quarto bug, que o arnês NÃO acharia
+
+4. **TDZ no cliente.** `let world = novaRodada()` executava antes das declarações
+   `let pendentes` / `let flutuantes` que a função usa. Função é hoisted, `let` não.
+   Derrubava o módulo inteiro na inicialização — o overlay aparecia (HTML estático) mas
+   nenhum JS rodava. Só apareceu abrindo o navegador de verdade.
+   **Lição para o PRD: arnês headless prova a simulação, não prova o cliente.** Fase 1
+   precisa de critério de verificação visual próprio, não herdado do `sim:check`.
 
 ### Desvios conscientes já registrados
 
@@ -181,15 +191,16 @@ no tipo e são renderizados (`render.ts:366`).
 
 ## 6. Próximo portão
 
-**O portão da Fase 0 NÃO foi passado. A Fase 1 não pode começar.**
+**O portão da Fase 0 está PENDENTE DE JULGAMENTO HUMANO** — não bloqueado por defeito.
 
 | | |
 |---|---|
 | **Fase** | 0 — Núcleo (construída) |
 | **Pergunta do portão** | *Mirar habilidades em bolas que andam sozinhas é divertido?* |
 | **Critério para passar** | Julgamento humano. Não há métrica automática e não deve haver: o `DESIGN.md` posiciona esta como a pergunta que valida ou invalida as outras 60 decisões. Só o usuário jogando responde |
-| **Bloqueio ativo** | O `README.md` registra que o canvas e a mira por arrasto **nunca foram vistos rodando** — a extensão do Chrome não conectou. Verificados: tipagem, build, módulos servidos pelo Vite, simulação inteira via arnês headless. Não verificado: o desenho e o arrasto de fato |
-| **Ação imediata** | `npm run dev` → `http://localhost:5177`, em paisagem, **no celular** (`npx vite --host`). Jogar. Reportar o que quebra |
+| **Estado real** | O jogo **roda e responde**, verificado no Chrome desktop em janela de paisagem: seleção de build, arena, física, HUD, cooldowns, mira por arrasto nas duas mãos, restart, fim de rodada. O bug de TDZ que impedia tudo isso foi encontrado e corrigido nessa verificação |
+| **O que falta** | Julgamento humano jogando — e de preferência **em celular real**, porque a pergunta é sobre polegar, não sobre mouse. O acesso pela rede local falhou por interferência de rede (não é defeito do código): testar via hotspot do computador ou outra rede |
+| **Ação imediata** | `npm run dev`, jogar em paisagem, decidir se é divertido |
 
 **Se o portão passar, a Fase 1 é:** layout mobile paisagem + 4 botões semitransparentes +
 mira por arrasto, testado em celular real. Portão da Fase 1: *os dois polegares funcionam
