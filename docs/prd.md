@@ -3,7 +3,8 @@
 > Escrito **a partir** de `DESIGN.md` v1 (decisões travadas) e `docs/brief.md` (medições e
 > contradições verificadas). Não reabre decisão. Onde o brief e o `DESIGN.md` divergem, o
 > conflito está **sinalizado**, não resolvido.
-> Data: 2026-07-28 · Fase corrente: 0 (construída, **portão pendente**).
+> Data: 2026-07-28 · Fase corrente: **0 APROVADA pelo usuário — Fase 1 autorizada**.
+> Todas as decisões de §5 e todos os indicadores de §6 foram aprovados em 2026-07-28.
 
 ---
 
@@ -37,7 +38,7 @@ vivo); rollback/resimulação no netcode; ring-out; dano por colisão passiva.
 Ordem e portões seguem `DESIGN.md` §9. **Regra do método (decisão travada #15): não se
 avança sem passar o portão.** Cada épico traz seu pré-requisito bloqueante quando existe.
 
-Indicador de escopo aplicável a todos (Risco #3, `[PROPOSTO]`): dias de calendário da fase
+Indicador de escopo aplicável a todos (Risco #3, **aprovado** §6): dias de calendário da fase
 ÷ estimativa do `DESIGN.md`. Acima de **2x** → reabrir corte de escopo; o corte natural é
 roster 8 → 4-5, já que a "regra do 9º" prova que o roster é elástico por design.
 
@@ -56,13 +57,14 @@ de produção passam; render e mira verificados no Chrome desktop em paisagem.
 posiciona esta como a pergunta que valida ou invalida as outras 60 decisões; só o usuário
 jogando responde. Qualquer número que este PRD inventasse aqui seria métrica falsa.
 
-**Estado: PENDENTE.** O jogo roda e responde. Falta o usuário jogar — de preferência em
-**celular real**, porque a pergunta é sobre polegar, não sobre mouse. O acesso pela rede
-local falha por interferência entre roteador e aparelho (não é defeito de código; brief §3);
-contornar por hotspot do computador ou outra rede.
+**Estado: ✅ APROVADO pelo usuário em 2026-07-28.** Veredito: *é divertido.* A pergunta que
+validava ou invalidava as outras 60 decisões foi respondida — o núcleo do jogo se sustenta.
 
-> ⛔ **Nenhum trabalho da Fase 1 em diante começa antes deste portão ser dado pelo usuário.**
-> Este PRD planeja as fases seguintes; não as autoriza.
+> ✅ **Fase 1 autorizada.** O portão foi dado em desktop; a verificação em **celular real**
+> permanece pendente e migra para a pré-condição **P1.1 da Fase 1**, onde ela é obrigatória.
+> O acesso pela rede local falha por interferência entre roteador e aparelho (não é defeito
+> de código; brief §3) — contornar por hotspot do computador ou outra rede é a primeira
+> tarefa da E1.
 
 ---
 
@@ -85,7 +87,7 @@ julgamento sem decidi-lo:
 |---|---|---|
 | P1.1 | O jogo carregou e foi jogado em **celular real**, em paisagem, por pelo menos uma partida completa | Pré-condição binária |
 | P1.2 | **Smoke visual próprio no dispositivo** — seleção de build, arena, física, HUD, cooldown, arrasto nas duas mãos, fim de rodada, sem erro de console | Pré-condição binária |
-| P1.3 | % de rodadas em que o jogador usou **só uma** das duas mãos; taxa de cast desperdiçado (mira >45° do alvo ou em bola morta) | Evidência — indicador `[PROPOSTO]`, pendente de aprovação (§6) |
+| P1.3 | % de rodadas em que o jogador usou **só uma** das duas mãos; taxa de cast desperdiçado (mira >45° do alvo ou em bola morta) | Evidência — indicador **aprovado** (§6) — instrumentar JUNTO com a E1 |
 
 **P1.2 não é redundante com `npm run sim:check`.** O bug de TDZ do brief §3 derrubava o
 módulo inteiro do cliente e o arnês headless não o veria: arnês prova a simulação, não prova
@@ -123,7 +125,7 @@ entre versões do bot — e isso quebra a Fase 4 antes de ela existir. Ver D-08.
 **Medição adicional a fazer nesta fase (não é portão):** detecção precoce do Risco #1 —
 delta de winrate de um pacote físico (+20% massa, −20% drag) vs um pacote de dano (+20% dmg)
 contra a mesma linha-base. Gatilho: físico < +2pp e dano > +5pp → a trilha física nasce morta
-e a Fase 3 precisa ser reprojetada antes de a loja existir. Indicador `[PROPOSTO]` (§6).
+e a Fase 3 precisa ser reprojetada antes de a loja existir. Indicador **aprovado** (§6).
 
 **Também nesta fase:** % de rodadas que atingem 60s (Risco #6). Hoje é 0 de 40, com max de
 19,5s. Se seguir 0% após o ajuste de HP/dano, ou a morte súbita é código morto ou os números
@@ -148,7 +150,7 @@ telemetria local para os Riscos #1, #5 e #6.
 >   dois itens de dano são um problema de balanceamento indeterminado.
 
 **Portão — JULGAMENTO HUMANO:** *dá vontade de jogar outra partida?* Acompanhado de evidência
-instrumentada (todos `[PROPOSTO]`, §6), que informa o julgamento sem substituí-lo:
+instrumentada (todos **aprovado**, §6), que informa o julgamento sem substituí-lo:
 
 | | Evidência | Gatilho de alerta |
 |---|---|---|
@@ -267,7 +269,7 @@ PM — os que dependem de decisão pendente estão marcados com o ID da decisão
 | RF-33 | Arrastar do botão define **direção E distância** (`mag` interpolando entre `minRange` e `maxRange`); soltar casta | decisão #9 |
 | RF-34 | Mira aparece **imediatamente** na bola correspondente (feedback local), mesmo com o efeito saindo em ~100ms | DESIGN §5 |
 | RF-35 | Atalhos de teclado (`Q W` / `O P`, `R`, espaço) são **ferramenta de desenvolvimento**, não requisito de produto | README |
-| RF-36 | Instrumentação do Risco #4: % de rodadas com uma só mão; taxa de cast desperdiçado | **`[PROPOSTO]`, ver §6** — instrumentar **junto com** a Fase 1, não depois |
+| RF-36 | Instrumentação do Risco #4: % de rodadas com uma só mão; taxa de cast desperdiçado | ****aprovado**, ver §6** — instrumentar **junto com** a Fase 1, não depois |
 
 ### 3.5 Netcode
 
@@ -289,7 +291,7 @@ PM — os que dependem de decisão pendente estão marcados com o ID da decisão
 | RF-45 | O bot joga **os dois lados**. Não precisa jogar *bem* — precisa jogar **igual nos dois lados**, porque assimetria é o que está sendo medido | DESIGN §6 |
 | RF-46 | O bot consome **stream de PRNG próprio**, separado de `world.rng` | **pendente D-08 — decidir antes de escrever o bot** |
 | RF-47 | CLI de balanceamento: N lutas × 28 confrontos → **matriz de winrate**, com alerta fora de **45–55%** | decisão #13 |
-| RF-48 | n por confronto **≥ 800** (poder 80% para distinguir 55% de 50%); o design pede 10k → ±1pp. **40 seeds dão ±15pp e não servem para balancear** | brief §4, Risco #2b `[PROPOSTO]` |
+| RF-48 | n por confronto **≥ 800** (poder 80% para distinguir 55% de 50%); o design pede 10k → ±1pp. **40 seeds dão ±15pp e não servem para balancear** | brief §4, Risco #2b **aprovado** |
 | RF-49 | Telemetria de jogadores reais (peneira fina): winrate por personagem, por build e por item; taxa de pick; duração média da rodada | DESIGN §6 — Fase 5 |
 | RF-50 | **Regra do 9º personagem:** nenhum personagem novo entra enquanto os 8 não estiverem em 45–55% | decisão #12 |
 
@@ -361,10 +363,33 @@ o teto é regra de jogo ou salvaguarda de engenharia.
 
 ---
 
-## 5. Decisões de produto pendentes
+## 5. Decisões de produto — ✅ TODAS APROVADAS (2026-07-28)
 
-Preciso que o usuário feche estas. Cada uma tem recomendação e risco declarado. **D-02, D-03
-e D-04 bloqueiam a Fase 3.**
+> **O usuário aprovou as recomendações do @pm em bloco.** Cada decisão abaixo passa a valer
+> como escrito na respectiva "Recomendação". A Fase 3 deixa de estar bloqueada por decisão
+> de produto — segue bloqueada apenas por **dívida de arquitetura (§4: C2 e C3)**.
+
+| # | Decisão aprovada | Observação |
+|---|---|---|
+| D-01 | Build **muda** entre rodadas, com custo em ouro | Preço é parâmetro medido na Fase 3, junto de D-09 |
+| D-02 | Rodada empatada é **nula**; teto de **7 rodadas**; ao fim vence quem tiver mais vitórias | Aprovada **com as duas partes**: a regra vale já, e a incidência de empate é **re-medida na Fase 2** com roster heterogêneo antes de se fixar o peso dela |
+| D-03 | +alcance afeta **só o ataque básico** na v1 | Revisão na Fase 5 com telemetria de winrate-por-item (RF-49) |
+| D-04 | `valor = base × (1 + Σbônus_passiva + Σbônus_item)`, **teto explícito por campo** | Tetos precisam ser números escritos. Entrada direta para o @architect em C3 |
+| D-05 | Mediana-alvo da rodada entre **25s e 35s**, fixada por medição na Fase 3 | Não ajustar antes da Fase 2 existir |
+| D-06 | Estouro do timer de build → **seleção default determinística**, sem penalidade | Randomizar ordem de exibição se a default virar meta |
+| D-07 | Pilar 3 reformulado: *"colisão **passiva** causa 0 dano; dano por contato existe apenas dentro de janela explícita de habilidade, declarada no personagem"* | Golem mantido. A janela vira **campo do personagem**, não código solto em `on.collide` — trabalho do @architect |
+| D-08 | Bot recebe **stream de PRNG próprio**, semeado a partir da seed da partida | Owner: @architect, no desenho do bot |
+| D-09 | Números da economia **não se decidem agora** | Valores provisórios permitidos desde que marcados como provisórios |
+
+**Consequência de D-07:** o Pilar 3 do `DESIGN.md` precisa ser reescrito com essa redação, e
+C1 deixa de ser contradição — vira exceção declarada e auditável.
+
+---
+
+### Registro original das recomendações
+
+Mantido abaixo por rastreabilidade: cada decisão com o raciocínio e o risco que o @pm
+declarou no momento da recomendação. **D-02, D-03 e D-04 bloqueavam a Fase 3.**
 
 ### D-01 — Build muda entre rodadas do Bo5? *(herdada de `DESIGN.md` §8)*
 
@@ -474,23 +499,34 @@ marcados como provisórios.
 ## 6. Indicadores de risco
 
 `DESIGN.md` §7 lista 5 riscos, mas só o Risco #1 tem indicador definido pelo próprio design.
-Os demais indicadores vieram do brief §4 e estão marcados **`[PROPOSTO]` — proposta do
-@analyst, não decisão do usuário.** Este PRD os lista como **pendentes de aprovação**; eles só
-viram critério de portão depois que o usuário aprovar.
+Os demais vieram do brief §4.
+
+> ### ✅ TODOS OS **aprovado** FORAM APROVADOS (2026-07-28)
+>
+> O usuário aprovou os indicadores em bloco. Eles deixam de ser proposta do @analyst e passam
+> a ser **critério de portão vinculante**. Consequências imediatas:
+>
+> - **O portão da Fase 2 está fechado e é objetivo**: o teste de mutante (#2) vale como P2.2,
+>   com o controle negativo (P2.3) que o @pm acrescentou. A Fase 2 não passa por julgamento.
+> - **n ≥ 800 lutas por confronto** (#2b) é obrigatório. As 40 seeds atuais dão ±15pp e
+>   **não servem para balancear** — servem só como teste de fumaça de determinismo.
+> - **O indicador do Risco #4 precisa ser instrumentado JUNTO com a Fase 1**, não depois:
+>   medir % de rodadas com uma só mão exige telemetria de input no cliente.
+> - **Risco #7 vira D-08** (aprovada): bot com stream de PRNG próprio.
 
 | # | Risco | Indicador | Gatilho | Fase | Status |
 |---|---|---|---|---|---|
 | 1 | Trilha de combate mata a trilha física | Taxa de compra de itens físicos | **< 35%** | 5 | ✅ **Decidido** (`DESIGN.md` §7) |
-| 1b | ↳ detecção precoce | No arnês: delta de winrate de pacote físico (+20% massa, −20% drag) vs pacote de dano (+20% dmg), contra a mesma linha-base | físico < +2pp **e** dano > +5pp → a trilha física nasce morta | **2** | ⏳ `[PROPOSTO]` |
-| 2 | Liberdade total sem moeda comum de dano | **Teste de mutante:** Vex com +30% de dano é reportado fora de 45–55% | arnês não detecta → o arnês não serve e a Fase 2 não passou | 2 | ⏳ `[PROPOSTO]` — **usado como P2.2 acima; se reprovado, o portão da Fase 2 volta a ser subjetivo** |
-| 2b | ↳ poder estatístico | n de lutas por confronto | < **800** não distingue 55% de 50% com 80% de poder. 40 seeds = ±15pp | 2 | ⏳ `[PROPOSTO]` |
-| 3 | Escopo somado (~12 meses) | Dias de calendário ÷ estimativa (F1: 1sem · F2: 1-2 · F3: 2-3 · F4: 2-3 · F5: 6-8) | **> 2x** → reabrir corte de escopo (corte natural: roster 8 → 4-5) | fim de cada fase | ⏳ `[PROPOSTO]` |
-| 4 | Mirar 2 personagens ao vivo | % de rodadas com **uma só** mão; taxa de cast desperdiçado (mira >45° do alvo ou em bola morta) | uma mão em **> 70%** → o input de duas bolas falhou; plano B é 1 bola pilotada + 1 automática | 1 | ⏳ `[PROPOSTO]` |
-| 5 | Curva econômica curta (4 compras) | Mediana da rodada com humano no controle | **< 25s** → o item não é sentido e a loja perde função | 3 | ⏳ `[PROPOSTO]` |
-| 6 | **`[NOVO]`** Morte súbita é código morto | % de rodadas que atingem 60s | Hoje **0 de 40** (max 19,5s). Seguir em 0% após ajuste de HP/dano → ou a mecânica é desnecessária, ou os números de combate estão errados por fator ~4 | 2 e 3 | ⏳ `[PROPOSTO]` — risco não listado no `DESIGN.md` |
-| 7 | **`[NOVO]`** Fluxo de RNG compartilhado bot↔sim | Bot da Fase 2 consumindo `world.rng` | Se consumir, "replay = seed + inputs" deixa de valer entre versões do bot | 2, no desenho do bot | ⏳ `[PROPOSTO]` — vira decisão **D-08** |
+| 1b | ↳ detecção precoce | No arnês: delta de winrate de pacote físico (+20% massa, −20% drag) vs pacote de dano (+20% dmg), contra a mesma linha-base | físico < +2pp **e** dano > +5pp → a trilha física nasce morta | **2** | ✅ **Aprovado** |
+| 2 | Liberdade total sem moeda comum de dano | **Teste de mutante:** Vex com +30% de dano é reportado fora de 45–55% | arnês não detecta → o arnês não serve e a Fase 2 não passou | 2 | ✅ **Aprovado** — **usado como P2.2 acima; se reprovado, o portão da Fase 2 volta a ser subjetivo** |
+| 2b | ↳ poder estatístico | n de lutas por confronto | < **800** não distingue 55% de 50% com 80% de poder. 40 seeds = ±15pp | 2 | ✅ **Aprovado** |
+| 3 | Escopo somado (~12 meses) | Dias de calendário ÷ estimativa (F1: 1sem · F2: 1-2 · F3: 2-3 · F4: 2-3 · F5: 6-8) | **> 2x** → reabrir corte de escopo (corte natural: roster 8 → 4-5) | fim de cada fase | ✅ **Aprovado** |
+| 4 | Mirar 2 personagens ao vivo | % de rodadas com **uma só** mão; taxa de cast desperdiçado (mira >45° do alvo ou em bola morta) | uma mão em **> 70%** → o input de duas bolas falhou; plano B é 1 bola pilotada + 1 automática | 1 | ✅ **Aprovado** |
+| 5 | Curva econômica curta (4 compras) | Mediana da rodada com humano no controle | **< 25s** → o item não é sentido e a loja perde função | 3 | ✅ **Aprovado** |
+| 6 | **`[NOVO]`** Morte súbita é código morto | % de rodadas que atingem 60s | Hoje **0 de 40** (max 19,5s). Seguir em 0% após ajuste de HP/dano → ou a mecânica é desnecessária, ou os números de combate estão errados por fator ~4 | 2 e 3 | ✅ **Aprovado** — risco não listado no `DESIGN.md` |
+| 7 | **`[NOVO]`** Fluxo de RNG compartilhado bot↔sim | Bot da Fase 2 consumindo `world.rng` | Se consumir, "replay = seed + inputs" deixa de valer entre versões do bot | 2, no desenho do bot | ✅ **Aprovado** — vira decisão **D-08** |
 
-**O que preciso do usuário nesta seção:** aprovar, ajustar ou recusar cada `[PROPOSTO]`.
+**O que preciso do usuário nesta seção:** aprovar, ajustar ou recusar cada **aprovado**.
 O item #2 é o mais urgente — ele é o portão da Fase 2 neste PRD. Se o usuário não o aprovar,
 a Fase 2 fica sem critério verificável e volta a depender de julgamento, o que contraria a
 decisão #13 (medição, não raciocínio).

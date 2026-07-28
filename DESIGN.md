@@ -12,8 +12,12 @@ e habilidades miradas pelo jogador. Mobile-first, paisagem, web.
    personagem pelo jeito que a bola anda.
 2. **A decisão vem antes E durante.** Draft e loja decidem o potencial; mira e timing
    decidem a execução.
-3. **Física é a camada de controle.** Colisão não machuca — ela desloca. Deslocar o
-   inimigo para fora do alcance dele nega o dano dele.
+3. **Física é a camada de controle.** Colisão **passiva** causa 0 dano — ela desloca.
+   Deslocar o inimigo para fora do alcance dele nega o dano dele. Dano por contato
+   existe **apenas dentro de janela explícita de habilidade, declarada no personagem**
+   (ex.: o dash do Golem). *Revisado em 2026-07-28 por decisão D-02→D-07 do `docs/prd.md`:
+   a redação anterior era absoluta e já era falsa no código, o que a tornava não-auditável.
+   A janela precisa ser campo declarado do personagem, não código solto em `on.collide`.*
 
 ---
 
@@ -195,14 +199,23 @@ O bot rende três usos: balanceamento, modo treino e oponente solo.
 
 ---
 
-## 8. Em aberto
+## 8. Em aberto → RESOLVIDO em 2026-07-28
 
-- **Build muda entre rodadas?** Não foi decidido. *Recomendação:* sim, com custo em ouro
-  — vira uma decisão econômica a mais e reaproveita a UI de draft que já existirá.
-- Quantidade e preço dos itens; renda exata por rodada; taxa de juros.
-- Duração-alvo da rodada (60s é o teto — qual é a mediana desejada?).
-- Meta-progressão fora da partida: ranked, desbloqueio de personagens, monetização.
-- Direção de arte, som, nome do jogo.
+As decisões abaixo foram fechadas no `docs/prd.md` §5 e aprovadas pelo usuário.
+**O `prd.md` é a fonte de verdade para elas**; esta seção é só o índice.
+
+| Era pergunta | Decisão |
+|---|---|
+| Build muda entre rodadas? | **Sim**, com custo em ouro (D-01). Preço medido na Fase 3 |
+| Regra de empate no Bo5 | Rodada empatada é **nula**, teto de **7 rodadas** (D-02). Incidência re-medida na Fase 2 com roster heterogêneo antes de fixar o peso |
+| Escopo do +alcance | **Só ataque básico** na v1 (D-03) |
+| Ordem dos mods de item | `base × (1 + Σbônus)`, com **teto por campo** (D-04) |
+| Duração-alvo da rodada | Mediana entre **25s e 35s**, fixada por medição na Fase 3 (D-05). Hoje: 13,8s |
+| Estouro do timer de build | **Default determinística**, sem penalidade (D-06) |
+| Números da economia | **Não decidir agora** (D-09). Provisórios permitidos se marcados como tal |
+
+**Segue em aberto (fora de escopo até a Fase 6):** meta-progressão, ranked, desbloqueio
+de personagens, monetização, direção de arte, som, nome do jogo.
 
 ---
 
@@ -212,7 +225,7 @@ Cada fase tem um **portão**: não avance sem passar.
 
 | Fase | Entrega | Portão |
 |---|---|---|
-| **0** — Núcleo ✅ *construída* | `sim` pura + Golem e Vex + render Canvas + mira por arrasto + arnês de determinismo. Ver `README.md`. | *Mirar habilidades em bolas que andam sozinhas é divertido?* — **em aberto, depende de você jogar** |
+| **0** — Núcleo ✅ **PASSOU** *(2026-07-28)* | `sim` pura + Golem e Vex + render Canvas + mira por arrasto + arnês de determinismo. Ver `README.md`. | *Mirar habilidades em bolas que andam sozinhas é divertido?* — **SIM.** Veredito do usuário. Fase 1 autorizada |
 | **1** — Sensação *(1 sem)* | Layout mobile paisagem, 4 botões semitransparentes, mira por arrasto. Teste no celular de verdade. | *Os dois polegares funcionam sem atrapalhar um ao outro?* |
 | **2** — Arnês *(1-2 sem)* | Bot heurístico + CLI de 10k lutas + matriz de winrate. | *Consigo detectar um personagem quebrado sem jogar?* |
 | **3** — Loop *(2-3 sem)* | Draft snake + builds cegas + Bo5 + loja + economia. Tudo local, contra o bot. | *Dá vontade de jogar outra partida?* |
@@ -220,5 +233,7 @@ Cada fase tem um **portão**: não avance sem passar.
 | **5** — Conteúdo *(6-8 sem)* | 8 personagens, itens, telemetria, ajuste por medição. | *A matriz de winrate fecha em 45-55%?* |
 | **6** — Meta | Ranked, progressão, polimento, som, arte. | — |
 
-**A Fase 0 é a única que importa agora.** Ela custa duas semanas e responde a pergunta
-que invalida ou valida todas as outras 60 decisões deste documento.
+**A Fase 0 respondeu sim.** As outras 60 decisões deste documento estão validadas pelo
+único teste que importava. O trabalho agora é a Fase 1 — com uma dívida a pagar antes
+da Fase 3: metade da loja não tem ponto de aplicação no simulador e `mods` não compõe
+(ver `docs/prd.md` §4, contradições C2 e C3).

@@ -1,10 +1,15 @@
-# Battle Balls — Fase 0
+# Battle Balls — Fase 0 ✅ portão passado
 
 Fatia vertical local. Sem rede, sem draft, sem loja. Existe para responder **uma** pergunta:
 
 > Mirar habilidades em bolas que andam sozinhas é divertido?
 
-Se a resposta for não, as decisões do `DESIGN.md` não importam.
+**Resposta do usuário em 2026-07-28: sim.** O núcleo se sustenta e a Fase 1 está
+autorizada. Documentos do fluxo: `DESIGN.md` (decisões) → `docs/brief.md` (medições e
+contradições) → `docs/prd.md` (épicos, requisitos e decisões aprovadas).
+
+**Pendência que migrou para a Fase 1:** o portão foi dado em desktop. O teste em celular
+real continua obrigatório e virou a pré-condição P1.1 da Fase 1.
 
 ## Rodar
 
