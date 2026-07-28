@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -195,6 +195,7 @@ fechar nenhum item sozinho; a validação plena continua dependendo de `debt.3` 
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §6.1 (passo 2) e §6.2 (cruzamento com a migração do Golem em `debt.3`) | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (8/10) — Status: Draft → Ready. **Risco de sequenciamento do `knockback` julgado pelo @po: não é risco, é certeza — a troca DEVE ser adiada para `debt.3`, sem tentativa.** Evidência verificada no código: `golem.ts:94-96` (`init` da Âncora) é chamado por `world.ts:110` em `makeBall`, então `mods.knockbackResist === 0.6` em runtime; o roster do baseline é golem+vex nos dois times (`determinism.ts:15-18`), logo o Golem está sempre em campo nas 5 seeds. Até `debt.3`, `stat.knockbackTaken` vale 1.0 para todos, contra os 0.4 efetivos de hoje — o hash **vai** divergir. A story continua bem-escopada (o risco está documentado e o protocolo de reversão é correto), mas AC 5 (que lista as 6 trocas como concluídas) contradiz AC 7 (que permite uma não concluir). Correção pedida ao @sm **antes** de `debt.2` entrar em desenvolvimento: mover a troca de `knockback` de AC 5 para escopo de `debt.3` e converter a Task 6 de "tentar e reverter" em "não fazer, fecha em `debt.3` Task 5" — a Task 6 atual gasta um ciclo num experimento de resultado conhecido. `debt.3` Task 5 já prevê o fechamento. | @po |
 
 ## Dev Agent Record
 

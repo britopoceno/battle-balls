@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+InReview
 
 ## Executor Assignment
 
@@ -207,24 +207,62 @@ demais stories (`debt.1`-`debt.7`) dependem desta infraestrutura para provar que
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §6.0 e §6.1 (passo 0) | River (@sm) |
+| 2026-07-28 | 1.1 | Implementada. Status: Ready → InProgress → InReview. Todos os 5 ACs verificados: `tsc` verde, `sim:check` verde com bloco de autoconsistência preservado, 5 seeds batendo baseline, único arquivo tocado é `src/tools/determinism.ts`, invariantes de pureza de `sim/` confirmadas. Teste negativo executado e registrado no Debug Log — a comparação dispara e nomeia seed/campo. | @dev |
+| 2026-07-28 | 1.0.1 | Validated GO (10/10) — Status: Draft → Ready. Tabela de baseline de §6.0 **reproduzida e conferida pelo @po** com o código atual: as 5 seeds batem hash, ticks e vencedor exatamente (seed 11 → `winner === -1`). `npm run check` e `npm run sim:check` verdes na validação. Nota ao @dev: o grep de AC 5 `grep -rn "Math.random" src/sim` **não** retorna vazio — casa o comentário de `rng.ts:2`; a invariante vale, só o comando precisa ignorar comentários. | @po |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-_A preencher pelo @dev._
+claude-opus-5 (sessão principal atuando como @dev)
 
 ### Debug Log References
 
-_A preencher pelo @dev._
+Teste negativo executado (corrompendo `hash: '96de1201', ticks: 753` → `'96de12FF', 999`):
+
+```
+  ✗ baseline seed 1: hash esperado 96de12FF, obtido 96de1201
+  ✗ baseline seed 1: ticks esperado 999, obtido 753
+golden hash    ✗ 2 desvio(s)
+Error: comportamento divergiu do baseline em 2 campo(s). ...
+EXIT=1
+```
+
+Arquivo restaurado em seguida; `sim:check` verde. **A comparação dispara de fato** — não é
+código morto. Ela nomeia seed e campo, que é exatamente o que `debt.2` vai precisar para
+localizar uma divergência de aritmética.
 
 ### Completion Notes List
 
-_A preencher pelo @dev._
+- `BASELINE` como constante nomeada com as 5 seeds de `architecture.md` §6.0, incluindo a
+  seed 11 (caminho de empate, `winner === -1`).
+- Reaproveitada a função `rodar(seed)` existente, conforme as Dev Notes — nada duplicado.
+- Bloco de autoconsistência **preservado intacto** (AC 2): as duas verificações são
+  independentes e nenhuma substitui a outra.
+- Contrato de erro seguindo o padrão existente: acumula desvios, imprime cada um nomeando
+  seed e campo, e lança ao final. A mensagem de erro instrui sobre o que fazer se a mudança
+  tiver sido intencional.
+- Comentário no código proíbe explicitamente "atualizar" o baseline para fazer o teste
+  passar — que é o modo de falha óbvio deste mecanismo.
+- **Nota do @po sobre AC 5 confirmada:** `grep -rn "Math.random" src/sim` casa o comentário
+  de `rng.ts:2`. A invariante vale; verificado com o comentário excluído do grep.
+
+### Saída atual do `sim:check`
+
+```
+determinismo   ✓ ok
+golden hash    ✓ ok — 5 seeds batem o baseline
+espelho 2v2    time0 19 · time1 14 · empate 7   (esperado ~50/50)
+duração        mediana 13.8s · min 12.3s · max 19.5s
+```
 
 ### File List
 
-_A preencher pelo @dev._
+| Arquivo | Mudança |
+|---|---|
+| `src/tools/determinism.ts` | +55 linhas — `BASELINE`, laço de comparação, saída e `throw` |
+
+Nenhum arquivo em `src/sim/`, `src/chars/` ou `src/bot/` foi tocado (AC 4 ✓).
 
 ## QA Results
 

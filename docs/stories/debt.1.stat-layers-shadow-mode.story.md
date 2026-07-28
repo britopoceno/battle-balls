@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -256,6 +256,7 @@ removido (`debt.3`).
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §1.2, §1.3, §1.4, §1.5 e §6.1 (passo 1) | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. **Discrepância 14/15 resolvida pelo @po: 14 é o número correto.** `architecture.md` §1.3 (array `STAT_KEYS`) e §1.4 (tabela de tetos) enumeram 14 chaves cada; nenhum 15º campo é nomeado em lugar algum do documento. O "15" aparece só em prosa não enumerada (§0 linha 19, §7.1 linha 750, §8/R-01 linha 849, Anexo B A-9) — é erro do documento-fonte. A decisão do @sm de implementar os 14 literais está **confirmada** (Article IV). Pendência para @architect (não bloqueia): reconciliar os 4 pontos, incluindo `3 600 recálculos/s` em §7.1 que deriva de 15 (com 14 seriam 3 360). Correção de citação: o "15" **não** está em §1.1, como afirma a nota da story. Should-Fix antes da implementação: AC 5 declara `recomputeStats(base, bonusPassive, bonusItem): StatBlock` (função pura que devolve bloco novo) mas AC 8, Task 3 e Task 4 chamam `recomputeStats(b)` — as duas formas são incompatíveis, e a que devolve `StatBlock` novo aloca por tick, contrariando §7.1. @dev/@architect decidem a assinatura única antes de codar. | @po |
 
 ## Dev Agent Record
 

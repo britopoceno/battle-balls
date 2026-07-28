@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -195,6 +195,7 @@ estar `Done`.
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §3.1, §3.2, §3.3, §3.4 e §6.1 (passo 4) | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. `world.ts:316` (`self.abilityReadyAt = world.time + ab.cd`) conferido no código, exato. Escopo negativo (AC 7) bem delimitado e verificável. Correção de fato herdada de `architecture.md` §3.3 e repetida em Dev Notes: "os outros cooldowns do roster (`tremor` 4000, `lamina` 3000, `deslize` 2500)" — esses **não** são os cooldowns, são os cd efetivos mínimos (`cd / cdSpeedMax`, com `cdSpeedMax = 2.0`). Os `cd` reais no código são `tremor` 8000 (`golem.ts:59`), `lamina` 6000 (`vex.ts:50`), `deslize` 5000 (`vex.ts:74`). A conclusão ("todos folgados") continua válida — e com mais folga. Nenhum desses números vira código nesta story; a fórmula de `debt.6` (A2) os recalcula do `CharDef`. | @po |
 
 ## Dev Agent Record
 

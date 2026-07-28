@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -330,6 +330,7 @@ existindo para cruzar). Resolve **D-07/C1** do PRD por completo.
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §4.1, §4.2, §4.3, §6.1 (passo 6), §6.2 (linha `golem.ts:52`) e §7.2 (vetor #4) | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (8/10) — Status: Draft → Ready. Os valores da janela declarada em AC 6 foram conferidos um a um contra `golem.ts` e batem exatamente: `source 'sismico'` (`:43`), `ms 450` (`:52`), `dmg 14` (`:141`), `knockback 520` (`:142`), `reHitMs 250` (`:139`). A seção "Leia isto antes de começar" é o melhor registro de risco do épico. Dois pontos a resolver **antes** de o @dev pegar a story: (1) **AC 13/A5 depende de um arnês que não existe** — a story pede "N rodadas de cada confronto do arnês", mas o arnês é artefato da Fase 2 (RF-48) e hoje o único executor é o laço de 40 seeds de `determinism.ts`, com roster de 2 personagens; definir A5 como "as 40 seeds de `sim:check` com a checagem de fase ligada, zero exceções" ou declarar o item como diferido. (2) **A mensagem de erro de AC 9 identifica a vítima, não o infrator** — Task 5 escreve `charOf(world, target).id`, o que nomeia quem levou o dano; o diagnóstico útil é o personagem cujo `on.collide` causou o dano (`source`, quando houver). Corrigir antes de implementar, senão o erro aponta para o arquivo errado. | @po |
 
 ## Dev Agent Record
 

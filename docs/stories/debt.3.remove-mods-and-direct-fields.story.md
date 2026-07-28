@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -228,6 +228,7 @@ Resolve **C3** do PRD (`docs/prd.md` §4) por completo.
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §1.3, §1.7, §6.1 (passo 3) e §6.2 (tabela linha a linha) | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. Todas as referências arquivo:linha da tabela "O que quebra" foram conferidas contra o código e batem (`golem.ts:95`, `:102`, `vex.ts:41`, `:90`, `:97`, `world.ts:158`, `render.ts:147`, `:195`, `:302`, `inspect.ts:32`). AC 12 confirmado: `golem.ts:135-143` usa só `ctx.damage`/`ctx.knockback`/`self.memory`, não quebra a compilação nesta story. Ponto de atenção (mitigado por AC 1, que já declara o `tsc` como autoridade final): a lista **omite** pelo menos 3 leituras reais de `radius` que o compilador vai apontar — `world.ts:352` (`e.radius - b.radius` em `autoAttack`), `physics.ts:75` (`collideWalls`) e `physics.ts:110` (`collideZoneWalls`). Nenhuma delas é migrada em `debt.2`; esta story é onde caem. Além disso, esta story é onde a troca de `knockback` para `stat.knockbackTaken` **deve** fechar (Task 5), porque `debt.2` não pode fazê-la — ver Change Log de `debt.2`. | @po |
 
 ## Dev Agent Record
 

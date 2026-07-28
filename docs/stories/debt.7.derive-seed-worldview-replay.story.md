@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -240,6 +240,7 @@ deste épico** e entra como próximo épico (Fase 3, catálogo de itens em `src/
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §5.1, §5.2, §6.1 (passo 7) e Anexo A | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. Fatos conferidos: `dummy.ts:7` traz o comentário "Determinístico: não consome RNG" citado pela story; `dummyCommands(world: World, team: Team)` em `dummy.ts:9`; chamadas em `determinism.ts:27` e `inspect.ts:19`; `sim/rng.ts` tem 14 linhas e nenhum `deriveSeed`. AC 6 está certo: `World` satisfaz `Omit<World,'rng'>` estruturalmente, então os pontos de chamada não precisam de conversão. A recusa em fixar as constantes do splitmix32 (Dev Notes) é a decisão correta sob Article IV — a arquitetura de fato não as especifica. Should-Fix menor: o critério funcional que substitui a especificação ("streams de `streamId` diferentes não colidam nas seeds testadas") não está quantificado; definir o que conta como colisão antes de implementar. | @po |
 
 ## Dev Agent Record
 

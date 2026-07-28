@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -175,6 +175,7 @@ nomeado e lido (**A-5**).
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §2.1, §2.2, §2.3 e §6.1 (passo 5) | River (@sm) |
+| 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. Referências de `physics.ts` conferidas: `REST_BALL` em `:4` e `:59`; `REST_WALL` em `:5`, `:78`, `:81`, `:85`, `:88`, `:120` **e `:121`**. A Task 5 cita só a linha 120 — são **duas** ocorrências em `collideZoneWalls`; migrar só uma deixa a outra órfã (o `tsc` pega, porque a Task 2 remove a constante, mas vale ajustar a task para não depender disso). Decisão "máximo" (AC 7) rastreada até §2.2 e o contra-argumento fica corretamente registrado como parâmetro reversível, não como ação. | @po |
 
 ## Dev Agent Record
 
