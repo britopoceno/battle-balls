@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.vite/
+
+# backups criados por instaladores de ferramentas
+*.bak
