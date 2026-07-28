@@ -1,0 +1,66 @@
+schema: 1
+story: 'debt.0'
+gate: CONCERNS
+status_reason: 'Os 5 ACs foram verificados de forma independente e todos passam; o teste negativo foi reproduzido do zero e a comparação dispara nomeando seed e campo. As ressalvas são de diagnóstico e higiene, nenhuma bloqueia a migração.'
+reviewer: 'Quinn (@qa)'
+reviewed_revision: 'commit:d52c23d'
+updated: '2026-07-28T00:00:00Z'
+
+verification_performed:
+  - 'npm run check → 0 erros de tsc (tsconfig inclui src, noUnusedLocals ativo)'
+  - 'npm run sim:check → determinismo ✓ ok · golden hash ✓ ok — 5 seeds · EXIT=0'
+  - 'Teste negativo REPRODUZIDO pelo @qa com campos diferentes dos usados pelo @dev (seed 2 hash, seed 3 ticks, seed 11 vencedor): 3 desvios nomeados com seed+campo+esperado/obtido, EXIT=1'
+  - 'Arquivo restaurado; git diff -- src/tools/determinism.ts vazio; git status limpo'
+  - 'git show --stat d52c23d → único arquivo de código é src/tools/determinism.ts (+55)'
+  - 'grep Math.random src/sim → só o comentário de rng.ts:2 (invariante funcional vale)'
+  - 'grep imports src/sim → só ./rng.ts, ./effects.ts, ./physics.ts, ./types.ts — zero chars/bot/client, zero DOM/IO'
+  - 'grep determinism em src → não é importado por ninguém; script standalone, fora do bundle do client'
+
+acceptance_criteria:
+  AC1: PASS
+  AC2: PASS
+  AC3: PASS
+  AC4: PASS
+  AC5: PASS
+
+top_issues:
+  - id: 'REL-001'
+    severity: low
+    finding: 'A ordem dos throws finais faz o `throw` de autoconsistência (linha 126) preceder o do baseline (linha 127). Se a autoconsistência e o baseline falharem juntos — combinação provável numa refatoração ruim em debt.2 — a mensagem final do Error cita apenas "simulação não é determinística" e omite a do baseline. As linhas de desvio já foram impressas em stdout antes, então o diagnóstico não se perde, só a mensagem terminal.'
+    suggested_action: 'Opcional em debt.1+: agregar as duas condições numa única mensagem de erro, ou lançar o baseline primeiro por ser o sinal mais informativo.'
+
+  - id: 'MNT-001'
+    severity: low
+    finding: 'A mensagem de divergência de hash informa QUE o estado divergiu, não ONDE. Para debt.2 (migração de leitores de stat, onde a divergência esperada é aritmética), `hash esperado X, obtido Y` identifica a seed reprodutível mas não localiza o ponto da divergência — quem for depurar terá de instrumentar o tick a mão. Os campos ticks e vencedor dão sinal grosso apenas.'
+    suggested_action: 'Não bloqueia debt.0 (AC 3 pede seed+campo+esperado/obtido e isso está entregue). Recomenda-se que debt.2 inclua no seu escopo um helper de bisecção — ex.: hash por tick para achar o primeiro tick divergente — em vez de assumir que esta mensagem basta para localizar aritmética.'
+
+  - id: 'PERF-001'
+    severity: low
+    finding: 'O laço de baseline chama `rodar(seed)` uma terceira vez para as seeds 1, 2, 3, 7 e 11, que o laço de autoconsistência (seeds 1..40) já executou duas vezes cada. São 5 execuções redundantes de 85 (+6% de trabalho).'
+    suggested_action: 'Impacto real desprezível — sim:check inteiro roda em <1s de wall clock. A independência entre os dois blocos é defensável como escolha de design. Nenhuma ação necessária; registrado só para não ser redescoberto como "bug" depois.'
+
+  - id: 'DOC-001'
+    severity: low
+    finding: 'Todos os checkboxes de Tasks/Subtasks (Task 1 a 4) e os de Quality Gate Tasks continuam `[ ]` mesmo com a story implementada e em InReview. O CLAUDE.md exige marcá-los conforme concluídos.'
+    suggested_action: '@dev deve marcar os checkboxes. Seção de Tasks é território do @dev — @qa não edita.'
+
+  - id: 'DOC-002'
+    severity: low
+    finding: 'O commit d52c23d agrupou, junto da implementação, as edições de validação do @po nas stories debt.1 a debt.7 (Draft → Ready + Change Log). Mistura dois autores/fases num único commit.'
+    suggested_action: 'Higiene de commit apenas — não afeta código. Observar separação em stories futuras.'
+
+  - id: 'REQ-001'
+    severity: low
+    finding: 'O texto do AC 5 afirma que `grep -rn "Math.random" src/sim` retorna vazio; não retorna — casa o comentário de rng.ts:2. Já apontado pelo @po e documentado pelo @dev. A invariante substantiva (zero uso funcional) foi confirmada pelo @qa.'
+    suggested_action: 'Nenhuma. Imprecisão de redação do AC, não de implementação. Corrigir a formulação se o AC for reaproveitado.'
+
+quality_checks:
+  code_review: PASS
+  tests: PASS
+  acceptance_criteria: PASS
+  no_regressions: PASS
+  performance: PASS
+  security: PASS
+  documentation: CONCERNS
+
+waiver: { active: false }

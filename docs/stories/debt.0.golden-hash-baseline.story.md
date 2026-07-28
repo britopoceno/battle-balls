@@ -2,7 +2,7 @@
 
 ## Status
 
-InReview
+Done
 
 ## Executor Assignment
 
@@ -208,6 +208,7 @@ demais stories (`debt.1`-`debt.7`) dependem desta infraestrutura para provar que
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §6.0 e §6.1 (passo 0) | River (@sm) |
 | 2026-07-28 | 1.1 | Implementada. Status: Ready → InProgress → InReview. Todos os 5 ACs verificados: `tsc` verde, `sim:check` verde com bloco de autoconsistência preservado, 5 seeds batendo baseline, único arquivo tocado é `src/tools/determinism.ts`, invariantes de pureza de `sim/` confirmadas. Teste negativo executado e registrado no Debug Log — a comparação dispara e nomeia seed/campo. | @dev |
+| 2026-07-28 | 1.1.1 | QA Gate CONCERNS — Status: InReview → Done. 5/5 ACs verificados independentemente pelo @qa: `npm run check` e `npm run sim:check` reexecutados (EXIT=0), **teste negativo reproduzido do zero com campos diferentes dos do @dev** (seed 2 hash, seed 3 ticks, seed 11 vencedor → 3 desvios nomeados, EXIT=1), arquivo restaurado e `git diff` vazio confirmado, escopo do diff conferido em `d52c23d`, invariantes de pureza de `sim/` confirmadas por grep. 6 ressalvas low, nenhuma bloqueante — destaque: `MNT-001` (hash não localiza a divergência; `debt.2` deve prever bisecção por tick) e `DOC-001` (checkboxes de Task não marcados). Gate: `docs/qa/gates/debt.0-golden-hash-baseline.yml` | Quinn (@qa) |
 | 2026-07-28 | 1.0.1 | Validated GO (10/10) — Status: Draft → Ready. Tabela de baseline de §6.0 **reproduzida e conferida pelo @po** com o código atual: as 5 seeds batem hash, ticks e vencedor exatamente (seed 11 → `winner === -1`). `npm run check` e `npm run sim:check` verdes na validação. Nota ao @dev: o grep de AC 5 `grep -rn "Math.random" src/sim` **não** retorna vazio — casa o comentário de `rng.ts:2`; a invariante vale, só o comando precisa ignorar comentários. | @po |
 
 ## Dev Agent Record
@@ -266,4 +267,68 @@ Nenhum arquivo em `src/sim/`, `src/chars/` ou `src/bot/` foi tocado (AC 4 ✓).
 
 ## QA Results
 
-_A preencher pelo @qa._
+### Review Date: 2026-07-28
+
+### Reviewed By: Quinn (@qa — Test Architect)
+
+### Revisão: `commit:d52c23d`
+
+Nada aqui foi aceito por alegação. Cada item abaixo foi executado nesta sessão.
+
+#### Verificações executadas
+
+| # | Verificação | Resultado |
+|---|---|---|
+| 1 | `npm run check` (`tsc --noEmit`) | 0 erros. `tsconfig.include` cobre `src`, e `noUnusedLocals: true` garante que `BASELINE`/`desvios` são de fato consumidos — não passariam como código morto declarado. |
+| 2 | `npm run sim:check` | `determinismo ✓ ok` · `golden hash ✓ ok — 5 seeds batem o baseline` · `EXIT=0`. Wall clock <1s. |
+| 3 | **Teste negativo reproduzido do zero** | Corrompi campos **diferentes** dos que o @dev usou, para exercitar os três: seed 2 `hash → deadbeef`, seed 3 `ticks → 12345`, seed 11 `winner → 0`. Saída: 3 linhas nomeando seed, campo, esperado e obtido; `golden hash ✗ 3 desvio(s)`; `Error: comportamento divergiu do baseline em 3 campo(s)`; `EXIT=1`. **A comparação dispara de verdade e cobre os 3 campos, não só o hash.** |
+| 4 | Restauração | Arquivo restaurado; `git diff -- src/tools/determinism.ts` vazio; `git status --short` limpo. |
+| 5 | Escopo do diff | `git show --stat d52c23d`: único arquivo de código é `src/tools/determinism.ts` (+55). Demais entradas são `docs/stories/`. |
+| 6 | Pureza de `sim/` — `Math.random` | Única ocorrência em `src/sim` é o comentário de `rng.ts:2` (*"a simulação NUNCA usa Math.random"*). Zero uso funcional. |
+| 7 | Pureza de `sim/` — imports | Todos os imports de `src/sim` são internos: `./rng.ts`, `./effects.ts`, `./physics.ts`, `./types.ts`. Zero `chars/`, `bot/`, `client/`; zero DOM, zero I/O. |
+| 8 | Contaminação do bundle | `determinism.ts` não é importado por nenhum arquivo em `src/`. Script standalone com efeitos colaterais no topo — se fosse importado pelo client, rodaria 85 simulações no navegador. Não é o caso. |
+
+#### Acceptance Criteria — 5/5 verificados
+
+| AC | Veredito | Evidência |
+|---|---|---|
+| 1 — `tsc` verde | ✅ PASS | Verificação 1 |
+| 2 — autoconsistência 40/40 preservada | ✅ PASS | O laço `for seed 1..40` está intacto no diff (nenhuma linha removida). O bloco de baseline é adicional, sob comentário separador próprio, e não interfere no contador `divergentes`. |
+| 3 — baseline das 5 seeds com erro nomeando seed/campo/esperado/obtido | ✅ PASS | Verificações 2 e 3. Os 5 pares hash/ticks/winner conferem contra a tabela de `architecture.md` §6.0 linha a linha, inclusive seed 11 `winner: -1` (caminho de empate). |
+| 4 — nada fora de `determinism.ts` | ✅ PASS | Verificação 5 |
+| 5 — invariantes de pureza de `sim/` | ✅ PASS | Verificações 6 e 7 |
+
+#### Qualidade do código
+
+O que está bem feito: `rodar(seed)` foi reaproveitada em vez de duplicada, conforme as Dev Notes. `BASELINE` é uma constante nomeada com tipo explícito, e o bloco de comentário acima dela explica *por que* o baseline existe e proíbe nominalmente o modo de falha óbvio deste mecanismo ("não 'atualize' a tabela para o teste passar") — isso é o que impede a próxima pessoa de neutralizar a proteção sem perceber. O laço de comparação usa uma tupla `[campo, esperado, obtido]`, o que faz os três campos serem tratados uniformemente em vez de três `if` copiados. A mensagem do `throw` aponta para `architecture.md` §6.1 e diz o que fazer se a mudança tiver sido intencional — é acionável, não decorativa.
+
+Sobre a pergunta central — **a mensagem serve para `debt.2`?** Parcialmente, e vale ser honesto sobre o limite. Ela entrega o que o AC 3 pede e é suficiente para *detectar* e *reproduzir* (seed determinística, campo nomeado). Mas `hash esperado 96de1201, obtido a1b2c3d4` diz **que** o estado divergiu, não **onde**: hash é sem localidade por construção. Quem migrar os leitores de stat em `debt.2` e vir esse erro ainda terá de instrumentar tick a tick à mão para achar o ponto da divergência aritmética. Isso não é defeito de `debt.0` — está registrado como `MNT-001` com a recomendação de que `debt.2` inclua no próprio escopo um helper de bisecção (hash por tick → primeiro tick divergente), em vez de assumir que esta mensagem basta.
+
+#### Ressalvas (nenhuma bloqueante)
+
+| ID | Sev | Achado |
+|---|---|---|
+| `REL-001` | low | O `throw` de autoconsistência (l. 126) precede o do baseline (l. 127). Se os dois falharem juntos — combinação plausível numa refatoração ruim —, o `Error` final cita só "simulação não é determinística". Os desvios do baseline já foram impressos em stdout antes, então o diagnóstico não se perde; só a mensagem terminal fica incompleta. |
+| `MNT-001` | low | Hash não localiza a divergência (ver acima). Ação recomendada em `debt.2`, não aqui. |
+| `PERF-001` | low | O laço de baseline roda `rodar(seed)` uma 3ª vez para as seeds 1, 2, 3, 7 e 11, que o laço de 40 já executou duas vezes cada: 5 execuções redundantes de 85 (+6%). Impacto real desprezível (<1s total) e a independência entre os blocos é defensável. Registrado para não ser redescoberto como "bug". |
+| `DOC-001` | low | Os checkboxes de Task 1 a 4 e de Quality Gate Tasks seguem `[ ]` com a story implementada. Seção do @dev — @qa não edita. |
+| `DOC-002` | low | O commit `d52c23d` agrupou a implementação com as edições de validação do @po nas stories `debt.1`–`debt.7`. Higiene de commit, não afeta código. |
+| `REQ-001` | low | O AC 5 afirma que o grep de `Math.random` retorna vazio; ele casa o comentário de `rng.ts:2`. Já apontado pelo @po. A invariante substantiva foi confirmada. Imprecisão de redação. |
+
+#### 7 verificações padrão
+
+| Verificação | Resultado |
+|---|---|
+| Code review | ✅ PASS |
+| Testes | ✅ PASS — inclusive o negativo, reproduzido independentemente |
+| Critérios de aceitação | ✅ PASS — 5/5 |
+| Ausência de regressão | ✅ PASS — bloco de autoconsistência intacto, `sim/` não tocada, script não entra no bundle |
+| Performance | ✅ PASS — `PERF-001` é informativo |
+| Segurança | ✅ PASS — sem I/O, rede, entrada externa, segredos ou dependências; tool script fora do artefato de produção |
+| Documentação | ⚠️ CONCERNS — `DOC-001` (checkboxes), `DOC-002` (commit) |
+
+### Gate Status
+
+Gate: CONCERNS → `docs/qa/gates/debt.0-golden-hash-baseline.yml`
+
+**A infraestrutura de baseline está funcional e provada.** As stories `debt.1` a `debt.7` estão liberadas para começar: o A-2 do Anexo B tem agora um mecanismo que falha de verdade quando o comportamento muda. Recomendação para `debt.2`: ler `MNT-001` antes de planejar a depuração.
