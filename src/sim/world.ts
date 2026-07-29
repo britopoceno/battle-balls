@@ -29,8 +29,14 @@ const MAX_SLOW = 0.85
  * dano por contato do roster é 450ms (dash do Golem, golem.ts). Se o cooldown pudesse
  * descer abaixo da janela que ele abre, o jogador recastaria antes dela fechar e o dano
  * por contato viraria permanente, quebrando o Pilar 3 (D-07) por dentro.
+ *
+ * Corrigido para 500ms (QA-001, gate de debt.4): o valor original de 400ms herdado de
+ * architecture.md §3.3 ficava ABAIXO dos 450ms que alegava proteger — o piso sozinho não
+ * entregava a garantia; quem protegia era o teto de cdSpeed. 500ms dá folga real acima da
+ * maior janela conhecida, não apenas encosta nela. Código ainda inalcançável hoje (o teto
+ * de cdSpeed mantém todo cooldown do roster bem acima disso) — mudança não altera hash.
  */
-const MIN_ABILITY_CD_MS = 400
+const MIN_ABILITY_CD_MS = 500
 
 export interface PickSetup {
   charId: string

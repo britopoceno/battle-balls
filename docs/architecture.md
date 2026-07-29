@@ -233,7 +233,7 @@ Bases atuais entre parênteses: (Golem / Vex).
 | `dmg` | contínuo | 1.00 | −0.75 | **+1.00** | — | ×2 dobra o DPS. Com a mediana atual de 13,8s isso daria ~7s; mesmo depois do ajuste de HP da Fase 3, ×2 é o ponto onde o piso de 25s de D-05 é violado sozinho por itens |
 | `dmgTaken` | contínuo | 1.00 | −0.60 | **+1.00** | [0.30, 2.50] | Campo novo, hoje sempre 1.0. Existe para a Couraça poder virar armadura sem inventar camada; e o piso 0.30 impede build imortal |
 | `atkSpeed` | contínuo | 1.00 | −0.60 | **+1.00** | cd efetivo ≥ **120 ms** | ×2: Vex 520→260ms = 15,6 ticks; Golem 1100→550ms. O piso de 120ms (≈7 ticks) só morde para um personagem futuro de cadência alta, e existe para que "ataque por tick" nunca seja alcançável |
-| `cdSpeed` | contínuo | 1.00 | −0.50 | **+1.00** | cd efetivo ≥ **400 ms** | Ver §3. O piso de 400ms tem origem concreta: a maior janela de dano por contato declarada hoje é 450ms (dash do Golem) |
+| `cdSpeed` | contínuo | 1.00 | −0.50 | **+1.00** | cd efetivo ≥ **500 ms** | Ver §3. O piso tem origem concreta: a maior janela de dano por contato declarada hoje é 450ms (dash do Golem) — o piso precisa ficar ACIMA dela, não apenas perto. *Corrigido de 400 para 500 (QA-001, gate de `debt.4`): 400 < 450 não entregava a garantia que este texto já alegava.* |
 | `range` | contínuo | 1.00 | −0.50 | **+0.60** | alcance ef. ≤ **324 px** | 324 = 60% da menor dimensão da arena (540). Enquanto o alcance não cobre a arena, reposicionar continua negando DPS — que é o Pilar 3. Vex 200×1.6 = 320 ✓, encostando |
 | `knockbackTaken` | contínuo | 1.00 | −0.75 | **+1.00** | [**0.25**, 2.00] | Piso 0.25 impede imunidade a empurrão. A Âncora do Golem sozinha (−0.60) já consome 80% do orçamento de redução — sinal de que a passiva é forte, e agora isso é visível num número |
 
@@ -430,7 +430,7 @@ Isto espelha deliberadamente a fronteira de D-03 para `range`: um ponto de aplic
 **Mecanismo 1 — teto de balanceamento (D-04).** `ΣMAX[cdSpeed] = +1.00` ⇒ `cdSpeed ≤ 2.0` ⇒ o
 cooldown nunca desce abaixo de **50% do base**. Regra de jogo, mexível por decisão de produto.
 
-**Mecanismo 2 — piso absoluto de motor: `MIN_ABILITY_CD_MS = 400`.** Não é redundante com o
+**Mecanismo 2 — piso absoluto de motor: `MIN_ABILITY_CD_MS = 500`.** Não é redundante com o
 mecanismo 1, e a razão é concreta e verificável:
 
 > A maior **janela de dano por contato** declarada no roster é a do dash do Golem: **450 ms**
@@ -438,6 +438,11 @@ mecanismo 1, e a razão é concreta e verificável:
 > jogador poderia recastar antes de a janela anterior fechar, a janela seria reaberta indefinidamente,
 > e **o dano por contato viraria permanente** — quebrando D-07 por dentro, sem que nenhum personagem
 > tivesse feito nada de errado.
+>
+> *Nota de correção: a primeira versão deste documento fixava o piso em 400ms — abaixo dos 450ms que
+> ele deveria proteger. O gate de `debt.4` (QA-001) achou a inconsistência antes de ela virar teste
+> automatizado em `debt.6`, o que a teria validado pelo motivo errado (quem protegeria seria o teto de
+> `cdSpeed`, não o piso). Corrigido para 500ms — folga real acima da maior janela conhecida.*
 
 Daí sai uma **invariante testável**, que liga §3 a §4 e é a peça que torna o Pilar 3 realmente
 auditável:
@@ -448,7 +453,7 @@ para todo personagem C, para toda janela W declarada em C.contactWindows:
 onde  cd_efetivo_mínimo(a) = max(MIN_ABILITY_CD_MS, a.cd / cdSpeedMax)
 ```
 
-Estado atual: Golem `sismico` → `max(400, 7000/2) = 3500 ms ≥ 450 ms` ✓ (fator 7,8 de folga).
+Estado atual: Golem `sismico` → `max(500, 7000/2) = 3500 ms ≥ 450 ms` ✓ (fator 7,8 de folga).
 Os outros cooldowns do roster: `tremor` 4000, `lamina` 3000, `deslize` 2500 — todos folgados.
 O teste falha alto no dia em que alguém desenhar uma habilidade de cd 800ms com janela de 500ms.
 
