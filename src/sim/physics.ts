@@ -1,8 +1,8 @@
 import type { Ball, World } from './types.ts'
 
-/** Restituição bola-bola e bola-parede. Colisão NÃO causa dano — só desloca. */
-const REST_BALL = 0.65
-const REST_WALL = 0.72
+// debt.5: as antigas constantes de restituição de módulo deixaram de existir — agora são
+// stat.restBall/stat.restWall por corpo (resolve C2, item Borracha). Colisão NÃO causa
+// dano — só desloca.
 
 export function integrate(world: World): void {
   const dt = world.dt
@@ -58,7 +58,11 @@ export function collideBalls(
 
       const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny
       if (vn < 0) {
-        const imp = (-(1 + REST_BALL) * vn) / invSum
+        // debt.5: regra de combinação é MÁXIMO, não média/produto — item não pode
+        // depender da build do inimigo (architecture.md §2.2). max(0.65,0.65)===0.65,
+        // hash não muda enquanto ninguém declarar restBall próprio.
+        const e = Math.max(a.stat.restBall, b.stat.restBall)
+        const imp = (-(1 + e) * vn) / invSum
         a.vx -= imp * nx * invA
         a.vy -= imp * ny * invA
         b.vx += imp * nx * invB
@@ -74,20 +78,21 @@ export function collideWalls(world: World): void {
   const { pad, w, h } = world.arena
   for (const b of world.balls) {
     if (!b.alive) continue
+    // debt.5: parede não é corpo, não tem stat — sem mixing, sempre b.stat.restWall
     const r = b.stat.radius
     if (b.x - r < pad) {
       b.x = pad + r
-      if (b.vx < 0) b.vx = -b.vx * REST_WALL
+      if (b.vx < 0) b.vx = -b.vx * b.stat.restWall
     } else if (b.x + r > w - pad) {
       b.x = w - pad - r
-      if (b.vx > 0) b.vx = -b.vx * REST_WALL
+      if (b.vx > 0) b.vx = -b.vx * b.stat.restWall
     }
     if (b.y - r < pad) {
       b.y = pad + r
-      if (b.vy < 0) b.vy = -b.vy * REST_WALL
+      if (b.vy < 0) b.vy = -b.vy * b.stat.restWall
     } else if (b.y + r > h - pad) {
       b.y = h - pad - r
-      if (b.vy > 0) b.vy = -b.vy * REST_WALL
+      if (b.vy > 0) b.vy = -b.vy * b.stat.restWall
     }
   }
 }
@@ -119,8 +124,9 @@ export function collideZoneWalls(world: World): void {
       b.y = py + ny * r
       const vn = b.vx * nx + b.vy * ny
       if (vn < 0) {
-        b.vx -= (1 + REST_WALL) * vn * nx
-        b.vy -= (1 + REST_WALL) * vn * ny
+        // debt.5: zone-wall (Muralha) não tem stat próprio ainda (v1) — sem mixing
+        b.vx -= (1 + b.stat.restWall) * vn * nx
+        b.vy -= (1 + b.stat.restWall) * vn * ny
       }
     }
   }

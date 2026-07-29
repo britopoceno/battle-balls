@@ -115,9 +115,14 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     passiveIndex: pick.passiveIndex,
     memory: {},
 
-    // camada de stats (debt.1) — base congela os valores do CharDef; restBall/restWall
-    // ainda não têm fonte própria no CharDef (isso é debt.5), usam DEFAULT_STATS por ora.
-    // debt.3: única fonte de verdade agora — mods e os campos diretos foram removidos.
+    // camada de stats (debt.1, completada em debt.3 — única fonte de verdade agora).
+    // debt.5: restBall/restWall ganham fonte própria opcional no CharDef; ausência usa
+    // DEFAULT_STATS (0.65/0.72), igual a nenhum personagem do roster hoje.
+    // ordem das chaves importa: precisa bater com STAT_KEYS (maxHp..knockbackTaken) para
+    // preservar a forma fixa de objeto de stats.ts (QA-001, gate de debt.5) — os 6 campos
+    // do CharDef primeiro, spread do DEFAULT_STATS (que já nasce na ordem certa: restBall,
+    // restWall, dmg...), e só então os overrides de restBall/restWall, que apenas
+    // atualizam o valor de uma chave já inserida pelo spread, sem reordenar.
     base: {
       maxHp: def.maxHp,
       radius: def.radius,
@@ -126,6 +131,8 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
       steer: def.steer,
       drag: def.drag,
       ...DEFAULT_STATS,
+      restBall: def.restBall ?? DEFAULT_STATS.restBall,
+      restWall: def.restWall ?? DEFAULT_STATS.restWall,
     },
     bonusPassive: makeStatBlock(0),
     bonusItem: makeStatBlock(0),

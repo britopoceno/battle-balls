@@ -68,4 +68,27 @@ sem checar o caso `cd` baixo (`cd ≤ 800`), onde o piso vira o termo dominante 
 efeito parece simplesmente não existir). Rodar um `step(world, [])` de aquecimento antes do tick
 do cast. Vale para qualquer stat consumido em cast, não só `cdSpeed`.
 
+**Terceira face do ponto cego, agora sobre FÓRMULA (gate de `debt.5`):** quando uma story
+introduz uma regra que combina dois valores e o roster tem os dois valores IGUAIS, o hash não
+distingue qual regra foi escrita. Em `debt.5` (`restBall` 0.65 nos dois corpos), `Math.max`,
+`Math.min`, média e média geométrica devolvem todas 0.65 — só *produto* seria flagrado. Hash
+idêntico prova que o comportamento não mudou; **não** prova qual fórmula está no arquivo.
+Regra prática para `debt.6`/`debt.7` e para o passo 8 (itens): se a story introduz combinação,
+seleção ou escolha entre valores, o gate precisa de harness próprio com valores DIFERENTES.
+
+**Técnica barata que substitui o `git archive` quando basta variar dados (gate de `debt.5`):**
+clonar o registro de personagens em vez de copiar a árvore — `{...CHARS, golem: {...CHARS.golem,
+restBall: 0.5}}` — e passar para `createWorld`. Depois, recuperar a constante analiticamente do
+resultado físico (das velocidades pós-colisão e das massas reais, `e = -imp·invSum/vn - 1`) e
+comparar com TODAS as candidatas plausíveis numa tabela. Distingue max/min/média/geométrica/
+produto em uma rodada, sem tocar em `src/`. Arquivos ficam no scratchpad e importam `src/` por
+`file:///C:/...` (Node faz type-stripping de `.ts` por caminho absoluto também).
+
+**Sempre olhar a ORDEM das chaves quando um literal de stats é reordenado (achado QA-001 de
+`debt.5`):** `Ball.base` é montado como literal com `...DEFAULT_STATS` e mover o spread muda a
+ordem de inserção, quebrando a coincidência com `STAT_KEYS`/`makeStatBlock` que `stats.ts:71`
+declara querer ("mesma hidden class no V8"). É invisível no diff, no `tsc` e no hash. Checar com
+`Object.keys(b.base).join() === STAT_KEYS.join()`. Medir antes de escalar a severidade: em
+`debt.5` o custo real foi 0,66% em 4M chamadas de `recomputeStats`, ou seja, ruído.
+
 Ver também [[feedback-verificacao-independente]].

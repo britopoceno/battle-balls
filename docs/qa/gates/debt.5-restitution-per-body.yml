@@ -1,0 +1,156 @@
+schema: 1
+story: 'debt.5'
+gate: CONCERNS
+status_reason: >-
+  Os 9 ACs estão cumpridos e a regra de combinação foi provada — não aceita da Debug Log, mas
+  medida: com `restBall` 0.5 vs 0.9 em bolas reais, o `e` recuperado da colisão é 0.9000000000
+  exato, batendo MÁXIMO e descartando média (0.70), produto (0.45), geométrica (0.6708) e mínimo
+  (0.50). A única ressalva é uma deriva silenciosa introduzida por um refactor não pedido: a
+  reordenação do spread em `makeBall` mudou a ordem de inserção de chaves de `Ball.base`, que
+  antes coincidia exatamente com `STAT_KEYS`/`makeStatBlock` e agora não coincide mais. Custo
+  medido ~0; o problema é a intenção documentada, não o desempenho.
+reviewer: 'Quinn'
+reviewed_revision: >-
+  working-tree sobre 4c2e458 — src/sim/types.ts (+3), src/sim/world.ts (+6/−4),
+  src/sim/physics.ts (+16/−10)
+updated: '2026-07-28T00:00:00Z'
+
+verification_performed:
+  independent_runs:
+    - 'npm run check → 0 erros (reexecutado pelo @qa)'
+    - >-
+      npm run sim:check → determinismo ✓ · golden hash ✓ 5 seeds ✓ · build coverage ✓ 5 variantes
+      (reexecutado pelo @qa)
+  baseline_integrity: >-
+    `git status` confirma que `src/tools/determinism.ts` NÃO está modificado: a tabela BASELINE
+    (seeds 1, 2, 3, 7, 11) e a tabela de cobertura de build de 06a927e estão intactas. O critério
+    de aprovação não foi adulterado. O diff da story é exatamente 3 arquivos, 25 inserções.
+  identity_reproduced: >-
+    `Math.max(0.65, 0.65) === 0.65` → true, reproduzido pelo @qa. `DEFAULT_STATS` lidos direto de
+    stats.ts: restBall 0.65, restWall 0.72.
+  constants_removed: >-
+    Grep próprio por `REST_BALL|REST_WALL` em todo `src/`: zero ocorrências, nem em código nem em
+    comentário — o comentário substituto em physics.ts:3-5 usa `stat.restBall`/`stat.restWall`, não
+    os nomes antigos, então o grep de confirmação da story fecha limpo.
+  combination_rule_measured: >-
+    O roster nunca exercita `restBall` diferente entre duas bolas (todos usam 0.65). Harness
+    temporário (scratchpad, working tree jamais tocada): CharDef clonado com golem restBall 0.5 e
+    vex restBall 0.9, colisão frontal controlada (nx=1, ny=0), `e` recuperado analiticamente da
+    variação de velocidade e das massas reais. Resultado 0.9000000000 — bate `max`, descarta
+    `média` 0.7000000000, `produto` 0.4500000000, `geométrica` 0.6708203932 e `mínimo`
+    0.5000000000. Repetido com os valores invertidos (golem 0.9, vex 0.5): e = 0.9 de novo, logo a
+    regra é simétrica e não é "usa sempre o do primeiro/segundo corpo".
+  no_mixing_walls: >-
+    Medido, não só lido. Duas bolas com restWall diferentes (0.11 e 0.9) no MESMO passo:
+    `collideWalls` devolveu vx = 11 e vx = 90 sobre v = −100 — cada corpo com o próprio fator, sem
+    combinação com nada. `collideZoneWalls` com um segmento-parede injetado: −11 e −90, mesma
+    conclusão. As DUAS ocorrências de `REST_WALL` em `collideZoneWalls` que o @po sinalizou na
+    v1.0.1 (`b.vx -=` e `b.vy -=`, physics.ts:128-129) estão ambas migradas; nenhuma órfã.
+  chardef_override_and_fallback: >-
+    Override: CharDef com `restBall: 0.5`/`restWall: 0.11` produziu `base` e `stat` = 0.5/0.11 —
+    o valor declarado vence, não é engolido pelo `??` nem pelo spread de DEFAULT_STATS. Override
+    parcial também funciona (vex com só restBall: 0.9 → base 0.9 / 0.72). Fallback: com os CharDefs
+    reais (nenhum declara restituição — confirmado, 0 de 2), `base.restBall`/`restWall` valem
+    exatamente 0.65/0.72, nunca `undefined` nem `NaN`, e `stat` idem após `recomputeStats`.
+  spread_reorder_is_behavior_neutral: >-
+    A reordenação (`...DEFAULT_STATS` passou de último para primeiro) NÃO regride os 6 stats vindos
+    do CharDef: `DEFAULT_STATS` é um `Pick` de 8 chaves disjuntas das 6 do CharDef, então nunca
+    houve sobreposição nos dois sentidos. Verificado no valor: `base.maxHp` = 190 = `def.maxHp`,
+    idem radius/mass/maxSpeed/steer/drag. O golden hash idêntico confirma.
+  clamp_path: >-
+    `recomputeStats` itera STAT_KEYS, logo restBall/restWall passam pelo mesmo caminho
+    ΣMIN −0.60 / ΣMAX +0.45 (stats.ts:43,48) e clamp absoluto [0.05, 0.92] (stats.ts:60,64) que
+    o AC 9 exige. Com bônus zero o clamp não morde — o hash idêntico é a prova por construção.
+  sim_purity: >-
+    Grep por Math.random / DOM / require / imports de chars,bot,client em `src/sim/`: única
+    ocorrência é a nota em `rng.ts` explicando que Math.random nunca é usado. AC 4 satisfeito.
+  working_tree_restored: >-
+    Todos os experimentos rodaram em arquivos do scratchpad importando `src/` por file:// — nenhum
+    arquivo criado ou alterado no repositório. `git status` pós-gate idêntico ao pré: os 3 arquivos
+    de src/ da story mais a própria story.
+
+top_issues:
+  - id: 'QA-001'
+    severity: low
+    finding: >-
+      Refactor não pedido com efeito silencioso: mover `...DEFAULT_STATS` para o TOPO do literal de
+      `base` mudou a ordem de inserção de chaves do objeto. Antes, `base` era construído em
+      maxHp,radius,mass,maxSpeed,steer,drag + spread — ordem IDÊNTICA a `STAT_KEYS` e, portanto, à
+      forma que `makeStatBlock` dá a `stat`/`bonusPassive`/`bonusItem`. Agora `base` é
+      restBall,restWall,dmg,...,knockbackTaken,maxHp,...,drag: mesmas 14 chaves, forma diferente.
+      Isso contraria a intenção que `stats.ts:71` declara em voz alta ("as 14 chaves em forma fixa
+      — mesma hidden class no V8"), num objeto lido chave a chave por `recomputeStats` a cada bola
+      a cada tick (o alvo de 40M ticks do arnês da Fase 2 é justamente o que §7.1 protege).
+      Medido: microbenchmark de `recomputeStats` com as duas ordens deu delta de 0,66% em 4M
+      chamadas × 2 rodadas alternadas — dentro do ruído. Ou seja, HOJE não custa nada; o defeito é
+      a deriva entre o que o código documenta querer e o que ele faz, deixada sem nota.
+    suggested_action: >-
+      Correção de custo zero e sem risco: manter `...DEFAULT_STATS` DEPOIS dos 6 campos do CharDef
+      (como era) e colocar `restBall: def.restBall ?? ...` / `restWall: ...` como as ÚLTIMAS linhas
+      do literal. Reatribuir uma chave já existente não muda a posição dela, então a ordem volta a
+      bater com STAT_KEYS e o override continua vencendo. Alternativa igualmente válida: manter
+      como está e trocar o comentário de `stats.ts:71` por uma nota dizendo que `base` não
+      compartilha a forma dos demais blocos, deliberadamente.
+
+  - id: 'ARCH-001'
+    severity: low
+    finding: >-
+      A regra MÁXIMO não tem nenhuma cobertura versionada. `determinism.ts` — inclusive a tabela de
+      cobertura de build acrescentada em 06a927e — só exercita bolas com `restBall` igual (0.65),
+      e com valores iguais MÁXIMO, MÍNIMO, MÉDIA e MÉDIA GEOMÉTRICA devolvem todas 0.65: o golden
+      hash só conseguiria flagrar a troca por PRODUTO. Ou seja, o hash idêntico prova que o
+      comportamento não mudou, mas não prova qual das quatro regras foi escrita. A prova de que é
+      `max` é o harness que este gate rodou FORA do repositório. Enquanto nenhum item existir, isso é inerte; a partir do passo 8 (agregação de
+      item), a Borracha torna a regra viva e um refactor futuro — incluindo a alavanca `√(ea·eb)`
+      que a própria story registra como reversível — não encontra teste nenhum no caminho.
+    suggested_action: >-
+      Na story de itens (passo 8), acrescentar um caso ao arnês com dois `restBall` diferentes e
+      asserção sobre o valor combinado. Não é trabalho desta story.
+
+  - id: 'PROC-001'
+    severity: low
+    finding: >-
+      As 6 Tasks / 13 subtasks da story continuam todas `[ ]` desmarcadas, apesar de a
+      implementação estar completa e a story ter ido para InReview. É a regra de
+      story-lifecycle ("Update progress — mark checkboxes as tasks complete"). O @qa não tem
+      autoridade para marcá-las (só Status/QA Results/Change Log), então ficam como estão.
+    suggested_action: >-
+      @dev marca as caixas ao fechar a próxima story. Sem impacto em código.
+
+scope_judgments:
+  spread_reorder:
+    verdict: NECESSÁRIO, MAS NÃO DA FORMA ESCOLHIDA
+    reasoning: >-
+      Alguma reordenação era obrigatória: com `...DEFAULT_STATS` no fim, uma linha
+      `restBall: def.restBall ?? ...` colocada antes dele seria sobrescrita pelo default e o
+      override do CharDef nunca funcionaria — o bug exato que o item 6 da revisão procurava. O @dev
+      viu isso corretamente. A escolha de mover o spread para o topo resolve, mas era a única das
+      duas soluções que muda a forma do objeto (ver QA-001); pôr as duas linhas no fim resolveria
+      igual sem efeito colateral.
+  zone_wall_without_own_stat:
+    verdict: ESCOPO CORRETO
+    reasoning: >-
+      `Zone.restitution` como identidade do Golem está registrado em architecture.md §2.3 como
+      espaço de design NÃO usado em v1. A implementação usa `b.stat.restWall` puro, sem tentativa
+      de mixing, exatamente como as duas linhas da tabela de casos de borda exigem. Confirmado por
+      medição, não só por leitura.
+  max_rule_choice:
+    verdict: FIEL À DECISÃO DE ARQUITETURA
+    reasoning: >-
+      `Math.max`, com o comentário em physics.ts:61-63 nomeando a razão (o item não pode depender
+      da build do inimigo) e apontando para §2.2. O contra-argumento honesto fica onde deve ficar —
+      registrado nas Dev Notes como alavanca reversível para a Fase 2 — e NÃO foi implementado,
+      como a story manda.
+
+acceptance_criteria:
+  AC1_tsc: PASS
+  AC2_sim_check: PASS
+  AC3_golden_hash_identico: PASS
+  AC4_sim_purity: PASS
+  AC5_chardef_opcionais: 'PASS (override e fallback verificados por medição)'
+  AC6_constantes_removidas: PASS
+  AC7_regra_maximo: 'PASS (provada com 0.5 vs 0.9 → e = 0.9)'
+  AC8_paredes_sem_mixing: 'PASS (arena ×4 e zone-wall ×2, medidos)'
+  AC9_clamp_recompute: PASS
+
+waiver: { active: false }

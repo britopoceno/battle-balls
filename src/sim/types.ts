@@ -208,6 +208,9 @@ export interface CharDef {
   steer: number
   /** fração da velocidade retida por segundo (0..1) · governa como o knockback decai */
   drag: number
+  /** debt.5 — restituição própria. Ausente = DEFAULT_STATS.restBall/restWall (0.65/0.72) */
+  restBall?: number
+  restWall?: number
   atk: AtkDef
   /** IA de movimento autoral · é aqui que mora a identidade do personagem */
   move: (ctx: SimCtx, self: Ball) => void
