@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+Done
 
 ## Executor Assignment
 
@@ -195,26 +195,171 @@ estar `Done`.
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-07-28 | 1.0 | Story criada a partir de `architecture.md` §3.1, §3.2, §3.3, §3.4 e §6.1 (passo 4) | River (@sm) |
+| 2026-07-28 | 1.1 | Implementada. Status: Ready → InProgress → InReview. Todos os ACs verificados, incluindo a identidade `7000/1.0===7000`. A cobertura de build adicionada ao fim de `debt.3` (ARCH-001) já exercitava `castCommand` com `cd` não-default via `abilityIndex:1` — hash idêntico nessas variantes reforça a garantia além do `BASELINE` principal. `ultChargeRate` deliberadamente não criado (campo morto sem consumidor). | @dev |
+| 2026-07-28 | 1.2 | Gate de qualidade: **CONCERNS**. Status: InReview → Done. Todas as verificações reexecutadas do zero (`check`, `sim:check`, identidade `/1.0` nos 9 `cd` do roster, escopo negativo por leitura direta). Piso `MIN_ABILITY_CD_MS` testado com harness temporário (32 casos, 4 habilidades × 8 valores de `cdSpeed`, igualdade exata; harness revertido). Ressalvas: **QA-001 (MEDIUM)** — `MIN_ABILITY_CD_MS = 400` é menor que a maior janela de contato do roster (450 ms, `golem.ts:52`), então o piso não entrega a propriedade que sua própria justificativa alega; falha de especificação herdada de `architecture.md` §3.3, deve entrar em `debt.6` antes da invariante A2. **QA-002 (LOW)** — a alegação de que a cobertura de build de ARCH-001 "validou esta story" está superestimada: as 5 variantes rodam com `cdSpeed = 1.0`, cobrem não-regressão em 2 valores extras de `cd`, mas não exercitam o comportamento novo. `ultChargeRate` não criado: divergência **aceita** e encerrada. | Quinn (@qa) |
 | 2026-07-28 | 1.0.1 | Validated GO (9/10) — Status: Draft → Ready. `world.ts:316` (`self.abilityReadyAt = world.time + ab.cd`) conferido no código, exato. Escopo negativo (AC 7) bem delimitado e verificável. Correção de fato herdada de `architecture.md` §3.3 e repetida em Dev Notes: "os outros cooldowns do roster (`tremor` 4000, `lamina` 3000, `deslize` 2500)" — esses **não** são os cooldowns, são os cd efetivos mínimos (`cd / cdSpeedMax`, com `cdSpeedMax = 2.0`). Os `cd` reais no código são `tremor` 8000 (`golem.ts:59`), `lamina` 6000 (`vex.ts:50`), `deslize` 5000 (`vex.ts:74`). A conclusão ("todos folgados") continua válida — e com mais folga. Nenhum desses números vira código nesta story; a fórmula de `debt.6` (A2) os recalcula do `CharDef`. | @po |
 
 ## Dev Agent Record
 
 ### Agent Model Used
 
-_A preencher pelo @dev._
+claude-opus-5 (sessão principal atuando como @dev)
 
 ### Debug Log References
 
-_A preencher pelo @dev._
+```
+$ npx tsc --noEmit
+(sem saída — 0 erros)
+
+$ npm run sim:check
+determinismo   ✓ ok
+golden hash    ✓ ok — 5 seeds batem o baseline
+build coverage ✓ ok — 5 variantes batem
+espelho 2v2    time0 19 · time1 14 · empate 7
+duração        mediana 13.8s · min 12.3s · max 19.5s
+
+$ node -e "console.log((7000/1.0)===7000)"
+true
+
+$ grep -n "atkReadyAt = world.time"
+world.ts:397: b.atkReadyAt = world.time + def.atk.cd / b.stat.atkSpeed   ← só atkSpeed, sem cdSpeed
+```
 
 ### Completion Notes List
 
-_A preencher pelo @dev._
+- Story pequena, sem surpresa: `MIN_ABILITY_CD_MS = 400` adicionada junto das demais
+  constantes de `world.ts`; `castCommand` aplicando `Math.max(MIN_ABILITY_CD_MS, ab.cd /
+  self.stat.cdSpeed)`.
+- **A cobertura de build introduzida no fim de `debt.3` (resolvendo ARCH-001) já validou
+  esta story de graça** — as 5 variantes incluem `golemAbility: 1`/`vexAbility: 1`, que
+  exercitam `castCommand` no ramo de habilidade com `cd` diferente do default (Tremor
+  8000ms, Deslize 5000ms). Hash idêntico nessas variantes confirma que a fórmula não
+  alterou o comportamento nem nesses casos, não só nos 5 do `BASELINE` principal.
+- Escopo negativo (AC 7) confirmado por leitura direta: `atkReadyAt` (linha 397) só lê
+  `stat.atkSpeed`; o ramo `slot === 'ult'` de `castCommand` não introduz nenhuma leitura
+  de `cdSpeed` — `ultCharge`/`ultThreshold` continuam sendo o único mecanismo de
+  cadência da ult.
+- `ultChargeRate` **não foi criado** — a story pede que o campo fique nomeado e não
+  implementado "para o dia em que alguém quiser" (AC 7), e como isso não é consumido em
+  lugar nenhum, adicionar um campo morto ao `CharDef` só criaria ruído sem benefício
+  auditável agora. Registrado aqui para não ser redescoberto como omissão.
+- Nenhum cenário do roster atual exercita o piso de 400ms na prática (`cdSpeed` é sempre
+  1.0 hoje, nenhum item existe ainda) — como a própria story antecipa em Testing. A
+  invariante completa (`cd_efetivo_mínimo ≥ janela declarada`) é escopo de `debt.6`.
 
 ### File List
 
-_A preencher pelo @dev._
+| Arquivo | Mudança |
+|---|---|
+| `src/sim/world.ts` | `MIN_ABILITY_CD_MS = 400` (nova constante); `castCommand` aplica `cdSpeed` com piso |
+
+Nenhum outro arquivo tocado.
 
 ## QA Results
 
-_A preencher pelo @qa._
+**Gate: CONCERNS** — Status `InReview` → `Done`. Revisor: Quinn (@qa) · 2026-07-28 · revisão sobre working
+tree (base `06a927e`), `src/sim/world.ts` +12/−1.
+
+### Verificação executada (nada aceito da Debug Log)
+
+| # | Verificação | Método | Resultado |
+|---|---|---|---|
+| 1 | Diff completo | `git diff src/sim/world.ts` | Constante + 1 linha de fórmula + 2 comentários. Nenhum import novo, nenhuma outra mudança |
+| 2 | AC 1 — `npm run check` | reexecutado | 0 erros |
+| 3 | AC 2/3 — `npm run sim:check` | reexecutado | determinismo 40/40 ✓ · golden hash ✓ 5 seeds ✓ · **build coverage ✓ 5 variantes** ✓ |
+| 4 | AC 3 — identidade `/1.0` | `node -e` sobre os 9 `cd` reais do roster (1100, 520, 7000, 8000, 6000, 5000, ...) | `x/1.0 === x` e `Object.is` verdadeiros em todos; `Math.max(400, x) === x` em todos (nenhum `cd` de habilidade < 400) |
+| 5 | AC 4 — pureza de `sim/` | grep `Math.random` / DOM / imports de `chars`,`bot`,`client` em `src/sim/` | única ocorrência é o comentário de `rng.ts`. Limpo |
+| 6 | AC 5 | leitura direta `world.ts:351` | `world.time + Math.max(MIN_ABILITY_CD_MS, ab.cd / self.stat.cdSpeed)` — exato |
+| 7 | AC 6 | `world.ts:31` | `const MIN_ABILITY_CD_MS = 400`, junto de `MAX_SLOW`/`MAX_ROUND_MS`, com bloco de justificativa acima |
+| 8 | AC 7 — escopo negativo | leitura direta + grep `cdSpeed` em `src/` | `world.ts:397` `b.atkReadyAt = world.time + def.atk.cd / b.stat.atkSpeed` — só `atkSpeed`. Ramo `slot === 'ult'` (`world.ts:355-361`) usa só `ultCharge`/`ultThreshold`. **`cdSpeed` tem exatamente 1 consumidor em todo `src/`**: a linha 351 |
+| 9 | AC 8 | leitura | `abilityReadyAt` só é escrito na linha 351; nada o recalcula. Propriedade preservada |
+
+### Teste do piso `MIN_ABILITY_CD_MS` (experimento temporário, revertido)
+
+O roster nunca exercita o piso (`cdSpeed` é sempre 1.0). Montei um harness temporário
+(`qa-tmp-floor.ts`, **apagado** — `git status` confirma só os 2 arquivos desta story) que força
+`base.cdSpeed` e mede `abilityReadyAt − world.time` no tick do cast, nas 4 habilidades do roster ×
+8 valores de `cdSpeed` = **32 casos, todos com igualdade exata em ponto flutuante**:
+
+| `cdSpeed` | `cd/cdSpeed` (Sísmico, cd 7000) | cd efetivo medido | Piso |
+|---|---|---|---|
+| 0.5 | 14000 | 14000 | inativo |
+| 1.0 | 7000 | 7000 | inativo |
+| 2.0 (teto D-04) | 3500 | 3500 | inativo |
+| 5.0 | 1400 | 1400 | inativo |
+| 17.5 (fronteira) | 400 | 400 | fronteira |
+| 25 | 280 | **400** | **ATIVO** |
+| 1000 | 7 | **400** | **ATIVO** |
+
+O piso aplica quando `cd/cdSpeed < 400` e **não** aplica quando fica acima — nos dois sentidos, nas 4
+habilidades. O caso `cdSpeed = 0.5 → 14000` também descarta a troca `Math.max`/`Math.min` (com `min` daria
+400). Sem inversão de operador.
+
+**Achado colateral do harness (informativo):** `castCommand` roda **antes** de `recomputeStats` dentro de
+`step` (`world.ts:517` vs `:534`), então o cast lê o `stat.cdSpeed` recomputado no tick anterior — 1 tick
+(16,7 ms) de defasagem. Irrelevante em jogo e coerente com a decisão de §3.4, mas a frase "amostrado no
+instante do cast" das Dev Notes é, ao pé da letra, "amostrado do stat do tick anterior". Só registro.
+
+### QA-001 · MEDIUM · o valor 400 não entrega a propriedade que a própria justificativa dele alega
+
+`golem.ts:52`: `self.memory.dashAte = ctx.now + 450` — a maior janela de dano por contato do roster é
+**450 ms**, e o piso é **400 ms**. O comentário em `world.ts:26-30` (e `architecture.md` §3.3, e as Dev Notes)
+argumenta que o piso existe para impedir que o cooldown desça abaixo da janela que a habilidade abre — mas
+`400 < 450`. Se o piso algum dia for o mecanismo que morde, ele deixa passar 50 ms de janela reaberta.
+
+Não é bug vivo: com `cdSpeed ≤ 2.0` (mecanismo 1, D-04), o cd efetivo mínimo do `sismico` é 3500 ms; para o
+piso morder seria preciso `cdSpeed ≥ 17.5`. O piso é hoje código inalcançável. A implementação também está
+**fiel ao AC 6**, que prescreve `400` literalmente — a falha é de especificação (`architecture.md` §3.3),
+herdada, não introduzida pelo @dev. Por isso CONCERNS e não FAIL.
+
+Consequência para `debt.6`: a invariante `max(MIN_ABILITY_CD_MS, a.cd/cdSpeedMax) ≥ W.ms` passa verde hoje
+**porque o `max` escolhe 3500, não porque o piso protege**. Um personagem futuro com `cd ≤ 800` e janela de
+contato ≥ 400 ms cairia no piso e quebraria D-07 com o teste ainda verde. Recomendação ao @architect antes de
+`debt.6`: ou elevar `MIN_ABILITY_CD_MS` acima da maior janela declarada (≥ 500), ou derivar o piso de
+`max(contactWindows)` quando `CharDef.contactWindows` existir, ou reescrever a justificativa para admitir que
+o piso é uma trava de sanidade genérica e que a proteção real é o teto de `cdSpeed`.
+
+### QA-002 · LOW · a alegação de cobertura das Completion Notes está superestimada (corrigida aqui)
+
+A nota "a cobertura de build de `debt.3` (ARCH-001) já validou esta story de graça" **não procede como
+escrita**. Verificado em `determinism.ts:90-106`: as 5 variantes do `BUILD_BASELINE` rodam com
+`cdSpeed = 1.0` como todo o resto — nenhuma delas exercita `cdSpeed ≠ 1.0` nem o piso, ou seja, **zero
+cobertura automatizada do comportamento novo** desta story.
+
+O que a cobertura de build de fato entrega, e isso tem valor: as variantes `golemAbility: 1` (Tremor, cd 8000)
+e `vexAbility: 1` (Deslize, cd 5000) fazem `castCommand` passar por `ab.cd` fora dos 7000/6000 do `BASELINE`
+principal, com hashes gravados **antes** desta mudança (commit `06a927e`) e idênticos depois. Isso é evidência
+real de não-regressão em 2 valores adicionais de `cd`, e confirma de passagem que o `Math.max(400, …)` não
+morde em nenhum `cd` do roster. É reforço de AC 3 — não é validação da story. A distinção importa porque
+tratar isso como "story validada" mascara que a única evidência do comportamento novo é a verificação manual
+registrada acima, e que a cobertura permanente disso é escopo de `debt.6`.
+
+### Nota 2 — `ultChargeRate` não criado: **divergência aceita**
+
+O AC 7 pede o campo "nomeado e não implementado". O @dev não o criou, argumentando que um campo sem consumidor
+é ruído. Aceito. O núcleo testável do AC 7 é o escopo **negativo** (`cdSpeed` não toca `AtkDef.cd` nem a ult),
+e isso está verificado e verde (item 8 da tabela). A cláusula do campo é intenção documental, não
+comportamento: um campo no `CharDef` sem leitor nenhum não protege nada, não é auditável e sugere uma
+capacidade que não existe — enquanto o nome já está preservado em três lugares de prosa (`architecture.md`
+§3.2, Dev Notes desta story, AC 7). A decisão está registrada nas Completion Notes, que era a condição para
+não ser redescoberta como omissão. Não reabrir em `debt.5`+.
+
+### Demais checagens do gate
+
+- **Regressão**: golden hash e build coverage idênticos, reexecutados por mim. Nenhum desvio.
+- **Performance**: um `Math.max` e uma divisão por cast (evento raro, não por tick). Zero alocação. Nada a dizer.
+- **Segurança**: N/A — módulo puro, sem I/O, sem entrada externa. Divisão por zero impossível hoje
+  (`recomputeStats` clampa σ em [−0.5, +1.0] sobre base 1.0 ⇒ `cdSpeed ∈ [0.5, 2.0]`); observo que `cdSpeed`
+  não tem entrada em `ABS_MIN` de `stats.ts`, então a garantia vem só da base ser 1.0 fixa. Se algum
+  `CharDef` futuro passar a fornecer base para `cdSpeed`, `ab.cd / 0` ⇒ `Infinity` ⇒ habilidade travada para
+  sempre. Ponto para o `debt.5`/`debt.6`, não para esta story.
+- **Documentação**: File List exata (só `world.ts`). Constante bem posicionada e comentada.
+
+### Veredito
+
+**CONCERNS.** Os 8 ACs estão satisfeitos, o comportamento novo foi verificado por mim nos dois ramos do piso e
+não há regressão. As duas ressalvas (QA-001 sobre o valor 400 vs. janela 450; QA-002 sobre a alegação de
+cobertura) são de especificação e de registro, não de implementação, e nenhuma delas é alcançável pelo código
+com o roster e os tetos atuais. Story liberada para `Done`; **QA-001 deve entrar na story `debt.6` como
+pré-requisito da invariante A2** — do jeito que a fórmula está escrita hoje, ela passaria verde sobre o
+problema.

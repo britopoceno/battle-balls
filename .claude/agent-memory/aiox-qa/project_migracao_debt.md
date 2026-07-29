@@ -53,4 +53,19 @@ negativo (perturbar as constantes numa terceira cópia) divergiu 123.958 delas. 
 sequenciais — nos dois casos tudo chegou numa working tree única, e só o estado FINAL é auditável.
 Já pedido em dois gates seguidos sem efeito.
 
+**Pendência aberta que `debt.6` precisa absorver (achado QA-001 do gate de `debt.4`):**
+`MIN_ABILITY_CD_MS = 400` é MENOR que a maior janela de dano por contato do roster (450 ms,
+`golem.ts:52`), embora a justificativa do próprio piso (em `architecture.md` §3.3 e no comentário
+de `world.ts`) diga que ele existe para impedir o cooldown de descer abaixo dessa janela. Hoje é
+código inalcançável (`cdSpeed ≤ 2.0` ⇒ cd efetivo mínimo 3500 ms). O risco é que a invariante A2
+de `debt.6` — `max(MIN_ABILITY_CD_MS, cd/cdSpeedMax) ≥ W.ms` — **passa verde porque o `max`
+escolhe 3500, não porque o piso protege**. Ao revisar `debt.6`, não aceitar essa invariante verde
+sem checar o caso `cd` baixo (`cd ≤ 800`), onde o piso vira o termo dominante e falha.
+
+**Armadilha de harness em `world.ts` (custou uma rodada falsa no gate de `debt.4`):** dentro de
+`step`, `castCommand` roda ANTES de `recomputeStats`. Um teste que força `b.base.X` depois de
+`createWorld` e casta no mesmo tick lê o stat VELHO e produz um falso negativo convincente (o
+efeito parece simplesmente não existir). Rodar um `step(world, [])` de aquecimento antes do tick
+do cast. Vale para qualquer stat consumido em cast, não só `cdSpeed`.
+
 Ver também [[feedback-verificacao-independente]].

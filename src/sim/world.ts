@@ -23,6 +23,14 @@ const SHRINK_PX_PER_S = 16
 /** trava dura: se ninguém morreu até aqui, é empate */
 const MAX_ROUND_MS = 150_000
 const MAX_SLOW = 0.85
+/**
+ * debt.4 — piso absoluto de motor para o cooldown efetivo de habilidade. Não é redundante
+ * com o teto de balanceamento de cdSpeed (ΣMAX +1.00 ⇒ cdSpeed ≤ 2.0): a maior janela de
+ * dano por contato do roster é 450ms (dash do Golem, golem.ts). Se o cooldown pudesse
+ * descer abaixo da janela que ele abre, o jogador recastaria antes dela fechar e o dano
+ * por contato viraria permanente, quebrando o Pilar 3 (D-07) por dentro.
+ */
+const MIN_ABILITY_CD_MS = 400
 
 export interface PickSetup {
   charId: string
@@ -338,7 +346,9 @@ function castCommand(world: World, ctx: SimCtx, cmd: Command): void {
   if (cmd.slot === 'ability') {
     const ab = def.abilities[self.abilityIndex]
     if (world.time < self.abilityReadyAt) return
-    self.abilityReadyAt = world.time + ab.cd
+    // debt.4: cdSpeed aplicado, com piso absoluto — resolve C2 (Relicário). Com
+    // cdSpeed=1.0 (default do roster hoje), ab.cd / 1.0 === ab.cd exato, hash não muda.
+    self.abilityReadyAt = world.time + Math.max(MIN_ABILITY_CD_MS, ab.cd / self.stat.cdSpeed)
     ab.cast(ctx, self, aimFrom(self, cmd, ab.minRange, ab.maxRange))
     world.events.push({ t: 'cast', ballId: self.id, name: ab.name })
     addCharge(world, self, 'casts', 1)
