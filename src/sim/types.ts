@@ -1,7 +1,7 @@
 // Tipos do simulador. Puro: nada aqui conhece DOM, rede ou renderizador.
 
 import type { EffectSpec } from './effects.ts'
-import type { StatBlock, BonusBlock } from './stats.ts'
+import type { StatBlock, BonusBlock, StatKey } from './stats.ts'
 
 export type Team = 0 | 1
 
@@ -15,16 +15,6 @@ export interface Effect {
   sourceId: number
 }
 
-/** Multiplicadores acumulados de passivas e (futuramente) itens. */
-export interface Mods {
-  dmg: number
-  atkSpeed: number
-  range: number
-  speed: number
-  /** 0..1 · fração do knockback recebido que é ignorada */
-  knockbackResist: number
-}
-
 export interface Ball {
   id: number
   charId: string
@@ -36,16 +26,7 @@ export interface Ball {
   /** aceleração acumulada no tick, zerada na integração */
   ax: number
   ay: number
-  radius: number
-  mass: number
-  /** velocidade que a IA de movimento tenta manter (já com mods aplicados) */
-  maxSpeed: number
-  /** convergência para a velocidade desejada */
-  steer: number
-  /** fração da velocidade retida por segundo (0..1) */
-  drag: number
   hp: number
-  maxHp: number
   alive: boolean
   /** radianos · só para render */
   facing: number
@@ -56,13 +37,11 @@ export interface Ball {
   effects: Effect[]
   abilityIndex: 0 | 1
   passiveIndex: 0 | 1
-  mods: Mods
   /** rascunho livre por personagem (contadores, cooldowns internos) */
   memory: Record<string, number>
 
-  // --- camada de stats (debt.1). Desde debt.2, stat.* é lido por effectiveSpeed,
-  // dealDamage, autoAttack, integrate e collideBalls; knockback e os demais pontos que
-  // ainda leem os campos diretos acima fecham em debt.3. Ver sim/stats.ts e architecture.md §1.
+  // --- camada de stats (debt.1, completada em debt.3 — mods e os campos diretos foram
+  // removidos; esta é a única fonte de verdade agora). Ver sim/stats.ts e architecture.md §1.
   /** valores do CharDef, congelados na criação da bola */
   base: StatBlock
   /** bônus de passiva — aditivo, zerado e reescrito por tick */
@@ -207,8 +186,8 @@ export interface PassiveDef {
   id: string
   name: string
   desc: string
-  /** aplica modificadores estáticos na criação da bola */
-  init?: (self: Ball) => void
+  /** bônus estático somado em bonusPassive todo tick (debt.3 — resolve C3: declarativo, auditável sem executar código) */
+  bonus?: Partial<BonusBlock>
   onTick?: (ctx: SimCtx, self: Ball) => void
   /** retorna multiplicador do dano causado */
   onDamageDealt?: (ctx: SimCtx, self: Ball, target: Ball) => number
@@ -269,6 +248,9 @@ export interface SimCtx {
   apply: (target: Ball, spec: EffectSpec, source?: Ball | null) => void
   spawnProjectile: (spec: Omit<Projectile, 'id' | 'hitIds'>) => void
   spawnZone: (spec: Omit<Zone, 'id'>) => void
+
+  /** soma em self.bonusPassive[key] — nunca sobrescreve. Resolve C3 pela raiz (debt.3). */
+  addBonus: (self: Ball, key: StatKey, amount: number) => void
 
   rand: () => number
 }

@@ -33,8 +33,24 @@ mudança, não basta verificar que ninguém a fez; aplicar a mudança proibida n
 que o arnês é sensível e que a proibição tinha fundamento. No caso do `knockback`, produziu 11
 desvios e inversão de vencedor em 2 seeds.
 
-**Recomendação em aberto para `debt.3`–`debt.7`:** exigir **um commit por troca individual**. Em
-`debt.2` o AC pedia `sim:check` isolado por troca, mas tudo chegou numa working tree única — a
-sequência era inverificável e precisou ser reconstruída do zero pelo @qa.
+**O ponto cego tem nome e índice (confirmado no gate de `debt.3`):** o roster do baseline fixa
+`passiveIndex: 0` para os dois personagens. No Golem isso é a Âncora (coberta), mas no Vex é o
+**Predador** — a passiva **Fantasma nunca é executada pelo golden hash**. Em `debt.3` isso teve
+consequência concreta: a mudança de maior risco da story (remover a multiplicação por
+`mods.speed`) passaria verde mesmo errada. Ao revisar `debt.4`–`debt.7`, sempre checar se o
+código tocado só roda com `passiveIndex`/`abilityIndex` 1.
+
+**Técnica decisiva do gate de `debt.3` — trace bit a bit entre árvores.** Quando uma story muda
+uma FÓRMULA (não só a origem de um número), comparar hash final é fraco. O que resolve:
+`git archive HEAD src | tar -x -C scratchpad/old`, escrever um `.mjs` no scratchpad que importa
+`src/sim/world.ts` de uma raiz arbitrária via `pathToFileURL` (Node 24 faz type-stripping de
+`.ts` direto), e amostrar tick a tick a grandeza antiga vs. a nova com `.toPrecision(20)`,
+varrendo todas as permutações de roster. Em `debt.3`: 125.464 amostras idênticas, e o controle
+negativo (perturbar as constantes numa terceira cópia) divergiu 123.958 delas. Barato e conclusivo.
+
+**Recomendação em aberto para `debt.4`–`debt.7`:** exigir **um commit por troca individual**. Em
+`debt.2` o AC pedia `sim:check` isolado por troca e em `debt.3` a Debug Log narrou 11 correções
+sequenciais — nos dois casos tudo chegou numa working tree única, e só o estado FINAL é auditável.
+Já pedido em dois gates seguidos sem efeito.
 
 Ver também [[feedback-verificacao-independente]].

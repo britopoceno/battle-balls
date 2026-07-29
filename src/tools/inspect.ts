@@ -29,7 +29,7 @@ console.log(`último dano aos ${(ultimoDano / 1000).toFixed(1)}s · pad final ${
 for (const m of marcos) console.log('  ' + m)
 for (const b of world.balls) {
   console.log(
-    `  #${b.id} ${b.charId} t${b.team} hp ${b.hp.toFixed(0)}/${b.maxHp}` +
+    `  #${b.id} ${b.charId} t${b.team} hp ${b.hp.toFixed(0)}/${b.stat.maxHp}` +
       ` pos ${b.x.toFixed(0)},${b.y.toFixed(0)} vel ${Math.hypot(b.vx, b.vy).toFixed(0)}` +
       ` ${b.alive ? '' : '(morto)'}`,
   )

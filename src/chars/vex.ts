@@ -38,7 +38,7 @@ export const vex: CharDef = {
       return
     }
     // mergulha em presa ferida, orbita o resto do tempo
-    if (alvo.hp / alvo.maxHp < 0.4) ctx.seek(self, alvo.x, alvo.y, 1.1)
+    if (alvo.hp / alvo.stat.maxHp < 0.4) ctx.seek(self, alvo.x, alvo.y, 1.1)
     else ctx.orbit(self, alvo, 165)
   },
 
@@ -54,8 +54,10 @@ export const vex: CharDef = {
         ctx.spawnProjectile({
           ownerId: self.id,
           team: self.team,
-          x: self.x + aim.dx * self.radius,
-          y: self.y + aim.dy * self.radius,
+          // debt.3: self.radius (campo direto de Ball) removido — usa self.stat.radius.
+          // Site não listado na tabela "o que quebra" da story; encontrado pelo tsc.
+          x: self.x + aim.dx * self.stat.radius,
+          y: self.y + aim.dy * self.stat.radius,
           vx: aim.dx * 620,
           vy: aim.dy * 620,
           radius: 9,
@@ -87,14 +89,17 @@ export const vex: CharDef = {
       id: 'predador',
       name: 'Predador',
       desc: 'Causa 28% mais dano em alvos abaixo de metade da vida.',
-      onDamageDealt: (_ctx, _self, alvo) => (alvo.hp / alvo.maxHp < 0.5 ? 1.28 : 1),
+      onDamageDealt: (_ctx, _self, alvo) => (alvo.hp / alvo.stat.maxHp < 0.5 ? 1.28 : 1),
     },
     {
       id: 'fantasma',
       name: 'Fantasma',
       desc: 'Ganha 25% de velocidade enquanto estiver abaixo de 40% da vida.',
-      onTick: (_ctx, self) => {
-        self.mods.speed = self.hp / self.maxHp < 0.4 ? 1.25 : 1
+      // debt.3: era atribuição absoluta ao antigo campo de velocidade — o bug raiz de C3,
+      // onde o último a escrever vence. addBonus SOMA em bonusPassive, já zerado no
+      // início do tick por step(): 250 × 1.25 === 250 × (1 + 0.25), conversão exata.
+      onTick: (ctx, self) => {
+        if (self.hp / self.stat.maxHp < 0.4) ctx.addBonus(self, 'maxSpeed', 0.25)
       },
     },
   ],

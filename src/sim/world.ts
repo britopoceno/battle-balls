@@ -1,7 +1,7 @@
 import { mulberry32 } from './rng.ts'
 import { sumEffects, type EffectSpec } from './effects.ts'
 import { integrate, collideBalls, collideWalls, collideZoneWalls } from './physics.ts'
-import { DEFAULT_STATS, makeStatBlock, recomputeStats } from './stats.ts'
+import { DEFAULT_STATS, addPartialBonus, makeStatBlock, recomputeStats, zeroBonus } from './stats.ts'
 import type {
   Aim,
   Ball,
@@ -89,13 +89,7 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     vy: 0,
     ax: 0,
     ay: 0,
-    radius: def.radius,
-    mass: def.mass,
-    maxSpeed: def.maxSpeed,
-    steer: def.steer,
-    drag: def.drag,
     hp: def.maxHp,
-    maxHp: def.maxHp,
     alive: true,
     facing: team === 0 ? 0 : Math.PI,
     atkReadyAt: 0,
@@ -105,11 +99,11 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     effects: [],
     abilityIndex: pick.abilityIndex,
     passiveIndex: pick.passiveIndex,
-    mods: { dmg: 1, atkSpeed: 1, range: 1, speed: 1, knockbackResist: 0 },
     memory: {},
 
     // camada de stats (debt.1) — base congela os valores do CharDef; restBall/restWall
     // ainda não têm fonte própria no CharDef (isso é debt.5), usam DEFAULT_STATS por ora.
+    // debt.3: única fonte de verdade agora — mods e os campos diretos foram removidos.
     base: {
       maxHp: def.maxHp,
       radius: def.radius,
@@ -123,7 +117,6 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     bonusItem: makeStatBlock(0),
     stat: makeStatBlock(0), // populado abaixo, nunca lido não-inicializado
   }
-  def.passives[pick.passiveIndex].init?.(b)
   recomputeStats(b)
   return b
 }
@@ -134,14 +127,17 @@ const charOf = (w: World, b: Ball): CharDef => w.chars[b.charId]
 
 function effectiveSpeed(b: Ball): number {
   const slow = Math.min(MAX_SLOW, sumEffects(b.effects, 'slow'))
-  // debt.2 Task 1: maxSpeed migrado para stat.*; mods.speed intocado (migra em debt.3)
-  return b.stat.maxSpeed * b.mods.speed * (1 - slow)
+  // debt.3: mods.speed removido. O bônus da passiva Fantasma agora entra direto em
+  // stat.maxSpeed via addBonus (ver vex.ts) — manter a multiplicação aqui aplicaria o
+  // mesmo bônus duas vezes. 250 × 1.25 (mods antigo) === 312.5 === stat.maxSpeed novo,
+  // já com o bônus incorporado; sem segunda multiplicação, o resultado bate.
+  return b.stat.maxSpeed * (1 - slow)
 }
 
 /** empurra a bola na direção de uma velocidade desejada (steering) */
 function steerTo(b: Ball, dvx: number, dvy: number): void {
-  b.ax += (dvx - b.vx) * b.steer
-  b.ay += (dvy - b.vy) * b.steer
+  b.ax += (dvx - b.vx) * b.stat.steer
+  b.ay += (dvy - b.vy) * b.stat.steer
 }
 
 export function makeCtx(world: World): SimCtx {
@@ -173,7 +169,7 @@ export function makeCtx(world: World): SimCtx {
       let best: Ball | null = null
       for (const b of world.balls) {
         if (!b.alive || b.team === self.team) continue
-        if (!best || b.hp / b.maxHp < best.hp / best.maxHp) best = b
+        if (!best || b.hp / b.stat.maxHp < best.hp / best.stat.maxHp) best = b
       }
       return best
     },
@@ -228,12 +224,15 @@ export function makeCtx(world: World): SimCtx {
 
     heal: (target, amount) => {
       if (!target.alive) return
-      target.hp = Math.min(target.maxHp, target.hp + amount)
+      target.hp = Math.min(target.stat.maxHp, target.hp + amount)
     },
 
     knockback: (target, dx, dy, force) => {
       const d = Math.hypot(dx, dy) || 1
-      const eff = (force * (1 - target.mods.knockbackResist)) / target.mass
+      // debt.3 Task 5: fecha a migração que debt.2 deixou pendente por decisão do @po.
+      // stat.knockbackTaken (base 1.0 + bônus do Golem -0.6 = 0.4) reproduz exatamente
+      // 1 - mods.knockbackResist (1 - 0.6 = 0.4) de antes.
+      const eff = (force * target.stat.knockbackTaken) / target.stat.mass
       target.vx += (dx / d) * eff
       target.vy += (dy / d) * eff
     },
@@ -254,6 +253,11 @@ export function makeCtx(world: World): SimCtx {
 
     spawnZone: (spec) => {
       world.zones.push({ ...spec, id: world.nextId++ } as Zone)
+    },
+
+    // debt.3 — soma, nunca sobrescreve. É isto que resolve C3.
+    addBonus: (self, key, amount) => {
+      self.bonusPassive[key] += amount
     },
 
     rand: world.rng,
@@ -294,7 +298,7 @@ function dealDamage(
   world.events.push({
     t: 'hit',
     x: target.x,
-    y: target.y - target.radius,
+    y: target.y - target.stat.radius,
     amount: amt,
     targetId: target.id,
     crit: amt >= 20,
@@ -371,7 +375,7 @@ function autoAttack(world: World, ctx: SimCtx, b: Ball): void {
     if (!e.alive || e.team === b.team) continue
     // alcance é medido de SUPERFÍCIE a superfície, senão corpos grandes nunca se
     // alcançam: a colisão os mantém separados pela soma dos raios.
-    const gap = Math.hypot(e.x - b.x, e.y - b.y) - e.radius - b.radius
+    const gap = Math.hypot(e.x - b.x, e.y - b.y) - e.stat.radius - b.stat.radius
     if (gap <= range && gap < bestD) {
       bestD = gap
       target = e
@@ -406,8 +410,8 @@ function autoAttack(world: World, ctx: SimCtx, b: Ball): void {
     ctx.spawnProjectile({
       ownerId: b.id,
       team: b.team,
-      x: b.x + (ix / id) * b.radius,
-      y: b.y + (iy / id) * b.radius,
+      x: b.x + (ix / id) * b.stat.radius,
+      y: b.y + (iy / id) * b.stat.radius,
       vx: (ix / id) * sp,
       vy: (iy / id) * sp,
       radius: 5,
@@ -434,7 +438,7 @@ function tickProjectiles(world: World, ctx: SimCtx): void {
     let consumed = false
     for (const b of world.balls) {
       if (!b.alive || b.team === p.team || p.hitIds.includes(b.id)) continue
-      if (Math.hypot(b.x - p.x, b.y - p.y) > b.radius + p.radius) continue
+      if (Math.hypot(b.x - p.x, b.y - p.y) > b.stat.radius + p.radius) continue
       p.hitIds.push(b.id)
       const owner = world.balls.find((x) => x.id === p.ownerId) ?? null
       dealDamage(world, ctx, b, p.dmg, owner)
@@ -509,13 +513,14 @@ export function step(world: World, commands: Command[] = []): void {
     tickEffects(world, ctx, b)
     if (!b.alive) continue
     const def = charOf(world, b)
+    // pipeline de recálculo por tick (debt.3, architecture.md §1.5) — ordem exata:
+    // zera bonusPassive, soma o bônus declarativo da passiva ativa, roda onTick (que pode
+    // chamar ctx.addBonus), roda on.tick do personagem, só então recomputa stat.
+    zeroBonus(b.bonusPassive)
+    const passiveBonus = def.passives[b.passiveIndex].bonus
+    if (passiveBonus) addPartialBonus(b.bonusPassive, passiveBonus)
     def.passives[b.passiveIndex].onTick?.(ctx, b)
     def.on?.tick?.(ctx, b)
-    // ponto único de recálculo de stats (architecture.md §1.5). Desde debt.2, 5 leitores
-    // reais consomem b.stat (effectiveSpeed, dealDamage, autoAttack, integrate,
-    // collideBalls); knockback ainda lê mods.knockbackResist direto (fecha em debt.3).
-    // bonusPassive/bonusItem seguem sempre zerados até debt.3 — então stat[k] === base[k]
-    // no roster atual, sem mudar o hash.
     recomputeStats(b)
     def.move(ctx, b)
     if (def.ult.charge === 'time') addCharge(world, b, 'time', world.dt * 1000)

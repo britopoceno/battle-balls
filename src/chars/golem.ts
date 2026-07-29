@@ -91,15 +91,15 @@ export const golem: CharDef = {
       id: 'ancora',
       name: 'Âncora',
       desc: 'Ignora 60% de todo knockback recebido.',
-      init: (self) => {
-        self.mods.knockbackResist = 0.6
-      },
+      // debt.3: era init com atribuição absoluta ao antigo campo de resistência (0.6).
+      // bonus é declarativo e soma em bonusPassive todo tick — 1 - 0.6 === 0.4, exato.
+      bonus: { knockbackTaken: -0.6 },
     },
     {
       id: 'casca',
       name: 'Casca',
       desc: 'Recebe 18% menos dano enquanto estiver acima de metade da vida.',
-      onDamageTaken: (_ctx, self) => (self.hp / self.maxHp > 0.5 ? 0.82 : 1),
+      onDamageTaken: (_ctx, self) => (self.hp / self.stat.maxHp > 0.5 ? 0.82 : 1),
     },
   ],
 

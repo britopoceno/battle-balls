@@ -144,7 +144,7 @@ function desenharBola(
 ) {
   const def = world.chars[b.charId]
   const [sx, sy] = paraTela(t, b.x, b.y)
-  const r = b.radius * t.scale
+  const r = b.stat.radius * t.scale
 
   if (!b.alive) {
     g.save()
@@ -192,7 +192,7 @@ function desenharBola(
   g.stroke()
 
   // arco de vida
-  const frac = Math.max(0, b.hp / b.maxHp)
+  const frac = Math.max(0, b.hp / b.stat.maxHp)
   g.strokeStyle = 'rgba(0,0,0,0.5)'
   g.lineWidth = 5
   g.beginPath()
@@ -299,7 +299,7 @@ function desenharHud(
       g.fillRect(x, y, larg, 18)
       g.fillStyle = def.color
       g.globalAlpha = b.alive ? 1 : 0.25
-      g.fillRect(x, y, larg * Math.max(0, b.hp / b.maxHp), 18)
+      g.fillRect(x, y, larg * Math.max(0, b.hp / b.stat.maxHp), 18)
       g.globalAlpha = 1
       g.strokeStyle = COR_TIME[time]
       g.lineWidth = 1.5

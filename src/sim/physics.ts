@@ -74,7 +74,7 @@ export function collideWalls(world: World): void {
   const { pad, w, h } = world.arena
   for (const b of world.balls) {
     if (!b.alive) continue
-    const r = b.radius
+    const r = b.stat.radius
     if (b.x - r < pad) {
       b.x = pad + r
       if (b.vx < 0) b.vx = -b.vx * REST_WALL
@@ -109,7 +109,7 @@ export function collideZoneWalls(world: World): void {
       const py = z.y + sa * t
       const dx = b.x - px
       const dy = b.y - py
-      const r = b.radius + z.radius
+      const r = b.stat.radius + z.radius
       const d2 = dx * dx + dy * dy
       if (d2 >= r * r) continue
       const d = Math.sqrt(d2) || 0.0001

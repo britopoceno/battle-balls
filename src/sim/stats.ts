@@ -80,6 +80,14 @@ export function zeroBonus(b: BonusBlock): void {
   for (const k of STAT_KEYS) b[k] = 0
 }
 
+/** Soma um bônus declarativo parcial (`PassiveDef.bonus`) num BonusBlock existente — nunca sobrescreve. */
+export function addPartialBonus(target: BonusBlock, partial: Partial<BonusBlock>): void {
+  for (const k of STAT_KEYS) {
+    const v = partial[k]
+    if (v !== undefined) target[k] += v
+  }
+}
+
 /**
  * Recalcula `b.stat` a partir de `b.base`/`b.bonusPassive`/`b.bonusItem`, MUTANDO `b.stat`
  * no lugar — nunca aloca um `StatBlock` novo.

@@ -1,0 +1,226 @@
+schema: 1
+story: 'debt.3'
+gate: CONCERNS
+status_reason: >-
+  Os 12 ACs estão cumpridos e a mudança de maior risco — a REMOÇÃO da multiplicação por
+  `mods.speed` em `effectiveSpeed` — foi provada numericamente equivalente, não aceita pela
+  justificativa: 125.464 amostras tick a tick de velocidade efetiva, fator de knockback e
+  massa saíram bit a bit idênticas entre a árvore pré-story e a atual, em 128 combinações de
+  roster. As ressalvas são de cobertura e de comentários, não de código entregue: o golden
+  hash (AC 3) é estruturalmente CEGO à passiva Fantasma, que é justamente o que esta story
+  reescreveu.
+reviewer: 'Quinn'
+reviewed_revision: >-
+  working-tree sobre 993830d (debt.2) — src/sim/types.ts, src/sim/stats.ts, src/sim/world.ts,
+  src/sim/physics.ts, src/chars/golem.ts, src/chars/vex.ts, src/client/render.ts,
+  src/tools/inspect.ts
+updated: '2026-07-28T00:00:00Z'
+
+verification_performed:
+  independent_runs:
+    - 'npm run check → 0 erros (reexecutado pelo @qa)'
+    - 'npm run sim:check → determinismo ✓ 40/40 · golden hash ✓ 5/5 seeds (reexecutado pelo @qa)'
+  baseline_integrity: >-
+    `git diff d52c23d -- src/tools/determinism.ts` vazio: a tabela BASELINE (seeds 1, 2, 3, 7,
+    11) está idêntica ao commit de debt.0. O critério de aprovação não foi adulterado.
+  interface_surface: >-
+    Grep próprio por `.(mods|radius|mass|maxSpeed|steer|drag|maxHp)` em todo src/: nenhuma
+    ocorrência restante é campo de `Ball`. As sobreviventes são `def.*` (CharDef, que mantém
+    maxHp/radius/mass/maxSpeed/steer/drag como base), `z.radius` (Zone) e `p.radius`
+    (Projectile) — nenhum dos três tem camada de stats. A interface `Mods` foi removida do
+    arquivo, não deixada órfã: as únicas ocorrências do token `mods` em src/ são comentários.
+    `PassiveDef.init` não existe mais em lugar nenhum (`grep "init:" src/chars` vazio).
+  equivalence_proof_speed_removal: >-
+    Ponto de maior risco da story, verificado de forma independente e adversarial. Harness de
+    QA rodou a MESMA matriz de partidas contra a árvore pré-story (git archive de 993830d) e
+    contra a working tree, medindo no MESMO ponto do tick três números cuja FÓRMULA mudou:
+    velocidade efetiva (antiga `stat.maxSpeed * mods.speed`, nova `stat.maxSpeed`), fator de
+    knockback (antiga `1 - mods.knockbackResist`, nova `stat.knockbackTaken`) e massa (antiga
+    `ball.mass`, nova `stat.mass`). Resultado: 125.464 amostras, ZERO divergências, com os
+    caminhos comprovadamente exercitados (6.764 amostras com o bônus de velocidade ativo,
+    29.160 com knockback reduzido). Em paralelo, 128 combinações de roster (2 abilityIndex ×
+    2 abilityIndex × 2 passiveIndex × 2 passiveIndex × 8 seeds) deram hash/ticks/vencedor
+    idênticos entre as duas árvores. A remoção da multiplicação está correta.
+  negative_control: >-
+    Numa cópia isolada da árvore (scratchpad; working tree jamais tocada), perturbar as duas
+    constantes migradas — `addBonus(self,'maxSpeed',0.25)` → `0.26` e
+    `bonus: { knockbackTaken: -0.6 }` → `-0.5` — divergiu 123.958 das 125.464 amostras e 96
+    das 128 combinações de hash. As 32 combinações que NÃO divergiram são exatamente as
+    32 sem nenhuma das duas passivas ativas (golem passiveIndex 1 + vex passiveIndex 0),
+    o que fecha a aritmética. O arnês de comparação é sensível: a igualdade acima tem valor.
+  instrumented_values: >-
+    Valores REAIS medidos em 8 seeds com Fantasma e Âncora ativas:
+    `stat.knockbackTaken` do Golem = 0.40000000000000002220 em 100% das amostras (é o double
+    de 0.4; `=== 0.4` retorna true) — nunca 1.0, que seria o bug que debt.2 evitou.
+    `stat.mass` do Golem = 3.2000000000000001776 (idêntico a `def.mass`).
+    `stat.maxSpeed` do Vex com a Fantasma ativa = 312.50000000000000000 exato.
+    Ressalva de leitura: o mesmo conjunto contém 250 em ticks nos quais o Vex cruza os 40%
+    de vida DEPOIS do ponto de recálculo do tick (o dano é aplicado nas fases posteriores do
+    step). É a defasagem de um tick declarada em architecture.md §1.5, presente de forma
+    idêntica na árvore antiga — o trace bit a bit acima prova que não é diferença.
+  ac10_identities: >-
+    Reproduzidas pelo @qa em binário64: `(1 - 0.6) === 0.4` → true;
+    `(250 * 1.25) === (250 * (1 + 0.25))` → true. Adicionalmente verificada a identidade que a
+    story NÃO pediu mas é a que o motor realmente executa: `1.0 * (1 + (-0.6)) === 0.4` → true
+    (o caminho é `base.knockbackTaken * (1 + sigma)`, não `1 - 0.6` literal).
+  pipeline_order: >-
+    `world.ts:519-524` confere token a token com o pseudocódigo de architecture.md §1.5:
+    zeroBonus → bônus declarativo → passives[i].onTick → char.on.tick → recomputeStats →
+    char.move. AC 8 satisfeito na ordem exata.
+  golem_on_collide: >-
+    `golem.ts:134-144` não aparece no diff. Confirmado por leitura: usa só `ctx.damage`,
+    `ctx.knockback` e `self.memory`. AC 12 satisfeito.
+  passives_write_only_bonus: >-
+    Grep por escrita em `.stat` (`= / += / -= / *= /=`) em todo src/: zero ocorrências fora
+    do cast deliberado dentro de `recomputeStats`. A única escrita em `bonusPassive` é
+    `addBonus` (`world.ts:260`, `+=`), mais `zeroBonus`/`addPartialBonus` no pipeline do
+    step. AC 11 satisfeito.
+  sim_purity: >-
+    Imports de src/sim/*.ts são todos relativos a ./ dentro de sim/. Nenhum Math.random
+    (só a nota em rng.ts), nenhum DOM, nenhum I/O. AC 4 satisfeito.
+  working_tree_restored: >-
+    Todos os experimentos rodaram em cópias no scratchpad. `git status` pós-gate idêntico ao
+    pré: só os arquivos desta story modificados, zero arquivos novos em src/.
+
+top_issues:
+  - id: 'ARCH-001'
+    severity: medium
+    finding: >-
+      O golden hash (AC 3), que a story declara como "a garantia comportamental desta story",
+      é ESTRUTURALMENTE CEGO à mudança de maior risco que ela faz. O roster de
+      `determinism.ts` fixa `passiveIndex: 0` para os dois personagens — golem passiveIndex 0
+      é Âncora (coberta), mas vex passiveIndex 0 é Predador, não Fantasma. Ou seja:
+      `mods.speed` valia 1.0 em todas as 5 seeds do baseline, e a remoção da multiplicação em
+      `effectiveSpeed` passaria verde mesmo se estivesse errada. A story trata AC 3 como
+      cobertura e ela não é. O que fecha o buraco é a matriz de 128 combinações que o @qa
+      rodou fora do repositório — evidência que não fica versionada e não protege debt.4-7.
+      Isto é o mesmo ponto cego registrado como ARCH-001 no gate de debt.2 (roster fixo),
+      agora com consequência concreta.
+    suggested_action: >-
+      Estender `determinism.ts` com uma segunda tabela de baseline cobrindo as permutações de
+      `passiveIndex`/`abilityIndex` (4 rosters × as mesmas 5 seeds). São ~20 linhas e passam a
+      cobrir toda passiva do roster, não só as de índice 0. Sem isso, debt.4-debt.7 continuam
+      declarando "hash idêntico" como garantia enquanto metade do conteúdo dos personagens
+      nunca é executada.
+
+  - id: 'MNT-001'
+    severity: medium
+    finding: >-
+      Recorrência exata do MNT-001 do gate de debt.2 — um comentário que ESTA story tornou
+      falso e não atualizou. `world.ts:292` diz "dmgTaken é campo novo (debt.1), sempre 1.0
+      hoje — multiplicação é no-op até debt.3". debt.3 fechou e `stat.dmgTaken` continua 1.0:
+      nada no roster escreve bônus de `dmgTaken` (a Casca do Golem usa o hook
+      `onDamageTaken`, não o stat). O comentário promete um marco que já passou sem cumprir,
+      e o próximo leitor é o dev de debt.4. Além disso, os comentários "debt.2 Task N" que o
+      MNT-002 daquele gate pediu para limpar em debt.3 seguem em `physics.ts:17`,
+      `physics.ts:39`, `world.ts:287`, `world.ts:369` e `world.ts:386` — a numeração de tasks
+      aponta para uma story arquivada e que foi renumerada no meio do caminho.
+    suggested_action: >-
+      Corrigir `world.ts:292` (dizer que `dmgTaken` segue sem fonte no roster, e em qual story
+      ganha uma) e remover as 5 referências "Task N" em debt.4. É higiene de 5 minutos que
+      duas revisões seguidas já pediram.
+
+  - id: 'ARCH-002'
+    severity: low
+    finding: >-
+      A migração de `mods.speed` (multiplicativo, fora do pipeline) para bônus de `maxSpeed`
+      (aditivo, dentro de `recomputeStats`) submete o bônus de velocidade a dois tetos que
+      antes não o alcançavam: `SIGMA_MAX.maxSpeed = +0.60` e `ABS_MAX.maxSpeed = 420`. Antes,
+      `stat.maxSpeed * mods.speed` era calculado DEPOIS do clamp e podia ultrapassá-lo. Hoje
+      é inerte (Vex: 250 → 312,5, longe de 420), mas é uma diferença de comportamento real e
+      permanente para qualquer personagem futuro com base acima de ~336, ou para bônus de
+      velocidade compostos. Provavelmente é o comportamento desejado — é a contrapartida de
+      "os clamps viram load-bearing" —, mas não está escrito em lugar nenhum: nem na story,
+      nem no comentário de `effectiveSpeed`, que só justifica a dupla multiplicação.
+    suggested_action: >-
+      Registrar a consequência em uma linha no comentário de `effectiveSpeed` ou no Anexo B:
+      bônus de velocidade agora passam por SIGMA_MAX/ABS_MAX, o que antes não acontecia.
+
+  - id: 'REL-001'
+    severity: low
+    finding: >-
+      `bonusPassive` nunca é zerado para bola morta: `step()` faz `if (!b.alive) continue`
+      antes do pipeline, então uma bola que morre com bônus ativo mantém `bonusPassive` e
+      `stat` congelados no último valor vivo. Hoje é inofensivo e NÃO é regressão (o `mods`
+      antigo tinha exatamente a mesma persistência), e os únicos leitores de bola morta são
+      de render (`stat.radius`, `stat.maxHp`), campos que nenhuma passiva do roster
+      bonifica. Vira defeito visível no dia em que existir bônus de `radius` ou `maxHp`
+      (itens, Fase 3) — o cadáver renderizaria no tamanho inflado.
+    suggested_action: >-
+      Sem ação agora. Registrar para a story que introduzir bônus estruturais: ou zerar
+      `bonusPassive` no momento da morte, ou recomputar uma última vez.
+
+  - id: 'MNT-002'
+    severity: low
+    finding: >-
+      `recomputeStats` recomputa as 14 chaves toda vez, inclusive as estruturais `maxHp` e
+      `radius`, contrariando o comentário do próprio `stats.ts:14` ("estruturais —
+      recomputados só em evento explícito (§1.5)") e o §1.6 de architecture.md. Vem de
+      debt.1 e não foi alterado aqui, e é inerte hoje (nenhum bônus estrutural existe). Mas
+      debt.3 elevou a aposta: `stat.maxHp` passou a ser a ÚNICA fonte de verdade das 6
+      leituras de fração de vida (golem Casca, vex move/Predador/Fantasma, weakestEnemy,
+      render ×2, inspect). Quando um bônus de `maxHp` existir, a divergência entre o
+      documentado e o implementado deixa de ser acadêmica.
+    suggested_action: >-
+      Reconciliar em debt.5 ou na story de itens: ou o código passa a respeitar o recálculo
+      por evento, ou o comentário e §1.6 mudam para descrever o que o código faz.
+
+  - id: 'PROC-001'
+    severity: low
+    finding: >-
+      Recorrência do PROC-001 do gate de debt.2 e da recomendação registrada na memória do
+      @qa: a story chegou de novo numa working tree única, sem commits intermediários. Para
+      debt.3 o custo é menor (os ACs não exigem verificação isolada por troca), mas a
+      sequência descrita na Debug Log — "11 erros do tsc, corrigidos um a um" e as duas
+      autocorreções (`mods` na interface, `steer` como campo direto) — é inverificável a
+      posteriori. O @qa só pôde auditar o estado FINAL. Confirmo que o estado final está
+      correto nos dois pontos: `mods`/`Mods` não existem mais e `steer` é lido de
+      `b.stat.steer` em `steerTo`.
+    suggested_action: >-
+      Em debt.4-debt.7, um commit por etapa. Para uma story deste tamanho, é a diferença
+      entre auditar o resultado e auditar o caminho.
+
+scope_judgments:
+  effective_speed_formula_removal:
+    verdict: DECISÃO CORRETA, COMPROVADA
+    reasoning: >-
+      A única mudança da story em que uma fórmula foi REMOVIDA e não substituída. Manter
+      `* stat.speed` teria aplicado o bônus da Fantasma duas vezes (312,5 × 1,25 = 390,6), já
+      que ele passou a entrar em `stat.maxSpeed` via `addBonus`. O raciocínio do @dev está
+      certo e, mais importante, o resultado foi medido: 125.464 amostras bit a bit idênticas
+      entre as duas árvores, com 6.764 delas no estado em que o bônus está ativo. Nota: não
+      existe `stat.speed` — `speed` nunca foi StatKey. A alternativa "trocar por stat.speed"
+      descrita na story nem era implementável.
+  additional_break_sites:
+    verdict: ESCOPO CORRETO
+    reasoning: >-
+      Os sites fora da tabela "o que quebra" (vex.ts:57-58, world.ts effectiveSpeed/steerTo,
+      heal, evento de dano, autoAttack, spawn e colisão de projétil, physics.ts ×2) foram
+      todos migrados. AC 1 já declarava o tsc como autoridade final e a lista como não
+      exaustiva; o @po havia antecipado physics.ts na v1.0.1. Nenhum site sobrou: grep
+      próprio confirma zero acessos a campo removido de `Ball` em todo src/.
+  knockback_closure:
+    verdict: FECHADO CORRETAMENTE
+    reasoning: >-
+      Task 5 fechou o que debt.2 adiou por decisão do @po. `stat.knockbackTaken` do Golem vale
+      0.4 exato em 100% das amostras instrumentadas, e o trace bit a bit contra a árvore
+      antiga prova que `stat.knockbackTaken`/`stat.mass` produzem os mesmos números que
+      `1 - mods.knockbackResist`/`ball.mass` produziam. O controle negativo do gate de debt.2
+      (11 desvios ao fazer a troca antes da hora) e a igualdade aqui são consistentes: a troca
+      só era neutra DEPOIS de o Golem passar a contribuir -0.6 via `bonus`.
+
+acceptance_criteria:
+  AC1_tsc: PASS
+  AC2_sim_check: PASS
+  AC3_golden_hash: 'PASS (idêntico ao baseline; ressalva de cobertura em ARCH-001)'
+  AC4_sim_purity: PASS
+  AC5_fields_removed: PASS
+  AC6_passivedef_bonus: PASS
+  AC7_addbonus_accumulates: PASS
+  AC8_tick_pipeline_order: PASS
+  AC9_all_break_sites: PASS
+  AC10_exact_numeric_identities: PASS
+  AC11_no_passive_writes_stat: PASS
+  AC12_golem_on_collide_untouched: PASS
+
+waiver: { active: false }
