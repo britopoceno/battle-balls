@@ -4,15 +4,17 @@ import { fileURLToPath } from 'node:url'
 import { CHARS } from '../chars/index.ts'
 import { dummyCommands } from '../bot/dummy.ts'
 import {
-  createWorld,
-  step,
   TICK_MS,
   MIN_ABILITY_CD_MS,
   type RoundSetup,
   type PickSetup,
 } from '../sim/world.ts'
 import { SIGMA_MAX } from '../sim/stats.ts'
-import type { World, Command } from '../sim/types.ts'
+import type { Command } from '../sim/types.ts'
+// `hash` também mora em `./harness.ts` (AC 4), mas este arquivo o consome apenas através de
+// `RoundResult.hash` — importá-lo aqui só para "cumprir a lista" seria import não usado, e
+// `noUnusedLocals` reprova o `npm run check`. Ver Dev Agent Record da story e2.0.
+import { runRound, type RoundDriver, type RoundResult } from './harness.ts'
 
 const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
 
@@ -34,29 +36,22 @@ function setup(seed: number, team: PickSetup[] = TIME): RoundSetup {
   return { seed, teams: [team, team] }
 }
 
-function rodar(seed: number, team: PickSetup[] = TIME) {
-  const world = createWorld(CHARS, setup(seed, team))
-  while (!world.over && world.tick < 60 * 180) {
-    step(world, [...dummyCommands(world, 0), ...dummyCommands(world, 1)])
-  }
-  return { winner: world.winner, ticks: world.tick, hash: hash(world) }
-}
+/**
+ * O laço e o `hash` vivem em `./harness.ts` desde `e2.0` — aqui ficam só os drivers e as
+ * tabelas de baseline. `determinism.ts` não tem mais laço próprio: se alguém mexer no teto
+ * de ticks ou na ordem de concatenação dos comandos lá, o golden hash abaixo acusa.
+ *
+ * Driver congelado do golden hash: `dummyCommands` dos dois times, na mesma ordem de sempre
+ * (time 0 e depois time 1). É sem estado, então ignora o `setup` da fábrica. `dummy.ts` é
+ * fixture: a Fase 2 acrescenta `heuristic` como driver NOVO, não substitui este.
+ */
+const dummyDriver: RoundDriver = () => (view) => [
+  ...dummyCommands(view, 0),
+  ...dummyCommands(view, 1),
+]
 
-/** FNV-1a sobre o estado quantizado. Quantizar evita ruído de ponto flutuante irrelevante. */
-function hash(w: World): string {
-  const partes: string[] = [String(w.tick), String(w.winner)]
-  for (const b of w.balls) {
-    partes.push(
-      `${b.id}:${b.x.toFixed(4)}:${b.y.toFixed(4)}:${b.vx.toFixed(4)}:${b.vy.toFixed(4)}:${b.hp.toFixed(4)}:${b.alive}`,
-    )
-  }
-  let h = 0x811c9dc5
-  const s = partes.join('|')
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193) >>> 0
-  }
-  return h.toString(16).padStart(8, '0')
+function rodar(seed: number, team: PickSetup[] = TIME): RoundResult {
+  return runRound(CHARS, setup(seed, team), dummyDriver)
 }
 
 /**
@@ -192,22 +187,26 @@ for (const esperado of BUILD_BASELINE) {
  * este teste é a segunda linha de defesa, em runtime, do que o tipo já impede em compilação.
  */
 function rodarComGravacao(seed: number): { hash: string; gravados: Command[] } {
-  const world = createWorld(CHARS, setup(seed))
+  // driver-gravador: delega ao driver congelado e anota o que ele produziu. Envolver o
+  // driver, em vez de reescrever o laço, mantém a gravação sobre EXATAMENTE os comandos
+  // que a partida consumiu — não sobre uma segunda derivação deles.
   const gravados: Command[] = []
-  while (!world.over && world.tick < 60 * 180) {
-    const cmds = [...dummyCommands(world, 0), ...dummyCommands(world, 1)]
-    gravados.push(...cmds)
-    step(world, cmds)
+  const gravador: RoundDriver = (s) => {
+    const driver = dummyDriver(s)
+    return (view) => {
+      const cmds = driver(view)
+      gravados.push(...cmds)
+      return cmds
+    }
   }
-  return { hash: hash(world), gravados }
+  return { hash: runRound(CHARS, setup(seed), gravador).hash, gravados }
 }
 
 function rodarReplay(seed: number, gravados: Command[]): string {
-  const world = createWorld(CHARS, setup(seed))
-  while (!world.over && world.tick < 60 * 180) {
-    step(world, gravados)
-  }
-  return hash(world)
+  // sem bot algum: a cada tick entrega a linha do tempo gravada inteira, e o motor
+  // executa só os comandos cujo `tick` é o corrente. Idêntico ao `step(world, gravados)`
+  // do laço original.
+  return runRound(CHARS, setup(seed), () => () => gravados).hash
 }
 
 const desviosReplay: string[] = []

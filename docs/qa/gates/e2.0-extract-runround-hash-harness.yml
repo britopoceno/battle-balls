@@ -1,0 +1,128 @@
+schema: 1
+story: 'e2.0'
+gate: PASS
+status_reason: >-
+  Extração verificada como refatoração pura por meio independente: 2.720 partidas
+  velho-vs-novo (16 builds × 150 seeds + times assimétricos) sem uma divergência, e a
+  saída do determinism.ts pré-extração (git archive HEAD) é idêntica linha por linha à
+  pós-extração. Três achados LOW, nenhum sobre o entregável.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: 'working tree sobre commit:4835863'
+updated: '2026-07-29T00:50:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: '`npm run check` rodado por mim — saída vazia, exit 0'
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` rodado por mim — determinismo 40/40, golden hash 5 seeds,
+      build coverage 5 variantes, replay 5 seeds, Pilar 3 camadas 1 e 3
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      5/5 hashes recomputados por arnês próprio (fora de determinism.ts) contra a tabela
+      de architecture.md §6.0 transcrita à mão — 96de1201/f66a7416/a8db9c28/cb77dbe0/6aede2d9
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      harness.ts exporta runRound(chars, setup, driver) → RoundResult e hash; corpo do hash
+      byte-idêntico ao original (única diferença: `export` e `World`→`WorldView`)
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Zero cópias residuais do laço ou do FNV em determinism.ts (grep). Consumo do `hash`
+      de harness.ts provado por teste negativo próprio (perturbar a constante FNV em
+      harness.ts derruba 5 campos do baseline + 5 de build coverage)
+  - id: AC6
+    verdict: PASS
+    evidence: '`git status --short src/` → apenas `M determinism.ts` e `?? harness.ts`'
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      grep próprio — todos os imports de src/sim/ apontam para ./; única ocorrência de
+      Math.random é o comentário de rng.ts:2; zero DOM/IO
+
+independent_verification:
+  equivalence_sweep:
+    matches_compared: 2720
+    detail: '2400 simétricas (16 builds × 150 seeds) + 320 assimétricas (caminho que determinism.ts nunca exercita)'
+    divergences: 0
+  recording_replay:
+    pairs: 75
+    commands_compared: 1062
+    detail: 'linha do tempo de Command[] comparada inteira, não só o hash'
+    divergences: 0
+  hash_isolated:
+    samples: 1200
+    divergences: 0
+  negative_control:
+    detail: 'teto de ticks reduzido no laço "velho" diverge em 40/40 seeds — comparador não é vazio'
+  output_diff:
+    detail: 'node em cópia pristina de HEAD (git archive) vs working tree — 0 linhas de diferença'
+
+top_issues:
+  - id: 'QA-001'
+    severity: low
+    category: docs
+    finding: >-
+      O golden hash é INSENSÍVEL à ordem de concatenação dos comandos de time 0/time 1.
+      Medido: nas 5 seeds do baseline há 22 ticks com comandos dos dois times, e inverter a
+      ordem produz hash idêntico em TODOS os ticks, não só no final. Também não detecta
+      comandos duplicados. architecture-e2.md §6.1 (e o Story statement de e2.0) citam
+      "ordem de concatenação de comandos diferente" como divergência que o hash pegaria.
+    suggested_action: >-
+      @architect ajustar a prosa de §6.1. Para e2.4/e2.5: não confiar no golden hash para
+      policiar ordem de driver — se a ordem importar, precisa de asserção dedicada. A
+      extração continua sendo a proteção certa, porque é estrutural e não depende do hash.
+  - id: 'QA-002'
+    severity: low
+    category: maintainability
+    finding: >-
+      src/tools/inspect.ts:18 mantém a terceira cópia do laço com o literal `60 * 180`.
+      Fora de escopo por decisão registrada (@po Achado 2, @dev Completion Notes), e correta
+      como decisão — mas "uma única definição do laço" vale para determinism.ts (+balance.ts
+      futuro), não para o repositório. inspect.ts não roda no sim:check, então se
+      MAX_ROUND_TICKS mudar, ele diverge em silêncio.
+    suggested_action: >-
+      Follow-up barato: fazer inspect.ts importar MAX_ROUND_TICKS de harness.ts mesmo
+      mantendo laço próprio. Não bloqueia; não vale commit isolado.
+  - id: 'QA-003'
+    severity: low
+    category: reliability
+    finding: >-
+      Descoberto ao construir teste negativo: remover `!world.over` da condição de parada de
+      runRound faz o sim:check TRAVAR para sempre em vez de falhar (step retorna cedo quando
+      world.over, então world.tick nunca avança). Propriedade pré-existente do motor, não
+      introduzida por e2.0 — mas agora o laço é único e compartilhado, então um erro ali
+      trava TODOS os consumidores (determinism, P2.5 de e2.4, CLI de e2.5) sem diagnóstico.
+    suggested_action: >-
+      Nada a fazer nesta story. Relevante para e2.5, onde um CLI de 10k rodadas que trava é
+      pior que um que falha. Considerar timeout/watchdog quando o CLI existir.
+
+design_decisions_reviewed:
+  - decision: 'driver como fábrica (RoundDriver = (setup) => TickDriver)'
+    verdict: 'razoável — engenharia correta, não desvio de escopo'
+    rationale: >-
+      Atende o critério que a story deixou aberto: createBot(setup.seed, team) precisa de um
+      ponto de nascimento por partida. Verificado que RoundSetup.seed (world.ts:48) e
+      deriveSeed (rng.ts:46) existem, então o exemplo do docstring é executável, não
+      aspiracional. TickDriver receber WorldView estende a proteção de tipo de debt.7 a todo
+      driver — endurecimento pequeno e alinhado, não escopo novo.
+  - decision: '`hash` não importado por nome em determinism.ts'
+    verdict: 'razoável — AC prevalece sobre a redação da task'
+    rationale: >-
+      noUnusedLocals:true confirmado no tsconfig.json; o TS6133 é real. AC 4 (hash exportado
+      de harness.ts) está satisfeito e AC 5 está satisfeito em substância — provado pelo
+      teste negativo da constante FNV. Comentário no ponto do import impede o "conserto"
+      futuro.
+  - decision: 'consolidar os três laços (rodar, rodarComGravacao, rodarReplay)'
+    verdict: 'razoável — dentro de escopo, e o escopo mínimo teria sido pior'
+    rationale: >-
+      Task 2 pede remover a definição local do laço e o CodeRabbit Secondary Focus pede
+      "nenhuma duplicação residual"; deixar dois laços de fora manteria exatamente a
+      duplicação que a story existe para eliminar. Equivalência do gravador verificada
+      comparando a linha do tempo de comandos inteira, não só o hash.
+
+waiver: { active: false }
