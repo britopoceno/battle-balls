@@ -4,8 +4,79 @@ import type { Ball, World } from './types.ts'
 // stat.restBall/stat.restWall por corpo (resolve C2, item Borracha). Colisão NÃO causa
 // dano — só desloca.
 
+/**
+ * CONTADOR DE MARGEM DE TUNELAMENTO — `docs/architecture.md` §7.4, story `e2.8`.
+ *
+ * A colisão bola-bola é discreta, sem CCD: duas bolas se atravessam sem detecção se o deslocamento
+ * relativo num tick exceder `2 × (r_a + r_b)`. §7.4 mediu o pior caso do roster de hoje (Vex em
+ * Deslize × Vex em Deslize, frontal: 33,3 px contra um limite de 60 px, 45% de folga) e concluiu
+ * que **está seguro hoje**. O que preocupa é o vetor de crescimento: os impulsos de cast
+ * (`self.vx = aim.dx * 900`) não passam por stat nenhum e não têm teto, então um personagem futuro
+ * com dash de 1 800 px/s come a margem inteira sem que nada avise.
+ *
+ * Recomendação literal da fonte, e é exatamente o que está implementado: "um contador no `integrate`
+ * que registra sempre que `hypot(vx,vy) × dt > 0.5 × (2 × menorSomaDeRaios)`, reportado pelo arnês.
+ * Zero custo em jogo, e transforma um bug latente de física em número acompanhado."
+ *
+ * O `0.5` é o que torna a condição verificável POR BOLA: o limite de §7.4 é sobre o deslocamento
+ * RELATIVO de um par, e duas bolas em rota frontal contribuem cada uma com metade dele. `samples`
+ * é o denominador (observações bola×tick) — sem ele, "12 registros" não é comparável entre duas
+ * execuções com `--n` diferente, e §7.4 pede um número ACOMPANHADO.
+ *
+ * `menorSomaDeRaios` é a menor soma sobre os PARES de bolas vivas do mundo — a soma dos dois menores
+ * raios, que é o par mais fácil de atravessar. Com menos de duas bolas vivas não existe par, e não
+ * existe observação: contar amostras ali diluiria o denominador com ticks em que tunelar é
+ * impossível.
+ *
+ * `observing` é `false` por padrão — em jogo nada disto roda (nem o pré-passo dos raios).
+ */
+export interface TunnelingCounter {
+  /** observações (bola×tick) em que `hypot(vx,vy)·dt` passou do limite de §7.4 */
+  hits: number
+  /** observações (bola×tick) desde o reset — o denominador */
+  samples: number
+  /** ligado só pelo arnês; em jogo é `false` e nada é contado */
+  observing: boolean
+}
+
+export const TUNNELING_COUNTER: TunnelingCounter = { hits: 0, samples: 0, observing: false }
+
+/** Zera e (des)liga — AC 6: reset por contexto de medição, nunca cumulativo por processo. */
+export function resetTunnelingCounter(observing = true): void {
+  TUNNELING_COUNTER.hits = 0
+  TUNNELING_COUNTER.samples = 0
+  TUNNELING_COUNTER.observing = observing
+}
+
 export function integrate(world: World): void {
   const dt = world.dt
+
+  // §7.4 — pré-passo de OBSERVAÇÃO. Fora do arnês (`observing: false`) não roda nenhuma linha
+  // dele, e dentro do laço a única diferença é um `if` sobre um booleano já em registrador.
+  const tc = TUNNELING_COUNTER
+  let limite = 0
+  let observar = false
+  if (tc.observing) {
+    let menor = Infinity
+    let segundo = Infinity
+    for (const b of world.balls) {
+      if (!b.alive) continue
+      const r = b.stat.radius
+      if (r < menor) {
+        segundo = menor
+        menor = r
+      } else if (r < segundo) {
+        segundo = r
+      }
+    }
+    if (segundo !== Infinity) {
+      // literal de §7.4: `0.5 × (2 × menorSomaDeRaios)`. Escrito sem simplificar de propósito —
+      // o `2 ×` é o limite de tunelamento do par e o `0.5 ×` é a parte de uma bola.
+      limite = 0.5 * (2 * (menor + segundo))
+      observar = true
+    }
+  }
+
   for (const b of world.balls) {
     if (!b.alive) continue
     b.vx += b.ax * dt
@@ -22,6 +93,12 @@ export function integrate(world: World): void {
     b.y += b.vy * dt
     const sp = Math.hypot(b.vx, b.vy)
     if (sp > 1) b.facing = Math.atan2(b.vy, b.vx)
+    // `sp` é o MESMO `hypot(vx,vy)` que produziu o deslocamento acima — não uma segunda derivação
+    // dele. Observa depois de tudo, não altera nada: `hits`/`samples` não são lidos por `sim/`.
+    if (observar) {
+      tc.samples++
+      if (sp * dt > limite) tc.hits++
+    }
   }
 }
 

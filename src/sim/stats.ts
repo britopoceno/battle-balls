@@ -72,6 +72,82 @@ function clamp(x: number, min: number, max: number): number {
   return x < min ? min : x > max ? max : x
 }
 
+/**
+ * CONTADORES DE CLAMP — `docs/architecture.md` §7.3, story `e2.8`.
+ *
+ * Literal da fonte: "todos os tetos moram em `sim/stats.ts` como constantes nomeadas, e o arnês da
+ * Fase 2 instrumenta **quantas vezes cada clamp mordeu**. Um contador por campo". A leitura que a
+ * §7.3 pede é a trichotomia: clamp que nunca morde = rede de segurança barata; que morde às vezes =
+ * funcionando como projetado; que morde SEMPRE = virou regra de jogo por acidente e volta ao usuário
+ * como decisão de produto. É o que transforma os tetos de §1.4 em hipótese falseável (decisão #13).
+ *
+ * "Mordeu" é o valor BRUTO ter excedido o teto e sido cortado — não "o campo foi calculado". Por
+ * isso a contagem é feita sobre a condição do corte (`raw < MIN` / `raw > MAX`), e não sobre a
+ * chamada. `calls` existe ao lado porque a trichotomia acima exige um denominador: sem ele não há
+ * como separar "morde às vezes" de "morde sempre". É o denominador comum a todos os campos, não uma
+ * métrica nova.
+ *
+ * **Um contador por campo QUE TEM AQUELE TETO DECLARADO**, e os quatro mapas não são simétricos:
+ * `SIGMA_MIN`/`SIGMA_MAX` cobrem as 14 chaves de `STAT_KEYS`; `ABS_MIN` tem 10 e `ABS_MAX` tem 8
+ * (`dmg` não tem clamp absoluto; `atkSpeed`/`cdSpeed`/`range` têm teto no ponto de consumo). Campo
+ * sem teto declarado não ganha contador — um zero ali leria como "nunca mordeu" quando a verdade é
+ * "não existe teto para morder".
+ *
+ * `observing` é `false` por padrão: em jogo (browser, `sim:check`) nada é contado e o caminho é o
+ * mesmo de antes desta story. Só o arnês liga, por contexto de medição. Isso é observação pura —
+ * nenhum caminho de decisão de `sim/` lê estes números, e o golden hash é a prova (AC 1/AC 5).
+ */
+export interface ClampCounters {
+  /** vezes que `bonusPassive+bonusItem` ficou ABAIXO de `SIGMA_MIN[k]` e foi cortado */
+  sigmaMin: Partial<Record<StatKey, number>>
+  /** vezes que `bonusPassive+bonusItem` ficou ACIMA de `SIGMA_MAX[k]` e foi cortado */
+  sigmaMax: Partial<Record<StatKey, number>>
+  /** vezes que `base×(1+Σ)` ficou abaixo de `ABS_MIN[k]` e foi cortado */
+  absMin: Partial<Record<StatKey, number>>
+  /** vezes que `base×(1+Σ)` ficou acima de `ABS_MAX[k]` e foi cortado */
+  absMax: Partial<Record<StatKey, number>>
+  /** chamadas de `recomputeStats` observadas desde o reset — o denominador da leitura de §7.3 */
+  calls: number
+  /** ligado só pelo arnês; em jogo é `false` e nada é contado */
+  observing: boolean
+}
+
+export const CLAMP_COUNTERS: ClampCounters = {
+  sigmaMin: {},
+  sigmaMax: {},
+  absMin: {},
+  absMax: {},
+  calls: 0,
+  observing: false,
+}
+
+/**
+ * Zera os contadores e (des)liga a observação — AC 6 da `e2.8`.
+ *
+ * O arnês roda vários confrontos no MESMO processo, e um contador cumulativo somaria confrontos
+ * diferentes num único número, que não descreve nenhum deles. Por isso o reset é por contexto de
+ * medição (confronto / linha do protocolo A/B), não por processo.
+ *
+ * Os mapas são reconstruídos a partir das próprias tabelas de teto, e não de uma lista escrita à
+ * mão: um campo novo em `ABS_MAX` ganha contador sozinho, e um removido perde o dele. Uma lista
+ * paralela seria a segunda fonte de verdade que este projeto já pagou caro três vezes.
+ */
+export function resetClampCounters(observing = true): void {
+  const c = CLAMP_COUNTERS
+  c.sigmaMin = {}
+  c.sigmaMax = {}
+  c.absMin = {}
+  c.absMax = {}
+  for (const k of STAT_KEYS) {
+    c.sigmaMin[k] = 0
+    c.sigmaMax[k] = 0
+    if (ABS_MIN[k] !== undefined) c.absMin[k] = 0
+    if (ABS_MAX[k] !== undefined) c.absMax[k] = 0
+  }
+  c.calls = 0
+  c.observing = observing
+}
+
 /** Cria um StatBlock/BonusBlock com as 14 chaves em forma fixa — mesma hidden class no V8. */
 export function makeStatBlock(fill = 0): StatBlock {
   const s = {} as StatBlock
@@ -108,13 +184,33 @@ export function recomputeStats(b: Ball): void {
   // `Ball.stat` é `Readonly<StatBlock>` para o resto do código — só recomputeStats escreve
   // nele, e só aqui. O cast é o ponto único e deliberado de exceção a essa proteção.
   const stat = b.stat as StatBlock
+  // e2.8 / §7.3: leitura ÚNICA do interruptor por chamada. O corpo do laço é o mesmo de antes —
+  // `raw` só dá nome à soma que já era o argumento de `clamp`, e as contagens moram dentro de
+  // `if (obs)`. Nenhum valor escrito em `stat` depende de `obs` (AC 5).
+  const cc = CLAMP_COUNTERS
+  const obs = cc.observing
   for (const k of STAT_KEYS) {
-    const sigma = clamp(b.bonusPassive[k] + b.bonusItem[k], SIGMA_MIN[k], SIGMA_MAX[k])
+    const raw = b.bonusPassive[k] + b.bonusItem[k]
+    const sigma = clamp(raw, SIGMA_MIN[k], SIGMA_MAX[k])
+    if (obs) {
+      // a condição do CORTE, não a da chamada: é isso que separa "o clamp mordeu" de "o campo
+      // foi calculado". `NaN` não satisfaz nenhuma das duas comparações e não é contado como
+      // mordida — coerente com `clamp`, que devolve `NaN` sem cortar.
+      if (raw < SIGMA_MIN[k]) cc.sigmaMin[k] = (cc.sigmaMin[k] ?? 0) + 1
+      else if (raw > SIGMA_MAX[k]) cc.sigmaMax[k] = (cc.sigmaMax[k] ?? 0) + 1
+    }
     let v = b.base[k] * (1 + sigma)
     const lo = ABS_MIN[k]
     const hi = ABS_MAX[k]
-    if (lo !== undefined && v < lo) v = lo
-    if (hi !== undefined && v > hi) v = hi
+    if (lo !== undefined && v < lo) {
+      v = lo
+      if (obs) cc.absMin[k] = (cc.absMin[k] ?? 0) + 1
+    }
+    if (hi !== undefined && v > hi) {
+      v = hi
+      if (obs) cc.absMax[k] = (cc.absMax[k] ?? 0) + 1
+    }
     stat[k] = v
   }
+  if (obs) cc.calls++
 }

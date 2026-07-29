@@ -1,0 +1,335 @@
+schema: 1
+story: 'e2.8'
+story_title: 'Contadores de clamp e de margem de tunneling (não bloqueante do portão)'
+gate: CONCERNS
+status_reason: >-
+  Os sete ACs passam e foram verificados de forma independente, inclusive o que a story não pediu:
+  rodei as 5 seeds do golden hash com os contadores LIGADOS e o hash é idêntico ao baseline nas
+  cinco — AC 5 provado no caminho que o `sim:check` não exercita. Escopo provado por sha256 contra o
+  gate de e2.7 (exatamente 3 arquivos mudaram; os outros 14 batem dígito a dígito). Dois achados
+  médios, ambos de GUARDA e não de defeito: uma mudança de comportamento que só exista com
+  `observing: true` passa por tudo (golden hash, 15 ensaios, tsc) sem ser vista, e o `medir` — que é
+  quem o AC 6 governa — não tem nenhuma asserção sobre si. Duas notas baixas de leitura.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  working tree sobre commit:4835863 ·
+  ALTERADOS por esta story (exatamente os 3 do File List):
+  src/sim/stats.ts sha256:b69b7a916076d13781164ebde8d8d53a6e1d102461fc1db48deb04e64175d940
+    (era 7493f054… no gate de e2.7) ·
+  src/sim/physics.ts sha256:a9d12e7f5cf4698b6e1ad82e63c547234a565e4508ef65ad5710f0f4242e1d4a
+    (era 32e5832d… no gate de e2.7) ·
+  src/tools/balance.ts sha256:031f9075b57da10ef1e4dcf0fb9af88f37c5efba7589fb53787320ece09bea04
+    (era 1f41891c… no gate de e2.7) ·
+  IDÊNTICOS ao gate de e2.7, dígito a dígito:
+  src/tools/harness.ts 2936e1ab… · src/tools/packages.ts 6d8edda9… · src/tools/determinism.ts f2953f76… ·
+  src/bot/heuristic.ts f113a8e0… · src/bot/dummy.ts 99ca652c… ·
+  src/sim/world.ts adf69442… · src/sim/types.ts f0641379… · src/sim/rng.ts c6854d2b… ·
+  src/sim/effects.ts e517efb0… · src/sim/index.ts a772d2bd… ·
+  src/chars/golem.ts 1bff8946… · src/chars/vex.ts 94ac3e80… · src/chars/index.ts ac78ea23… ·
+  package.json 0a279866f0cb8ff6491c088c1b70ba40d2392f27d6a2c06825eedd8bac40b89c (IDÊNTICO — confirma
+    "nenhuma flag nova": os contadores são rodapé, não comando)
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      Reexecutado do zero. `npm run check` (tsc --noEmit) sem saída. `npm run sim:check` verde em
+      TODAS as linhas: determinismo ✓, golden hash ✓ (5 seeds batem o baseline), build coverage ✓
+      (5 variantes), replay ✓, bot dupla exec ✓, bot replay ✓, guarda BOT-001 ✓, pilar 3 ✓.
+      Conferido que o `BASELINE` de `src/tools/determinism.ts:78-84` é literalmente a tabela de
+      `docs/architecture.md` §6.0 linhas 711-715 — {1:96de1201/753/t1, 2:f66a7416/961/t0,
+      3:a8db9c28/830/t0, 7:cb77dbe0/831/t0, 11:6aede2d9/1168/empate} — e que `determinism.ts` está
+      byte-idêntico (sha256 f2953f76…) ao gate de e2.7, isto é, o baseline não foi reescrito para
+      caber no resultado.
+
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      As quatro tabelas de teto de `sim/stats.ts` são instrumentadas, cada uma por campo, e a
+      contagem é sobre a CONDIÇÃO DO CORTE, não sobre a chamada: `if (raw < SIGMA_MIN[k])` /
+      `else if (raw > SIGMA_MAX[k])` para o Σ (stats.ts:199-200) e a contagem dentro do próprio ramo
+      de corte para o absoluto (stats.ts:205-212). Comparadores idênticos aos de `clamp()`
+      (stats.ts:72), portanto o contador morde exatamente quando o valor morre. Os quatro mapas NÃO
+      são simétricos e a implementação não presume que sejam: `resetClampCounters` reconstrói os
+      mapas a partir das próprias tabelas (`if (ABS_MIN[k] !== undefined)`), não de uma lista
+      paralela — 14 ΣMIN + 14 ΣMAX + 10 ABS_MIN + 8 ABS_MAX = 46, conferido em runtime pelo ensaio
+      (8) e no `--json` (46 objetos serializados por contexto, inclusive os zerados).
+
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      `physics.ts:98-101`, dentro de `integrate`, exatamente a fórmula literal de
+      `docs/architecture.md` §7.4 linha 845 — `limite = 0.5 * (2 * (menor + segundo))`
+      (physics.ts:75), escrito SEM simplificar de propósito, e `sp * dt > limite` com comparador
+      estrito. `sp` é o MESMO `Math.hypot(b.vx, b.vy)` que já existia para o `facing` (physics.ts:94)
+      e que produziu o deslocamento — não uma segunda derivação, e nenhuma chamada nova de `hypot`
+      no caminho quente. `menorSomaDeRaios` como soma dos DOIS MENORES raios entre as bolas VIVAS é
+      a leitura correta de "duas bolas se atravessam se o deslocamento exceder 2×(r_a+r_b)": o par
+      mais fácil de atravessar é o de menor soma.
+
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      `npm run balance` padrão reproduzido do zero, e a linha do rodapé bate NÚMERO A NÚMERO o que a
+      story alega — "[golem,vex] vs [golem,vex] espelho · 2847670 · nenhum, de 46 contadores ·
+      0 de 2841927". Impresso junto da matriz de winrate como §7.3 pede, e rotulado exatamente pelo
+      que é: "recomendação de arquitetura registrada · NÃO é requisito de RF e não bloqueia
+      P2.1-P2.5". No `--json` a rotulagem também está no dado, não só no console
+      (`natureza: recomendacao-de-arquitetura-nao-requisito-de-rf`).
+
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Verificado por três caminhos, e o terceiro é meu, não da story. (a) Leitura: dentro de `sim/`
+      as ÚNICAS referências a `CLAMP_COUNTERS`/`TUNNELING_COUNTER` são declaração, reset e
+      incremento; nenhum `if` de decisão lê `hits`, `calls`, `samples` ou os mapas. O único
+      condicional é `if (obs)`, que gate só contagem. (b) Golden hash idêntico com os contadores
+      desligados. (c) EXTRA — rodei as 5 seeds do baseline com `observing: true` e comparei contra a
+      mesma seed com `observing: false`: hash, ticks e vencedor idênticos nas cinco
+      (96de1201/f66a7416/a8db9c28/cb77dbe0/6aede2d9), com 2934-3978 chamadas contadas e 2926-3970
+      amostras observadas em cada uma. O caminho LIGADO — que é o único que o arnês usa — produz o
+      mesmo jogo que o golden hash trava. Ver QA-E28-001 para a guarda que falta.
+
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      Testado por mim, não aceito da story. Três contextos no mesmo processo
+      (`--n=10 --mutacao=vex:dmg:+1.50`): espelho 34566/0-de-46, controle A/B "nenhum → vex"
+      34566/0-de-46, tratamento "dmg +1.50 → vex" 23963 com 6392 cortes. O controle roda DEPOIS do
+      espelho e sai com contagem idêntica a ele, não somada — se vazasse daria 69132. Repetido com
+      7 contextos (`--risco-1b`): as sete linhas independentes, e os dois controles
+      (`nenhum → golem` e `nenhum → vex`) numericamente idênticos entre si. `medir`
+      (balance.ts:685-714) reseta na ENTRADA e desliga+zera na SAÍDA — defesa dupla, e é por isso
+      que a minha perturbação E (remover só um dos dois resets) foi corretamente inofensiva.
+      Ver QA-E28-002 para o que a defesa dupla não cobre.
+
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      `grep -rnE "console\.|document\.|window\.|localStorage|node:|from '\.\./(chars|bot|tools|client)"
+      src/sim/` → nenhuma ocorrência (EXIT=1). Enumerei também TODOS os imports de `src/sim/*.ts`:
+      são 100% relativos ao próprio diretório (`./types.ts`, `./effects.ts`, `./stats.ts`,
+      `./physics.ts`, `./rng.ts`). RF-19 intacto. Os contadores não introduzem I/O nem dependência
+      nova — `stats.ts` continua importando só `type { Ball }` e `physics.ts` só
+      `type { Ball, World }`.
+
+top_issues:
+  - id: 'QA-E28-001'
+    severity: medium
+    category: tests
+    finding: >-
+      O caminho `observing: true` não é coberto por nenhuma guarda permanente, e a story afirma o
+      contrário em dois lugares no código ("o golden hash de `sim:check` é a prova (AC 1 / AC 5)",
+      balance.ts:640; stats.ts:98). O golden hash roda com os contadores DESLIGADOS: ele certifica o
+      caminho off. O caminho on — o único que a matriz de winrate inteira usa — não é certificado por
+      nada. MEDIDO, não inferido: apliquei a perturbação `let v = b.base[k] * (1 + (obs ? raw : sigma))`
+      em stats.ts, isto é, o arnês passa a medir um jogo SEM os tetos Σ enquanto o jogo entregue
+      continua com eles. Passou por tudo — `npm run check` EXIT=0, `sim:check` verde (golden hash E
+      build coverage), os 15 ensaios permanentes verdes, e até a minha própria paridade nas 5 seeds
+      do baseline (porque com o roster de hoje nenhum clamp morde, então `raw === sigma` e a
+      perturbação é invisível nessas seeds). O único vestígio foi o denominador do MESMO contexto de
+      medição cair de 23963 para 23417 chamadas de `recomputeStats` — número que ninguém compara com
+      nada — enquanto o CLI continuava imprimindo "A linha acima mediu o valor CORTADO, não o
+      pedido", que a essa altura era falso. Registro que a implementação ATUAL está correta (provei a
+      paridade on/off nas 5 seeds); o que falta é a rede que garante que continue.
+    suggested_action: >-
+      Um 16º ensaio em `autotesteContadores`, de duas chamadas: para uma bola em que o clamp MORDE
+      (`bolaSintetica('dmg', 1, 1.5)`), rodar `recomputeStats` com `observing: false` e com
+      `observing: true` e asserir que o `stat` resultante é idêntico campo a campo. Pega a
+      perturbação acima diretamente. É melhor que uma paridade de partida inteira, que — como medi —
+      NÃO pegaria, porque nas seeds do baseline nenhum clamp morde.
+
+  - id: 'QA-E28-002'
+    severity: medium
+    category: tests
+    finding: >-
+      Os 15 ensaios exercitam `resetClampCounters`/`resetTunnelingCounter` chamando-as DIRETO. Quem o
+      AC 6 governa, porém, é o `medir` — e sobre `medir` não há uma asserção. MEDIDO: troquei em
+      `medir` as duas chamadas de `resetTunnelingCounter` por um liga/desliga puro do `observing`,
+      sem nunca zerar. O denominador passou a acumular monotonicamente entre contextos do mesmo
+      processo — 34495 → 68990 → 102209 → 137173 → 171668 → 205826 → 237078 no `--risco-1b` — que é
+      LITERALMENTE o modo de falha que o AC 6 nomeia ("não misturar contagem de confrontos diferentes
+      num único número"). `npm run check` EXIT=0, os 15 ensaios verdes, nenhum ⚠, nenhum abort, saída
+      plausível. Só um humano lendo a coluna e reparando no crescimento monótono perceberia. Nota em
+      favor da implementação: `medir` reseta na entrada E na saída, então remover só um dos dois é
+      inofensivo (perturbação E, confirmada como no-op) — a defesa é dupla hoje. Esta é a QUARTA
+      ocorrência desta classe no épico (gates de e2.5: "a fiação entre partes testadas não é
+      testada"; e2.6: "perturbar a fiação que lê a constante"; e2.7/QA-E27-001: "o sinal é decidido
+      num call site que nenhuma asserção cobre").
+    suggested_action: >-
+      Um ensaio que chame `medir` DUAS vezes com a mesma carga sintética e asserir que o segundo
+      retrato é igual ao primeiro — e, explicitamente, que não é a soma dos dois. Cobre os dois
+      contadores e o call site de uma vez, sem rodar partida nenhuma.
+
+  - id: 'QA-E28-003'
+    severity: low
+    category: requirements
+    finding: >-
+      A TERCEIRA leitura de §7.3 — "clamp que morde SEMPRE virou regra de jogo por acidente" — é
+      praticamente inalcançável no denominador escolhido, para o caso em que ela mais interessa. O
+      alerta dispara em `frac >= 1` (balance.ts:2537), com `frac = vezes / chamadas`, e `chamadas`
+      conta `recomputeStats` de TODAS as bolas. No protocolo A/B só 1 das 4 bolas carrega a mutação,
+      então um clamp que morda em 100% das chamadas em que PODERIA morder lê ~26,7% — que é
+      exatamente o número medido para ΣMAX dmg. O teto de `frac` nesse desenho é ~0,25-0,27, e a
+      mensagem "MORDE SEMPRE" nunca sai. Continua alcançável para tetos que mordam em todo o roster
+      (que é defensavelmente o caso central de §7.3), então é limite de LEITURA, não erro de
+      contagem — a legenda impressa, porém, não avisa disso e um leitor concluiria "nunca chega a
+      morder sempre" quando a verdade é "este denominador não consegue mostrar isso".
+    suggested_action: >-
+      Uma cláusula na legenda dizendo que `frac` é sobre TODAS as chamadas do contexto (todas as
+      bolas), e que num A/B de 1 bola mutada em 4 o teto observável é ~25%. Alternativa mais forte, se
+      a trichotomia importar como contrato: contar também as chamadas por bola que carrega o bônus
+      daquele campo, e usar essa como denominador do alerta.
+
+  - id: 'QA-E28-004'
+    severity: low
+    category: docs
+    finding: >-
+      "nenhum, de 46 contadores" lê como "nenhum teto do jogo mordeu", e a premissa de §7.3 que
+      autoriza essa leitura ("todos os tetos moram em `sim/stats.ts` como constantes nomeadas") não é
+      verdadeira hoje. Fora dos 46 existem pelo menos `MIN_ABILITY_CD_MS = 500` (world.ts:46, o teto
+      EFETIVO de `cdSpeed`, aplicado em world.ts:436 — e justamente a constante que um gate anterior
+      subiu de 400 para 500, QA-001/commit 4c2e458) e `MAX_SLOW = 0.85` (world.ts:32, teto da soma de
+      lentidão). Nenhum dos dois tem contador. Confirmei que isto NÃO é buraco desguarnecido:
+      `MIN_ABILITY_CD_MS` é coberto estaticamente pela auditoria A2 do roster
+      (`determinism.ts:420-441`, `cdEfetivoMinimo = max(MIN_ABILITY_CD_MS, ability.cd/cdSpeedMax)`),
+      herdada de debt.4. Conferi também que `range` e `atkSpeed` NÃO têm teto no ponto de consumo
+      (world.ts:465 e 482 são multiplicação pura), logo o Σ os cobre por inteiro. Sobra o texto: a
+      saída não diz quais tetos ficam fora da conta nem onde eles são vigiados.
+    suggested_action: >-
+      Uma frase na legenda nomeando os tetos fora dos 46 (`MIN_ABILITY_CD_MS`, `MAX_SLOW`) e onde
+      são vigiados (auditoria A2 do roster, no `sim:check`). Custo de uma linha, e fecha a distância
+      entre a premissa de §7.3 e o estado real do código.
+
+verificacao_independente:
+  reexecucao_do_zero:
+    - 'npm run check → EXIT=0 (tsc --noEmit, sem saída)'
+    - >-
+      npm run sim:check → EXIT=0. golden hash ✓ 5 seeds batem o baseline · build coverage ✓ 5
+      variantes · determinismo ✓ · replay ✓ · bot dupla exec ✓ · bot replay ✓ · guarda BOT-001 ✓ ·
+      pilar 3 ✓. Espelho 2v2 19/14/7 e mediana 13.8s idênticos ao Debug Log.
+    - >-
+      npm run balance (padrão, n=800) → rodapé reproduzido NÚMERO A NÚMERO contra a story:
+      2847670 recomputeStats · "nenhum, de 46 contadores" · 0 de 2841927 observações bola×tick.
+    - >-
+      npm run balance -- --n=10 --mutacao=vex:dmg:+1.50 → 3 contextos, os três reproduzidos
+      exatamente: 34566/0 · 34566/0 · 23963 com "6392 corte(s) em 1 campo(s)", "⚠ ΣMAX dmg mordeu
+      6392× — 26.7% das chamadas". A instrumentação NÃO é decorativa.
+    - >-
+      npm run balance -- --n=10 --risco-1b → 7 contextos, os sete reproduzidos (34566/34566/33285/
+      35040/34566/34226/31322), controles idênticos entre si.
+    - >-
+      --json conferido: `contadores.contextos[]`, cada um com 46 objetos {tabela, campo, mordidas}
+      INCLUSIVE os zerados, e `tunelamento.condicao` carregando a fórmula literal de §7.4. O
+      contexto mutado traz [{ΣMAX, dmg, 6392}] e mais 45 zeros — um consumidor de máquina consegue
+      distinguir "nunca mordeu" de "não tem contador", que era o ponto.
+  paridade_observing_on_off:
+    verdict: 'CONFIRMADA — verificação que a story não fez'
+    evidence: >-
+      O `sim:check` só prova o caminho DESLIGADO. Escrevi um arnês próprio que roda cada uma das 5
+      seeds do baseline duas vezes, uma com `resetClampCounters(false)/resetTunnelingCounter(false)`
+      e outra com `(true)/(true)`, e compara hash+ticks+vencedor: idênticos nas cinco, e idênticos ao
+      baseline de §6.0. Contagens observadas por seed: calls 2934/3574/3264/2957/3978 · samples
+      2926/3568/3258/2949/3970. É a prova direta do AC 5 no caminho que o arnês realmente usa.
+  escopo:
+    verdict: 'PROVADO POR SHA256, não por declaração'
+    evidence: >-
+      Comparei os 17 arquivos de código + package.json contra os hashes registrados no gate de e2.7.
+      Exatamente TRÊS diferem — `sim/stats.ts`, `sim/physics.ts`, `tools/balance.ts` — que são
+      exatamente os três do File List. Os outros 14 batem dígito a dígito, inclusive `world.ts`,
+      `determinism.ts`, `harness.ts`, `heuristic.ts`, `packages.ts` e os dois personagens. Reforço
+      independente por duas vias: (a) mtime — os três alterados estão em 07:24-07:26 e nenhum outro
+      arquivo de `src/` foi tocado depois de 06:06; (b) grep de `e2\.8|§7\.3|§7\.4` em `src/` retorna
+      3 arquivos e só esses 3. `package.json` IDÊNTICO confirma "nenhuma flag nova".
+  perturbacoes:
+    total: 4
+    detectadas: 1
+    passaram_despercebidas: 2
+    inofensivas_por_design: 1
+    detalhe:
+      - >-
+        B (reprodução de uma das 3 do @dev, para provar que os ensaios não estão mortos):
+        `>=` no lugar de `>` na condição de §7.4 → DETECTADA. Ensaio (10) disparou com o texto certo
+        ("o comparador de §7.4 é estrito") e o CLI abortou a matriz com "erro: os invariantes […] não
+        fecham". Os 15 ensaios são vivos e bloqueantes, não decorativos.
+      - >-
+        D (minha, nova): `let v = b.base[k] * (1 + (obs ? raw : sigma))` — comportamento que só muda
+        com os contadores LIGADOS → PASSOU DESPERCEBIDA por tsc, golden hash, build coverage, os 15
+        ensaios e a paridade nas 5 seeds do baseline. Ver QA-E28-001.
+      - >-
+        E (minha, nova): `medir` liga o contador de tunelamento sem zerar (mantendo o reset de saída)
+        → INOFENSIVA, saída idêntica ao baseline. O reset de saída de `medir` já cobre. Achado em
+        FAVOR da implementação: a defesa do AC 6 é dupla.
+      - >-
+        E2 (minha, nova): `medir` liga E desliga sem nunca zerar → PASSOU DESPERCEBIDA. Denominador
+        acumula 34495→68990→102209→137173→171668→205826→237078 e nada acusa. Ver QA-E28-002.
+    nota: >-
+      Todas as perturbações foram aplicadas na árvore real com backup e revertidas ao fim. Conferido
+      por sha256 depois de cada reversão (stats b69b7a91… · physics a9d12e7f… · balance 031f9075…),
+      por `grep -rn PERTURBACAO src/` (vazio) e por `npm run check` + `npm run sim:check` verdes de
+      novo. A árvore entregue ao @devops é bit-idêntica à que o @dev deixou.
+
+avaliacao_dos_denominadores:
+  pergunta: >-
+    `calls` e `samples` não estão na letra de §7.3/§7.4. São interpretação razoável ou invenção de
+    escopo (Artigo IV)?
+  veredito: 'INTERPRETAÇÃO RAZOÁVEL — dentro de escopo'
+  fundamentacao:
+    - >-
+      §7.3 não pede um contador: pede uma LEITURA de três estados (nunca / às vezes / SEMPRE). O
+      terceiro estado é uma afirmação de fração, e é indecidível a partir de uma contagem crua: `6392`
+      não se distingue de `6392 em 6392`. Sem denominador, um terço do texto literal da fonte fica
+      sem implementação. O denominador é condição necessária para executar a letra, não acréscimo a
+      ela.
+    - >-
+      §7.4 pede explicitamente um "número ACOMPANHADO". Uma contagem crua de um `--n=10` não é
+      comparável com a de um `--n=3000` — medi as duas: 34495 e 10587589 amostras para o mesmo
+      confronto. Sem denominador o número não sustenta a comparação que a própria fonte pede.
+    - >-
+      Os dois denominadores não medem NADA de novo sobre o jogo: contam invocações de código que já
+      existia (`recomputeStats`, o laço de `integrate`). Não introduzem conceito de jogo, não são
+      lidos por nenhum caminho de decisão, e desaparecem com `observing: false`.
+    - >-
+      O @dev declarou a interpretação no Dev Agent Record em vez de embuti-la em silêncio, com a
+      rastreabilidade ao texto de origem. É exatamente a disciplina que o Artigo IV cobra — a
+      violação seria inventar sem declarar, não interpretar e registrar.
+  ressalva: >-
+    A escolha do denominador tem uma consequência de leitura que o @dev não registrou, e ela é minha
+    contribuição a esta discussão: com `chamadas` sobre TODAS as bolas, o terceiro estado de §7.3
+    fica inalcançável no protocolo A/B. Ver QA-E28-003. Isso não muda o veredito de escopo — muda o
+    que a legenda deveria dizer.
+
+pontos_fortes:
+  - >-
+    `resetClampCounters` reconstrói os mapas a partir das PRÓPRIAS tabelas de teto. Campo novo em
+    `ABS_MAX` ganha contador sozinho; campo removido perde o dele. Era o lugar óbvio para uma lista
+    paralela de campos — a segunda fonte de verdade que este projeto já pagou três vezes (C3,
+    AimSpec, MNT-001) — e o @dev não a criou.
+  - >-
+    Campo sem aquele teto declarado NÃO ganha contador, e a justificativa é correta e não óbvia: um
+    `0` ali leria como "nunca mordeu" quando a verdade é "não existe teto para morder", e as duas
+    coisas levam a decisões de produto opostas. O ensaio (8) confere em runtime que `dmg` não tem
+    contador absoluto, isto é, a assimetria é asserida e não só comentada.
+  - >-
+    O `--json` traz os 46 um a um, inclusive os zerados, enquanto o console resume. É a distinção
+    certa: resumir para leitura humana é legibilidade; esconder no dado impediria uma máquina de
+    distinguir "nunca mordeu" de "não tem contador".
+  - >-
+    O interruptor `observing: false` por padrão faz o custo em jogo ser literalmente zero — nem o
+    pré-passo dos raios de `integrate` roda. O ensaio (15) assere isso, o que é a metade verificável
+    da promessa de "zero custo em jogo" de §7.4.
+  - >-
+    Os 15 ensaios permanentes existem porque a saída verdadeira de hoje é uma fila de zeros, e um
+    contador morto produz a mesma fila. É a resposta direta às dívidas QA-E25-006 e QA-E26-003 dos
+    gates anteriores, e a perturbação B confirma que eles ABORTAM a matriz, não só avisam.
+  - >-
+    A medição em si é o entregável, e ela cumpre o que §7.3 prometeu: "os tetos são raciocínio" virou
+    "nenhum dos 46 mordeu em 2 847 670 recálculos", e "está seguro hoje" virou "0 de 2 841 927". Duas
+    afirmações do arquiteto deixaram de ser argumento e viraram número reproduzível.
+
+waiver: { active: false }
+
+recommended_status: 'Done — os 2 achados médios são dívida de guarda rastreada, não bloqueio'
+next_agent: '@devops'
+next_command: '*push'

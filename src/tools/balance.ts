@@ -1,8 +1,19 @@
 import { CHARS, ROSTER } from '../chars/index.ts'
 import { BOT_VERSION, PRESET_ARNES, botCommands, createBot } from '../bot/heuristic.ts'
 import { SUDDEN_DEATH_MS, TICK_MS, type PickSetup, type RoundSetup } from '../sim/world.ts'
-import { SIGMA_MAX, SIGMA_MIN, STAT_KEYS, type StatKey } from '../sim/stats.ts'
-import type { AimSpec, CharDef, WorldView } from '../sim/types.ts'
+import {
+  CLAMP_COUNTERS,
+  SIGMA_MAX,
+  SIGMA_MIN,
+  STAT_KEYS,
+  makeStatBlock,
+  recomputeStats,
+  resetClampCounters,
+  type StatBlock,
+  type StatKey,
+} from '../sim/stats.ts'
+import { TUNNELING_COUNTER, integrate, resetTunnelingCounter } from '../sim/physics.ts'
+import type { AimSpec, Ball, CharDef, World, WorldView } from '../sim/types.ts'
 import { runRound, type RoundDriver } from './harness.ts'
 import { NOMES_PACOTE, PACOTES, type NomePacote, type Pacote } from './packages.ts'
 
@@ -608,6 +619,343 @@ function fechar(inst: Instrumentacao, reg: RegistroRodada, ticks: number, empate
   }
 }
 
+// ------------------------- contadores de clamp (§7.3) e de margem de tunelamento (§7.4) · e2.8
+
+/**
+ * CONTADORES DE OBSERVAÇÃO — `docs/architecture.md` §7.3 e §7.4, passo 8 de
+ * `docs/architecture-e2.md` §7.
+ *
+ * São **recomendação de arquitetura registrada, não requisito de RF**: não bloqueiam nenhum
+ * critério P2.1-P2.5 do portão da Fase 2. O que eles resolvem é outra coisa, e §7.3 é explícita —
+ * os tetos de `sim/stats.ts` são números que o arquiteto argumentou e não mediu, enquanto a decisão
+ * #13 diz que balanceamento é medição. Um contador por campo transforma o teto em hipótese
+ * falseável: nunca morde = rede de segurança barata; morde às vezes = funcionando; morde sempre =
+ * virou regra de jogo por acidente, e volta ao usuário como decisão de produto.
+ *
+ * A contagem mora em `sim/` (é lá que o clamp corta e que o `integrate` roda) e é DESLIGADA por
+ * padrão. Este arquivo é o único que liga — por CONTEXTO DE MEDIÇÃO, que é o que o AC 6 pede: um
+ * contador cumulativo somaria confrontos diferentes num único número, que não descreve nenhum
+ * deles. Contexto aqui é uma célula do plano ou uma linha do protocolo A/B.
+ *
+ * Nada disto entra em decisão de simulação: o golden hash de `sim:check` é a prova (AC 1 / AC 5).
+ */
+const TABELAS_CLAMP = ['ΣMIN', 'ΣMAX', 'ABS_MIN', 'ABS_MAX'] as const
+type TabelaClamp = (typeof TABELAS_CLAMP)[number]
+
+function mapaDaTabela(t: TabelaClamp): Partial<Record<StatKey, number>> {
+  switch (t) {
+    case 'ΣMIN':
+      return CLAMP_COUNTERS.sigmaMin
+    case 'ΣMAX':
+      return CLAMP_COUNTERS.sigmaMax
+    case 'ABS_MIN':
+      return CLAMP_COUNTERS.absMin
+    case 'ABS_MAX':
+      return CLAMP_COUNTERS.absMax
+  }
+}
+
+interface Mordida {
+  tabela: TabelaClamp
+  campo: StatKey
+  vezes: number
+}
+
+interface ContagemContexto {
+  rotulo: string
+  /** chamadas de `recomputeStats` no contexto — o denominador da leitura de §7.3 */
+  chamadas: number
+  /** só os contadores que registraram mordida — o que a tabela do console destaca */
+  mordidas: Mordida[]
+  /** TODOS os contadores declarados, inclusive os zerados — o `--json` não resume nada */
+  porCampo: Mordida[]
+  tunelamento: { registros: number; amostras: number }
+}
+
+const contagens: ContagemContexto[] = []
+
+/**
+ * Liga os contadores, roda o contexto, guarda o retrato e desliga.
+ *
+ * Desligar no fim não é zelo decorativo: se um caminho futuro rodar simulação fora de `medir`
+ * (um autoteste novo, um diagnóstico), essas rodadas não entram na contagem de NINGUÉM — que é o
+ * comportamento correto — em vez de entrarem na contagem do último contexto medido, que seria
+ * exatamente a contaminação entre confrontos que o AC 6 proíbe.
+ */
+function medir<T>(rotulo: string, f: () => T): T {
+  resetClampCounters(true)
+  resetTunnelingCounter(true)
+
+  const r = f()
+
+  const porCampo: Mordida[] = []
+  for (const tabela of TABELAS_CLAMP) {
+    const mapa = mapaDaTabela(tabela)
+    for (const campo of STAT_KEYS) {
+      const vezes = mapa[campo]
+      // ausente = campo SEM aquele teto declarado (`dmg` não tem clamp absoluto; `atkSpeed`,
+      // `cdSpeed` e `range` têm teto no ponto de consumo). Imprimir 0 ali leria como "nunca
+      // mordeu" quando a verdade é "não existe teto para morder" — as duas coisas são diferentes.
+      if (vezes === undefined) continue
+      porCampo.push({ tabela, campo, vezes })
+    }
+  }
+  contagens.push({
+    rotulo,
+    chamadas: CLAMP_COUNTERS.calls,
+    mordidas: porCampo.filter((m) => m.vezes > 0),
+    porCampo,
+    tunelamento: { registros: TUNNELING_COUNTER.hits, amostras: TUNNELING_COUNTER.samples },
+  })
+
+  resetClampCounters(false)
+  resetTunnelingCounter(false)
+  return r
+}
+
+/** Base folgada dentro de TODOS os `ABS_MIN`/`ABS_MAX` — assim só o campo sob teste pode morder. */
+function baseFolgada(): StatBlock {
+  const s = makeStatBlock(1)
+  s.maxHp = 100
+  s.radius = 20
+  s.mass = 1
+  s.maxSpeed = 200
+  s.steer = 3
+  s.drag = 0.3
+  s.restBall = 0.5
+  s.restWall = 0.5
+  return s
+}
+
+/** `recomputeStats` lê `base`/`bonusPassive`/`bonusItem` e escreve `stat`; o resto da `Ball` não. */
+function bolaSintetica(campo: StatKey, base: number, bonusItem: number): Ball {
+  const b = {
+    base: baseFolgada(),
+    bonusPassive: makeStatBlock(0),
+    bonusItem: makeStatBlock(0),
+    stat: makeStatBlock(0),
+  }
+  b.base[campo] = base
+  b.bonusItem[campo] = bonusItem
+  return b as unknown as Ball
+}
+
+function totalMordidas(): number {
+  let t = 0
+  for (const tabela of TABELAS_CLAMP) {
+    const mapa = mapaDaTabela(tabela)
+    for (const campo of STAT_KEYS) t += mapa[campo] ?? 0
+  }
+  return t
+}
+
+function mordidasDe(tabela: TabelaClamp, campo: StatKey): number {
+  return mapaDaTabela(tabela)[campo] ?? 0
+}
+
+/**
+ * AUTOTESTE dos contadores de §7.3/§7.4. Roda em toda execução pelo mesmo motivo dos outros: com o
+ * roster e os pacotes de hoje **nenhum clamp morde e nenhum tick passa da margem de tunelamento**,
+ * então a saída verdadeira é uma fila de zeros — e um contador quebrado, morto ou nunca ligado
+ * produz exatamente a mesma fila de zeros. É o modo de falha da morte súbita de §4.5, de novo.
+ *
+ * O que cada bloco pega, e por que é justamente isso:
+ *   - "mordida" é o valor bruto ter sido CORTADO, não o campo ter sido calculado — trocar a
+ *     condição pelo contador de chamadas dá um número enorme e plausível;
+ *   - a borda é ESTRITA nos dois sentidos: um bônus exatamente em `ΣMAX` não é cortado e não conta;
+ *   - `ΣMIN`/`ΣMAX` e `ABS_MIN`/`ABS_MAX` são contadores SEPARADOS, sobre valores diferentes (a
+ *     soma dos bônus e o stat derivado) — os dois casos abaixo mordem um sem o outro;
+ *   - contador existe só para campo com AQUELE teto declarado (os quatro mapas não são simétricos);
+ *   - desligado não conta nada, que é a metade verificável do golden hash idêntico;
+ *   - o limite de §7.4 é a menor SOMA de raios do mundo, não o dobro do menor raio, e bola morta
+ *     não entra nem no limite nem no denominador.
+ */
+function autotesteContadores(): string[] {
+  const problemas: string[] = []
+  const conferir = (rotulo: string, ok: boolean, detalhe: string): void => {
+    if (!ok) problemas.push(`  ✗ contadores (§7.3/§7.4) — ${rotulo}: ${detalhe}`)
+  }
+
+  // (1) desligado não conta — é o que garante que em jogo/`sim:check` o caminho é o de antes
+  resetClampCounters(false)
+  recomputeStats(bolaSintetica('dmg', 1, 1.5))
+  conferir(
+    '(1) desligado não conta',
+    CLAMP_COUNTERS.calls === 0 && totalMordidas() === 0,
+    `calls ${CLAMP_COUNTERS.calls} · mordidas ${totalMordidas()}`,
+  )
+
+  // (2) MORDIDA, não CHAMADA: três recálculos com bônus folgado não são três mordidas
+  resetClampCounters(true)
+  for (let i = 0; i < 3; i++) recomputeStats(bolaSintetica('dmg', 1, 0.5))
+  conferir(
+    '(2) mordida != chamada',
+    CLAMP_COUNTERS.calls === 3 && totalMordidas() === 0,
+    `calls ${CLAMP_COUNTERS.calls} · mordidas ${totalMordidas()} — +0.50 está dentro de ΣMAX.dmg ${SIGMA_MAX.dmg}`,
+  )
+
+  // (3) ΣMAX morde, e só ele — §5.1: "um +150% seria silenciosamente reduzido para +100%"
+  resetClampCounters(true)
+  recomputeStats(bolaSintetica('dmg', 1, 1.5))
+  conferir(
+    '(3) ΣMAX dmg',
+    mordidasDe('ΣMAX', 'dmg') === 1 && totalMordidas() === 1,
+    `ΣMAX.dmg ${mordidasDe('ΣMAX', 'dmg')} · total ${totalMordidas()}`,
+  )
+
+  // (4) ΣMIN morde no outro sentido
+  resetClampCounters(true)
+  recomputeStats(bolaSintetica('dmg', 1, -0.9))
+  conferir(
+    '(4) ΣMIN dmg',
+    mordidasDe('ΣMIN', 'dmg') === 1 && totalMordidas() === 1,
+    `ΣMIN.dmg ${mordidasDe('ΣMIN', 'dmg')} · total ${totalMordidas()}`,
+  )
+
+  // (5) borda estrita: exatamente NO teto não é corte, e contar ali inflaria todo campo cujo
+  // bônus encoste no limite sem ser reduzido
+  resetClampCounters(true)
+  recomputeStats(bolaSintetica('dmg', 1, SIGMA_MAX.dmg))
+  recomputeStats(bolaSintetica('dmg', 1, SIGMA_MIN.dmg))
+  conferir(
+    '(5) borda não morde',
+    CLAMP_COUNTERS.calls === 2 && totalMordidas() === 0,
+    `calls ${CLAMP_COUNTERS.calls} · mordidas ${totalMordidas()} — ΣMAX ${SIGMA_MAX.dmg} / ΣMIN ${SIGMA_MIN.dmg} exatos`,
+  )
+
+  // (6) ABS_MAX é outro contador: maxSpeed 400 × (1 + 0.50) = 600 > 420, com o Σ folgado (+0.50
+  // cabe em ΣMAX.maxSpeed +0.60). Se os dois compartilhassem contador, o Σ apareceria mordendo.
+  resetClampCounters(true)
+  recomputeStats(bolaSintetica('maxSpeed', 400, 0.5))
+  conferir(
+    '(6) ABS_MAX maxSpeed',
+    mordidasDe('ABS_MAX', 'maxSpeed') === 1 && mordidasDe('ΣMAX', 'maxSpeed') === 0 && totalMordidas() === 1,
+    `ABS_MAX ${mordidasDe('ABS_MAX', 'maxSpeed')} · ΣMAX ${mordidasDe('ΣMAX', 'maxSpeed')} · total ${totalMordidas()}`,
+  )
+
+  // (7) ABS_MIN, com o Σ EXATAMENTE na borda: maxHp 30 × (1 − 0.50) = 15 < ABS_MIN.maxHp 20
+  resetClampCounters(true)
+  recomputeStats(bolaSintetica('maxHp', 30, SIGMA_MIN.maxHp))
+  conferir(
+    '(7) ABS_MIN maxHp',
+    mordidasDe('ABS_MIN', 'maxHp') === 1 && mordidasDe('ΣMIN', 'maxHp') === 0 && totalMordidas() === 1,
+    `ABS_MIN ${mordidasDe('ABS_MIN', 'maxHp')} · ΣMIN ${mordidasDe('ΣMIN', 'maxHp')} · total ${totalMordidas()}`,
+  )
+
+  // (8) um contador por campo QUE TEM AQUELE TETO — os quatro mapas não são simétricos
+  resetClampCounters(true)
+  const nSigma = Object.keys(CLAMP_COUNTERS.sigmaMin).length
+  const nSigmaMax = Object.keys(CLAMP_COUNTERS.sigmaMax).length
+  const nAbsMin = Object.keys(CLAMP_COUNTERS.absMin).length
+  const nAbsMax = Object.keys(CLAMP_COUNTERS.absMax).length
+  conferir(
+    '(8) ΣMIN/ΣMAX cobrem STAT_KEYS',
+    nSigma === STAT_KEYS.length && nSigmaMax === STAT_KEYS.length,
+    `ΣMIN ${nSigma} · ΣMAX ${nSigmaMax} != ${STAT_KEYS.length}`,
+  )
+  conferir(
+    '(8) ABS_* é subconjunto',
+    nAbsMin < STAT_KEYS.length && nAbsMax < STAT_KEYS.length && nAbsMax <= nAbsMin,
+    `ABS_MIN ${nAbsMin} · ABS_MAX ${nAbsMax} · STAT_KEYS ${STAT_KEYS.length}`,
+  )
+  conferir(
+    '(8) dmg não tem clamp absoluto',
+    CLAMP_COUNTERS.absMin.dmg === undefined && CLAMP_COUNTERS.absMax.dmg === undefined,
+    'existe contador ABS para dmg — um 0 ali leria como "nunca mordeu", e o teto não existe',
+  )
+
+  // (9) reset zera de verdade (AC 6)
+  resetClampCounters(true)
+  recomputeStats(bolaSintetica('dmg', 1, 1.5))
+  resetClampCounters(true)
+  conferir(
+    '(9) reset zera',
+    CLAMP_COUNTERS.calls === 0 && totalMordidas() === 0,
+    `calls ${CLAMP_COUNTERS.calls} · mordidas ${totalMordidas()} — sem reset a contagem de um confronto vaza para o próximo`,
+  )
+
+  // ---------------- §7.4 · margem de tunelamento
+  //
+  // `dt = 0.5` e `drag = 1` de propósito: `pow(1, dt) = 1`, então `sp` sai exatamente igual a `v` e
+  // a borda do limite vira verificável em binário (com dt = 1/60 o produto tem erro de float e o
+  // ensaio de borda passaria ou falharia por arredondamento, não pelo comparador).
+  const mundo = (bolas: readonly { r: number; viva: boolean }[], v: number): World =>
+    ({
+      dt: 0.5,
+      balls: bolas.map((b, i) => {
+        const stat = baseFolgada()
+        stat.radius = b.r
+        stat.drag = 1
+        return { id: i, alive: b.viva, x: 0, y: 0, vx: v, vy: 0, ax: 0, ay: 0, facing: 0, stat }
+      }),
+    }) as unknown as World
+
+  const rodarTunel = (bolas: readonly { r: number; viva: boolean }[], v: number): { hits: number; samples: number } => {
+    resetTunnelingCounter(true)
+    integrate(mundo(bolas, v))
+    return { hits: TUNNELING_COUNTER.hits, samples: TUNNELING_COUNTER.samples }
+  }
+
+  // duas de raio 10 ⇒ limite = 0.5 × (2 × (10 + 10)) = 20 px por tick
+  const duas = [{ r: 10, viva: true }, { r: 10, viva: true }] as const
+
+  const naBorda = rodarTunel(duas, 40) // 40 × 0.5 = 20, e `20 > 20` é falso
+  conferir(
+    '(10) borda não registra',
+    naBorda.hits === 0 && naBorda.samples === 2,
+    `hits ${naBorda.hits} · samples ${naBorda.samples} — o comparador de §7.4 é estrito (maior que, não maior ou igual)`,
+  )
+
+  const acima = rodarTunel(duas, 41) // 20.5 > 20, nas duas bolas
+  conferir(
+    '(11) acima registra',
+    acima.hits === 2 && acima.samples === 2,
+    `hits ${acima.hits} · samples ${acima.samples}`,
+  )
+
+  // (12) menor SOMA de raios, não o dobro do menor raio: [10,30,30] ⇒ 10+30 = 40, limite 40.
+  // Um `2 × menor` daria 20 e este ensaio (30 px por tick) registraria três vezes.
+  const mistos = [{ r: 10, viva: true }, { r: 30, viva: true }, { r: 30, viva: true }] as const
+  const soma = rodarTunel(mistos, 60)
+  conferir(
+    '(12) menor SOMA de raios',
+    soma.hits === 0 && soma.samples === 3,
+    `hits ${soma.hits} · samples ${soma.samples} — 60 × 0.5 = 30 passa de 2×10 mas não de 10+30`,
+  )
+
+  // (13) bola morta não entra nem no limite nem no denominador: com a de raio 1 contando, o limite
+  // cairia para 0.5 × (2 × (1 + 10)) = 11 e os 15 px deste ensaio registrariam
+  const comMorta = rodarTunel([{ r: 10, viva: true }, { r: 10, viva: true }, { r: 1, viva: false }], 30)
+  conferir(
+    '(13) bola morta fora',
+    comMorta.hits === 0 && comMorta.samples === 2,
+    `hits ${comMorta.hits} · samples ${comMorta.samples}`,
+  )
+
+  // (14) uma viva só: não existe par, não existe tunelamento possível, não existe observação
+  const sozinha = rodarTunel([{ r: 10, viva: true }, { r: 10, viva: false }], 100000)
+  conferir(
+    '(14) sem par não observa',
+    sozinha.hits === 0 && sozinha.samples === 0,
+    `hits ${sozinha.hits} · samples ${sozinha.samples} — amostra sem par diluiria o denominador`,
+  )
+
+  // (15) desligado não observa — a outra metade da garantia de custo zero em jogo
+  resetTunnelingCounter(false)
+  integrate(mundo(duas, 100000))
+  conferir(
+    '(15) desligado não observa',
+    TUNNELING_COUNTER.hits === 0 && TUNNELING_COUNTER.samples === 0,
+    `hits ${TUNNELING_COUNTER.hits} · samples ${TUNNELING_COUNTER.samples}`,
+  )
+
+  // o autoteste não pode deixar o interruptor ligado: a primeira medição de verdade recomeça do
+  // zero por `medir`, mas até lá ninguém deve estar contando.
+  resetClampCounters(false)
+  resetTunnelingCounter(false)
+  return problemas
+}
+
 // ---------------------------------------------------------------- execução (§4.2, §4.3)
 
 interface ResultadoRodada {
@@ -1165,7 +1513,13 @@ function rodarAb(
         'não rodaria e o winrate reportado seria o viés de lado bruto disfarçado de efeito do pacote.',
     )
   }
-  return { res: rodarConfronto(conf, n, seedBase, inst), avisos: conferirClamp(alvo, bonus) }
+  // `medir` liga os contadores de §7.3/§7.4 por LINHA A/B: cada pacote é um contexto próprio, e é
+  // o que permite ler "o clamp mordeu no tratamento e não no controle" em vez de um total que
+  // mistura os dois (AC 6 de `e2.8`).
+  return {
+    res: medir(`A/B ${rotuloBonus} → ${alvo}`, () => rodarConfronto(conf, n, seedBase, inst)),
+    avisos: conferirClamp(alvo, bonus),
+  }
 }
 
 /** `dmg +0.30 · mass -0.20` — a forma curta que vai para a coluna `pacote` e para o rótulo. */
@@ -1875,12 +2229,13 @@ const problemasAutoteste = [
   ...autotesteAb(),
   ...autotesteClamp(),
   ...autotesteRisco1b(),
+  ...autotesteContadores(),
 ]
 if (problemasAutoteste.length > 0) {
   for (const p of problemasAutoteste) console.error(p)
   console.error(
     'erro: os invariantes de §4.1/§4.4/§4.5/§5.1/§5.2 não fecham — nenhuma matriz é reportável ' +
-      'assim, porque todos esses erros (veredito, contagem de células, sinal do pacote, ' +
+      'assim, porque todos esses erros (veredito, contagem de células, contadores, sinal do pacote, ' +
       'entrada não finita) são invisíveis na tabela impressa.',
   )
   sair(1)
@@ -1925,7 +2280,9 @@ for (let i = 0; i < plano.confrontos.length; i++) {
   if (plano.confrontos.length > 1) {
     console.error(`  … confronto ${i + 1}/${plano.confrontos.length}: ${c.rotulo}`)
   }
-  resultados.push(rodarConfronto(c, flags.n, flags.seed, inst))
+  resultados.push(
+    medir(`${c.rotulo}${c.espelho ? ' espelho' : ''}`, () => rodarConfronto(c, flags.n, flags.seed, inst)),
+  )
 }
 
 const matriz = resultados.filter((r) => !r.confronto.espelho)
@@ -2142,6 +2499,65 @@ if (linhasAb.length > 0) {
       'mutadas — a taxa de empate por confronto acima separa as duas fontes)',
   )
 }
+// ------------------------- contadores de clamp (§7.3) e de margem de tunelamento (§7.4) · e2.8
+
+/*
+ * Impressos JUNTO da matriz de winrate, como §7.3 pede ("um contador por campo, imprimível junto da
+ * matriz de winrate"), e rotulados pelo que são: recomendação de arquitetura registrada, NÃO
+ * requisito de RF — não bloqueiam nenhum critério P2.1-P2.5 (`architecture-e2.md` §7, passo 8).
+ *
+ * Um bloco por CONTEXTO DE MEDIÇÃO, nunca um total agregado: um número que soma o confronto do
+ * plano com as linhas do protocolo A/B não descreve nenhum dos dois, e é justamente a mistura que
+ * o AC 6 proíbe. Os campos que não morderam ficam fora da tabela do console e continuam no
+ * `--json`, um por um — resumir no console é legibilidade, esconder no dado seria outra coisa.
+ */
+if (contagens.length > 0) {
+  const larguraCtx = Math.max(22, ...contagens.map((c) => c.rotulo.length))
+  console.log(
+    `contadores de observação — clamp (architecture.md §7.3) e margem de tunelamento (§7.4)\n` +
+      `                 recomendação de arquitetura registrada · NÃO é requisito de RF e não bloqueia P2.1-P2.5`,
+  )
+  console.log(
+    `  ${'contexto'.padEnd(larguraCtx)}  ${'recomputeStats'.padStart(14)}  ${'clamps que morderam'.padEnd(28)}  tunelamento (bola×tick)`,
+  )
+  for (const c of contagens) {
+    const total = c.mordidas.reduce((s, m) => s + m.vezes, 0)
+    const resumo =
+      total === 0
+        ? `nenhum, de ${c.porCampo.length} contadores`
+        : `${total} corte(s) em ${c.mordidas.length} campo(s)`
+    console.log(
+      `  ${c.rotulo.padEnd(larguraCtx)}  ${String(c.chamadas).padStart(14)}  ${resumo.padEnd(28)}  ` +
+        `${c.tunelamento.registros} de ${c.tunelamento.amostras}`,
+    )
+    for (const m of c.mordidas) {
+      const frac = c.chamadas > 0 ? m.vezes / c.chamadas : 0
+      console.log(
+        `      ⚠ ${m.tabela} ${m.campo} mordeu ${m.vezes}× — ${pct(frac, 1)} das chamadas` +
+          (frac >= 1
+            ? ' · MORDE SEMPRE: o teto virou regra de jogo por acidente e §7.3 devolve isso ao usuário como decisão de produto'
+            : ''),
+      )
+    }
+    if (c.tunelamento.registros > 0) {
+      console.log(
+        `      ⚠ tunelamento: ${c.tunelamento.registros} observação(ões) passaram da margem — a colisão bola-bola é ` +
+          'discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)',
+      )
+    }
+  }
+  console.log(
+    '                 leitura (§7.3): clamp que nunca morde é rede de segurança barata e fica; que morde às vezes\n' +
+      '                 está funcionando como projetado; que morde SEMPRE virou regra de jogo por acidente, e volta ao\n' +
+      '                 usuário como decisão de produto em vez de constante escondida em sim/stats.ts.',
+  )
+  console.log(
+    '                 leitura (§7.4): registro = hypot(vx,vy)·dt > 0.5×(2×menor soma de raios do mundo), por bola e por\n' +
+      '                 tick. Zero é o esperado hoje (o pior caso do roster tem 45% de folga); o número existe para que o\n' +
+      '                 vetor de crescimento — impulso de cast sem teto — apareça como medida, e não como suposição.',
+  )
+  console.log('')
+}
 
 console.log(
   `autotestes       veredito de 3 estados ✓ ${CASOS_VEREDITO.length}/${CASOS_VEREDITO.length} casos · ` +
@@ -2153,7 +2569,9 @@ console.log(
     '                 protocolo A/B ✓ um personagem de um lado, outro lado intocado, não vira espelho · ' +
     `clamp ✓ 5 ensaios + ${NOMES_PACOTE.length * ROSTER.length} pacotes×roster\n` +
     `                 risco #1b ✓ controle primeiro mesmo com NOMES_PACOTE invertido (QA-E26-003) · ` +
-    `gatilho ✓ ${CASOS_GATILHO_1B.length} casos (as duas bordas, +${LIMIAR_FISICO_PP}pp e +${LIMIAR_DANO_PP}pp)`,
+    `gatilho ✓ ${CASOS_GATILHO_1B.length} casos (as duas bordas, +${LIMIAR_FISICO_PP}pp e +${LIMIAR_DANO_PP}pp)\n` +
+    '                 contadores §7.3/§7.4 ✓ 15 ensaios (mordida != chamada, borda estrita, Σ e ABS separados, ' +
+    'reset zera,\n                 desligado não conta, menor SOMA de raios, bola morta fora do denominador)',
 )
 console.log('')
 
@@ -2239,6 +2657,27 @@ if (flags.json) {
                   gatilhoNaoAvaliavel: b.motivo,
                 })),
               },
+        /*
+         * §7.3/§7.4 — os contadores por CONTEXTO de medição. Aqui vai a lista COMPLETA de
+         * contadores declarados, inclusive os que ficaram em zero: no console eles são resumidos
+         * para caber, e um consumidor de máquina que só recebesse os não-zerados não conseguiria
+         * distinguir "este clamp nunca mordeu" (a primeira leitura de §7.3) de "este clamp não
+         * tem contador". Campo sem aquele teto declarado continua ausente, que é o terceiro caso.
+         */
+        contadores: {
+          fonte: 'architecture.md §7.3 (clamp) e §7.4 (margem de tunelamento)',
+          natureza: 'recomendacao-de-arquitetura-nao-requisito-de-rf',
+          contextos: contagens.map((c) => ({
+            contexto: c.rotulo,
+            recomputeStats: c.chamadas,
+            clamp: c.porCampo.map((m) => ({ tabela: m.tabela, campo: m.campo, mordidas: m.vezes })),
+            tunelamento: {
+              registros: c.tunelamento.registros,
+              amostras: c.tunelamento.amostras,
+              condicao: 'hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)',
+            },
+          })),
+        },
         instrumentacao: {
           rodadas: inst.rodadas,
           empates: inst.empates,
