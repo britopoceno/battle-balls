@@ -1,0 +1,471 @@
+schema: 1
+story: 'e2.3'
+gate: CONCERNS
+status_reason: >-
+  Os 24 ACs passam sob verificação independente. Bateria própria de 60+ checks em dois scripts de
+  scratchpad (nada reaproveitado do Dev Agent Record): streams de PRNG conferidos contra
+  `mulberry32(deriveSeed(seed,1|2))` valor a valor, ordem de saque de §3.2 medida por instrumentação
+  do `rand`, N-3 provado por comparação de snapshot JSON do mundo inteiro antes/depois de cada
+  `botCommands` ao longo de 900 ticks, e simetria RF-45 provada num estado NÃO-vacuo com mundo
+  refletido 180°. A matemática de ARCH-001 foi derivada e reconferida por três caminhos
+  independentes e está CORRETA — a decisão do @dev é engenharia sólida, sem objeção. O achado da
+  Lâmina Fantasma reproduz-se exatamente (`pAcerto` máximo = 0,5). Golden hash idêntico, e verificado
+  que as tabelas `BASELINE`/`BUILD_BASELINE` não foram movidas.
+  CONCERNS por um achado próprio deste gate, não presente no relato: existe UM caminho em que um
+  denominador não conferido atravessa o limiar de decisão em vez de ser barrado por ele (BOT-001), e
+  ele é alcançável de ponta a ponta a partir da porta que `e2.1` abriu. Não bloqueia — ver
+  `blocking`.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: 'working tree sobre commit:4835863 · src/bot/heuristic.ts sha256:80dcd986c1e8b8e29a2cabd5fb9e8e372e7835fcee7b2c2e1c53c256fa14dbef'
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      `botCommands` devolve `Command[]` e o tipo de retorno não admite outra coisa. A afirmação forte
+      — "e nada mais" — foi provada em runtime, não por leitura: comparei `JSON.stringify` do mundo
+      inteiro (menos funções) imediatamente antes e depois de cada chamada de `botCommands`, para os
+      dois bots, ao longo de uma partida completa de 900 ticks. Zero divergências. O bot não move
+      bola, não dispara básico, não escreve estado nenhum na simulação.
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      Os seis símbolos exportados existem com as assinaturas de §2.7 (`heuristic.ts:31,40,64,90,97,113,159`).
+      A recusa de `.rng()` foi reproduzida por mim, não aceita do relato: inseri `void view.rng()` em
+      `botCommands`, `npm run check` → `src/bot/heuristic.ts(162,13): error TS2339: Property 'rng'
+      does not exist on type 'WorldView'`, EXIT=2; revertido, e o arquivo confirmado byte-idêntico por
+      SHA256 (`80dcd986...`) antes e depois, com `npm run check` EXIT=0 no fim.
+      Registro do limite, medido na mesma passada: uma segunda linha com cast explícito
+      (`(view as unknown as { rng: () => number }).rng()`) compila sem erro. É a ressalva que
+      `types.ts:172-176` já declara (`Omit` é raso) e o motivo de §3.3/N-3 delegar a proteção real ao
+      teste de replay de `e2.4` — não é regressão desta story, é o contrato conhecido.
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      Auditei TODAS as 11 ocorrências de `team` e as 2 de `charId` em `heuristic.ts`, uma a uma.
+      `team` entra em exatamente os dois pontos permitidos: `:121` (`deriveSeed(matchSeed, team + 1)`
+      — qual stream é meu) e `:165` (`self.team !== bot.team` — quais bolas são minhas). As demais
+      (`:98,115,119` plumbing de tipo/campo; `:267,327,552` na forma `x.team === self.team`) são
+      comparações RELATIVAS, que se comportam identicamente para qualquer valor de `team` — não são um
+      terceiro ramo. `charId` aparece só como chave de dicionário (`view.chars[self.charId]`,
+      `:174,:475`); zero `if (charId === ...)`.
+      Prova empírica, e é a mais forte da bateria: avancei uma partida real (seed 3) até o tick 208,
+      um estado em que o time 0 de fato casta — refleti o mundo 180° (posição, velocidade e time
+      trocados) e rodei um bot de `team: 1` com o stream do time 0. Saída: `dx/dy` invertidos com erro
+      < 1e-9 e `mag` idêntico a 1e-12. Isso separa os dois pontos permitidos de qualquer terceiro: um
+      ramo por `team` em qualquer outro lugar faria este check falhar.
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      `pAcerto` (`:363-393`) implementa `raioEf²/(raioEf²+sigma²)` com `sigma = |v_e|·(t+LAG_S) +
+      JITTER_RAD·dPrev + erroMira`, termo a termo igual a §2.3. Nenhum ramo por `charId`; o único
+      `switch` do arquivo é sobre `AimSpec.kind`. A generalização `erroAlcance → erroMira` foi
+      conferida: para o inimigo mirado o ponto de impacto está sobre o raio até ele, logo
+      `dist(impacto, prev) = |dPrev − alcanceEf|` exatamente — §2.3 continua valendo palavra por
+      palavra no caso que ela descreve, e o somatório de §2.4 passa a estar definido para os demais.
+      A leitura do @dev é a única que faz as duas seções coexistirem; concordo e não vejo alternativa.
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      `tImpacto` (`:430`) e `raioEf` (`:377-382`) derivam só de `S.kind`. Verificado numericamente:
+      `raioEf` vs vex = 9 + 15 = 24, vs golem = 9 + 24 = 33, sem consultar identidade de personagem.
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      `valorEsperado` (`:318-331`) itera `view.balls` inteiro filtrando só por vivo e time inimigo.
+      Não aceitei por leitura: montei o caso decisivo. A d=295px, o Tremor contra UM inimigo NÃO
+      cruza o limiar; contra DOIS inimigos praticamente sobrepostos, CASTA. Se `VE` fosse só do alvo
+      pretendido os dois casos seriam idênticos.
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      Provado por perturbação, não por grep. Rodei o mesmo mundo com `contactWindows[0].dmg` de 14
+      para 140 (10×) e, separadamente, com `atk.dmg` de 16 para 999: em ambos os casos os comandos
+      emitidos são `JSON.stringify`-idênticos aos do roster original. O bot é comprovadamente cego a
+      dano.
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      Os cinco ramos da política testados um a um. `reposicao` (vex Deslize): hp 20% < FUGA 0.35 →
+      dx = −0.9935 (direção OPOSTA) com mag máximo; hp cheio e gap 361px > alcance do básico → mira
+      NELE (dx = +0.9935); hp cheio e gap 141px ≤ alcance → não casta. A fronteira exata foi medida:
+      d = 239px (= 200 + 15 + 24, superfície a superfície com `stat.range`) — a 238px não casta, a
+      240px casta, que é literalmente o que `autoAttack` (`world.ts:465-474`) mede. `utilidade` (golem
+      Muralha, [70,240]): casta a 150px, não casta a 300px nem a 50px.
+  - id: AC9
+    verdict: PASS
+    evidence: >-
+      `limiarEf` (`:218-224`) é `LIMIAR[slot] * max(PISO_LIMIAR, 1 − espera/DECAIMENTO_MS)`. Valores
+      recalculados por mim: ability 0.5500 → 0.2750 (4s) → 0.1925 (piso); ult 0.8000 → 0.2800 (piso).
+      Empírico: a d=295px o Tremor não casta com espera 0 e CASTA com o slot parado há 9s — a válvula
+      de §2.5 age de verdade.
+  - id: AC10
+    verdict: PASS
+    evidence: >-
+      Rotação por `(r()*2−1)*JITTER_RAD` (`:524-528`). 3 000 seeds: `max |ângulo|` = 0.119994 rad,
+      dentro de JITTER_RAD = 0.12 e cobrindo a faixa (não é jitter degenerado).
+  - id: AC11
+    verdict: PASS
+    evidence: >-
+      `:530` — `clamp01(mira.mag + (r()*2−1)*JITTER_MAG)`. 3 000 amostras: mag ∈ [0.3286, 0.5284] em
+      torno da base `faixa(200,140,280)` = 0.4286, amplitude 0.19975 ≤ 2·JITTER_MAG. Clamp em [0,1]
+      confirmado por `clamp01` (`:577`).
+  - id: AC12
+    verdict: PASS
+    evidence: >-
+      `:171-172`. Medido em 400 seeds: `proximaDecisaoTick` ∈ [9, 15] exatamente — isto é,
+      `REACAO_TICKS + floor(r()*REACAO_JITTER_TICKS)` com REACAO_JITTER_TICKS = 7 (0..6). Bate os
+      150–250 ms de §2.6.
+  - id: AC13
+    verdict: PASS
+    evidence: >-
+      Os 11 números conferidos um a um contra §2.6, por igualdade estrita, no objeto exportado: todos
+      exatos. `PRESET_ARNES` tem exatamente 10 chaves (11 números, `LIMIAR` agrupa dois) — nenhum
+      campo extra infiltrado. `BOT_VERSION === 'heuristic-1'`. O tipo é `Readonly<BotConfig>`, que é
+      literalmente o que §2.7 prescreve — AC atendido à letra. Ver BOT-002 para a ressalva de runtime.
+  - id: AC14
+    verdict: PASS
+    evidence: >-
+      Verificado por igualdade de sequência, não por leitura: 200 saques de `createBot(12345,0).rand`
+      são valor a valor idênticos a `mulberry32(deriveSeed(12345,1))`, e os de `team:1` a
+      `mulberry32(deriveSeed(12345,2))`. Nenhum dos dois coincide com `mulberry32(seed)` — o stream 0
+      que `createWorld` usa. Testei ADEMAIS sobreposição deslocada (prefixos de 20 valores contra 150
+      offsets, todos os pares entre streams 0/1/2): zero. E varri `deriveSeed(seed, 0|1|2)` para
+      5 000 seeds: zero colisões. O bot nunca toca o stream da simulação.
+  - id: AC15
+    verdict: PASS
+    evidence: >-
+      A ordem de §3.2 foi medida instrumentando `bot.rand` com um contador, em seis cenários. 1 bola
+      decidindo + 1 cast de ativa = 3 saques / 1 comando. Fora do ponto de decisão = 0 saques. Ult
+      pronta + ativa = 5 saques / 2 comandos, com `ult` emitida ANTES da ativa. Bola morta = 0 saques.
+      Ult não pronta = 3 saques. E o check que é o coração da seção: uma bola que chega ao ponto de
+      decisão e NÃO casta ainda saca 1 — o consumo do stream é função do estado do mundo, não da
+      decisão, exatamente como §3.2 exige. Confirmado também que o saque (1) acontece ANTES do guard
+      `if (!def) continue` (`:171-174`), então nem um `charId` desconhecido desalinha o stream.
+  - id: AC16
+    verdict: PASS
+    evidence: >-
+      Grep próprio em `src/bot/` por `Date.now|performance.now|process.hrtime|Math.random`: em
+      `heuristic.ts` as únicas ocorrências são as três linhas de COMENTÁRIO que citam as invariantes
+      (`:19,:24,:564`). Zero chamadas. O único relógio lido é `view.time` (`:182,183,190,192`).
+  - id: AC17
+    verdict: PASS
+    evidence: >-
+      `porBola` é tocado em exatamente dois lugares, ambos dentro de `estadoDe` (`:204-210`): leitura
+      por chave e escrita por chave. Nenhum `for..in`, nenhum `for..of`, nenhum `Object.keys/values/
+      entries` no arquivo (grep confirmado). Toda iteração parte de `view.balls`.
+  - id: AC18
+    verdict: PASS
+    evidence: >-
+      Ver AC1 — snapshot JSON do mundo inteiro comparado antes/depois de cada `botCommands`, dois
+      bots, 900 ticks, zero divergências. É mais forte que o grep de atribuição que o @dev rodou,
+      porque pega escrita por alias e por referência aninhada também.
+  - id: AC19
+    verdict: PASS
+    evidence: >-
+      Zero `Math.hypot` e zero `Math.atan2` em `heuristic.ts` (grep). `distancia` (`:565-569`) usa
+      `Math.sqrt(dx*dx+dy*dy)`, e `maisProximo` (`:548-562`) compara em d² sem sequer tirar raiz.
+      `cos`/`sin` aparecem uma vez (`:525-526`, rotação de jitter) e `log`/`pow` uma vez (`:442`,
+      velEfetivaDash) — os dois casos sem alternativa algébrica, e §8.5 os aceita explicitamente. O AC
+      é redigido como "onde houver alternativa algébrica"; não há.
+  - id: AC20
+    verdict: PASS
+    evidence: >-
+      Imports do arquivo: só `sim/rng.ts` e `sim/types.ts` (`:1-2`). Nenhum import de `chars/`,
+      `client/`, `tools/` ou de qualquer coisa fora de `sim/`. O roster chega por `view.chars`, dado
+      injetado. Não há caminho para loja, item ou preço — nenhum desses conceitos existe no arquivo.
+      A fronteira comportamental (não move, não usa básico, não drafta) é a mesma prova do AC1.
+  - id: AC21
+    verdict: PASS
+    evidence: >-
+      Rodados por mim do zero. `npm run check` → EXIT=0, zero saída. `npm run sim:check` → EXIT=0 com
+      determinismo ✓, golden hash ✓ (5 seeds), build coverage ✓ (5 variantes), replay ✓ (5 seeds),
+      Pilar 3 ✓, `espelho 2v2 19/14/7` e `duração 13.8/12.3/19.5` — byte a byte a mesma saída do gate
+      de e2.2. E o "✓ ok" NÃO está se comparando com um baseline movido: extraí a tabela `BASELINE`
+      da cópia de trabalho e de `git show HEAD:src/tools/determinism.ts` e comparei as duas strings
+      normalizadas — idênticas; idem `BUILD_BASELINE`. Os 5 hashes conferem ainda com
+      `docs/architecture.md` §6.0 linhas 711-715 (96de1201/753/1 · f66a7416/961/0 · a8db9c28/830/0 ·
+      cb77dbe0/831/0 · 6aede2d9/1168/-1).
+  - id: AC22
+    verdict: PASS
+    evidence: >-
+      `git diff --stat -- src/bot/dummy.ts` → vazio. `dummy.ts` não aparece em `git status --short
+      src/`. Intocado.
+  - id: AC23
+    verdict: PASS
+    evidence: >-
+      `git status --short src/` mostra os 5 arquivos modificados de e2.0/e2.1/e2.2 (Done, não
+      commitadas) + `harness.ts` (e2.0) + `heuristic.ts` (esta story, `??`). Confirmei que a entrega
+      de e2.3 não vazou para nenhum deles: `git diff -- src/ | grep heuristic|createBot|botCommands`
+      devolve UMA linha, e ela é um COMENTÁRIO em `determinism.ts:46` que já pertencia a e2.0
+      ("a Fase 2 acrescenta `heuristic` como driver NOVO"). O delta desta story é um arquivo novo.
+  - id: AC24
+    verdict: PASS
+    evidence: >-
+      `sim/` puro: nenhum import de `bot/`, `chars/`, `client/` ou `tools/` dentro de `src/sim/`
+      (grep). `bot/heuristic.ts` não ganhou dependência de DOM nem de relógio de parede (AC16), então
+      a exigência de §8.4 (o cliente importa `bot/` na Fase 3) segue satisfeita.
+
+independent_verification:
+  metodo: >-
+    Dois scripts próprios em scratchpad, importando `src/` por `file://` — `src/` real tocado uma
+    única vez, para o teste negativo de `WorldView`, e restaurado byte-idêntico (SHA256 conferido).
+    60+ asserções. Nenhum número do Dev Agent Record foi aceito sem recomputação.
+  streams_prng:
+    detail: 'igualdade de sequência contra mulberry32(deriveSeed(...)), sobreposição deslocada, varredura de colisão'
+    result: >-
+      team0 ≡ stream 1, team1 ≡ stream 2, nenhum ≡ stream 0. Zero sobreposição em 150 offsets. Zero
+      colisão de `deriveSeed` em 5 000 seeds × streams 0/1/2. `deriveSeed(12345, 0|1|2)` =
+      2258480790 / 3283241497 / 613117429.
+  partida_real_dois_bots:
+    detail: >-
+      Três seeds com `heuristic` nos DOIS lados, laço manual conferido contra `runRound` do harness.
+      Os comandos de cada time gravados separadamente e comparados.
+    result: >-
+      seed 1 → winner 0 · 827 ticks · hash adc82769 (t0 emite 3 comandos, t1 emite 4); seed 2 →
+      winner 0 · 1159 ticks · c304f0c2 (4 / 5); seed 3 → winner 1 · 766 ticks · f899b3ad (3 / 4). Em
+      todas, `comandos(t0) != comandos(t1)` — os streams estão de fato separados, não só no código.
+      Laço manual ≡ `runRound` nas três. Autoconsistência (seed 7 rodada duas vezes): 6c272a56 ≡
+      6c272a56 — prévia do P2.5 que `e2.4` vai formalizar.
+  arch_001_matematica:
+    veredito: 'CORRETA. Decisão de engenharia sólida, sem objeção.'
+    detail: >-
+      Derivei do zero em vez de conferir. `physics.ts:18` roda `k = Math.pow(drag, dt); v *= k` por
+      tick, e `drag^dt` composto n vezes é `drag^(n·dt)` — logo `v(t) = v0·drag^t` EXATAMENTE, não
+      por aproximação. A média temporal em [0,T] é `(1/T)∫v0·drag^t dt = v0·(1−drag^T)/(T·(−ln drag))`,
+      que é linha por linha a fórmula de `velEfetivaDash` (`:442`). A forma está certa.
+    numeros_recomputados:
+      - 'analítico, golem (drag 0.3 de golem.ts:22, T = 450/1000): v̄ = 694.85 px/s = 77.21% de 900 — bate os 694.9 / 77.2% que o @dev alega'
+      - 'integração discreta reproduzindo o laço EXATO de physics.ts (27 ticks a 1/60): 687.91 px/s = 76.4%. A integral contínua fica 1.00% acima da soma de Riemann à direita — o desvio de dt/2, irrelevante num estimador heurístico'
+      - 'medição REAL num mundo em execução, com a IA de movimento no laço: 543.22 px/s = 60.4% (o gate de e2.2 mediu 550 px/s = 61.1% com outro setup — mesma ordem, confirma)'
+      - 'tImpacto a 280px: cru 0.311s · corrigido 0.403s · real 0.515s. Erro cai de −39.6% para −21.7%'
+      - "fidelidade do 'raio' do Vex medida por mim: 620.0 px/s de 620 declarados = 100.0% (ver BOT-005)"
+    ordenacao_verificada: >-
+      `real (543) < modelado (695) < declarado (900)`. Isto é o que importa e foi testado como
+      asserção: a correção anda NA DIREÇÃO da realidade sem ultrapassá-la, e o resíduo continua sendo
+      otimismo (o bot ainda acha que chega antes do que chega), não vira pessimismo. O sinal do erro
+      não inverteu.
+    julgamento: >-
+      Aprovo a escolha. Ela usa só dado já declarado (`S.ms` de `AimSpec`, `self.stat.drag` do
+      `WorldView`), não toca `sim/`, deriva da lei que o motor de fato roda, e degrada para `S.speed`
+      fora do domínio em vez de produzir NaN. Uma constante calibrada a 0.61 seria um número por
+      personagem disfarçado de fórmula — a opção C de §2.2 entrando pela porta dos fundos — e
+      envenenaria qualquer personagem futuro com `drag` diferente. O @dev nomeou esse risco antes de
+      mim e escolheu certo. Bônus registrado: resolve metade de REQ-001 (o gate de e2.2 apontou que
+      `dash.ms` não tinha consumidor na política escrita; agora tem).
+  invariantes_n1_n4:
+    N1: 'zero Date.now/performance.now/process.hrtime/Math.random — só 3 comentários que os citam'
+    N2: 'porBola tocado só em estadoDe, por chave; zero for..in / for..of / Object.keys sobre ele'
+    N3: 'snapshot JSON do mundo inteiro, antes vs depois de cada botCommands, 900 ticks, 2 bots — zero divergências'
+    N4: 'zero Math.hypot, zero Math.atan2; cos/sin 1× (jitter) e log/pow 1× (velEfetivaDash), ambos aceitos por §8.5'
+  guardas_rel_002:
+    detail: 'cada guarda exercitada com o estado degenerado que ela existe para barrar'
+    result: >-
+      distância zero (bolas sobrepostas) → comandos finitos; `maxHp = 0` → finitos; `maxHp = NaN` →
+      barrado pelo `!(x>0)` corretamente; `raioEf = 0` com sigma 0 (o 0/0 literal) → finitos;
+      `drag` em {0, 1, −0.5, 1.5} → finitos nos quatro (degrada para `S.speed`); `DECAIMENTO_MS = 0`
+      num preset customizado → sem −Infinity; posição do alvo = NaN → a rede de finitude de `emitir`
+      segura e nenhum comando sai. A forma `!(x > 0)` está de fato usada nos quatro pontos que o @dev
+      declara e ela de fato barra NaN. Um quinto ponto ficou de fora — BOT-001.
+  lamina_fantasma:
+    detail: 'recomputado analiticamente E reproduzido no bot, sem reusar o número do relato'
+    result: >-
+      Confirmado exatamente. Lâmina: `minRange = maxRange = 200`, `aim.radius = 9`. Contra outro Vex
+      (`radius 15`): `raioEf = 24`; o melhor caso possível (alvo parado, mira exata, alvo exatamente
+      no alcance) zera dois dos três termos de sigma e deixa `sigma = JITTER_RAD·dPrev = 0.12·200 =
+      24`. `pAcerto = 24²/(24²+24²) = 0.5`, exato até o último bit. Contra Golem (`radius 24`):
+      `raioEf = 33` → 0.6541. Verificado no bot real: 1v1 vex-vs-vex, alvo cheio a d=200 → NÃO casta.
+    ressalva: 'ver BOT-003 — o número está certo, a conclusão que o @dev tirou dele está ampla demais'
+
+top_issues:
+  - id: 'BOT-001'
+    severity: medium
+    category: reliability
+    finding: >-
+      Achado próprio deste gate, ausente do relato. A disciplina `!(x > 0)` foi aplicada a quatro
+      denominadores, mas o QUINTO ponto onde um NaN decide é o próprio limiar — e lá a mesma
+      propriedade ("toda comparação com NaN é falsa") age no sentido INVERSO: em vez de barrar, deixa
+      passar. `porValorEsperado` fecha com `if (melhor === null || melhorVE < limiar) return null`
+      (`heuristic.ts:277`). Com `melhorVE = NaN`, `NaN < limiar` é `false` e o candidato é ACEITO.
+      A cadeia: `peso` (`:334-340`) guarda `!(e.stat.maxHp > 0)` mas não guarda `e.hp` — com
+      `hp = NaN`, `frac` é NaN, o clamp ternário `frac > 1 ? 1 : frac < 0 ? 0 : frac` cai no ramo
+      final (as duas comparações são falsas) e devolve NaN; `peso` vira NaN; `VE` vira NaN; o limiar
+      não segura. O comando emitido é FINITO (a geometria está sã), então a rede de `emitir` também
+      não pega. Medido: alvo a 900px com `hp` normal → 0 comandos, correto; o mesmo mundo com
+      `hp = NaN` → 1 comando, `{dx:0.9935, dy:0.1134, mag:0.9399}`. O bot casta onde não castaria.
+    alcancabilidade: >-
+      Não é hipótese de laboratório — segui o caminho inteiro e ele fecha. `PickSetup.itemBonus`
+      (entregue por `e2.1`, e a porta que o CLI de `e2.6` vai alimentar a partir de string de linha de
+      comando) aceita `{ dmg: NaN }` sem validação; `recomputeStats` propaga e `stat.dmg` sai NaN;
+      80 ticks depois, `hp` de uma bola é NaN. Reproduzido nesta revisão.
+    atenuantes: >-
+      Três, e são substanciais. (1) Um `hp = NaN` já é estado corrompido em que a bola é imortal
+      (toda comparação de morte falha) e a rodada bate o teto de 180s — anomalia que a instrumentação
+      de morte súbita de §4.5 (Risco #6) já vai imprimir, então a célula afetada não passa silenciosa.
+      (2) O bot não é a ORIGEM do NaN e não o propaga para dentro da simulação. (3) Nenhum AC de e2.3
+      exige isto: REL-002 é Should-Fix herdada de `e2.1`, advisory, e o @dev cobriu os quatro pontos
+      que enumerou.
+    scope_verdict: >-
+      Não reprova a story. É lacuna de completude numa mitigação já reivindicada, não AC falhado, e o
+      @dev inclusive nomeia corretamente que "o parser do CLI (e2.6) continua sendo o dono do problema
+      no outro sentido". Este gate acrescenta que a metade do bot tem um ponto a mais do que os quatro
+      mapeados.
+    suggested_action: >-
+      (a) `e2.4`, uma linha: trocar `melhorVE < limiar` por `!(melhorVE >= limiar)`, que fecha o
+      ponto com a MESMA idiomática já adotada no arquivo, e clampar `frac` em `peso` contra NaN
+      (`if (!(frac >= 0)) return 1`). É onde cabe porque `e2.4` põe o bot no laço e pode provar a
+      guarda por teste. (b) `e2.6`: validar `itemBonus` na entrada do CLI — `Number.isFinite` em cada
+      campo, com erro explícito. É o dono de raiz. (c) registrar em `e2.1` que REL-002 tinha alcance
+      maior do que aquela story escopou.
+  - id: 'BOT-002'
+    severity: low
+    category: maintainability
+    finding: >-
+      `PRESET_ARNES` é `Readonly<BotConfig>` — apagado em runtime. Medido: `PRESET_ARNES.PISO_LIMIAR =
+      0.99` MUTA o objeto exportado, sem `Object.freeze`. O AC 13 pede "Readonly" e §2.7 escreve
+      literalmente `Readonly<BotConfig>`, então a letra está cumprida e por isso o AC é PASS. Mas §8.4
+      ("deriva de preset") declara a mitigação do risco como "`PRESET_ARNES` é `Readonly` e
+      **congelado por `BOT_VERSION`**" — e uma matriz reportada sob `heuristic-1` depois de alguém ter
+      escrito num campo do preset seria exatamente a falha que §6.3 existe para impedir, sem nenhum
+      sinal. `e2.5`/`e2.6` são as stories que vão manipular flags perto deste objeto.
+    scope_verdict: 'não reabre e2.3 — o AC está atendido como escrito'
+    suggested_action: >-
+      `e2.5`: `export const PRESET_ARNES = Object.freeze({ ... LIMIAR: Object.freeze({...}) })`
+      (freeze é raso, `LIMIAR` precisa do seu). Custo zero, e transforma uma promessa de tipo numa
+      garantia de runtime bem no ponto em que o CLI começa a existir.
+  - id: 'BOT-003'
+    severity: low
+    category: requirements
+    finding: >-
+      O número do @dev está certo e o achado é real, mas a conclusão é mais ampla do que o dado
+      sustenta. Reproduzi `pAcerto` máximo = **exatamente 0,5** contra outro Vex, e 0,6541 contra
+      Golem. Porém a Completion Note 5 afirma que "o limiar base `LIMIAR.ability = 0,55` é
+      **inalcançável**", e isso confunde `pAcerto` com `VE`: §2.4 define `VE = Σ pAcerto·peso`, e
+      `peso ∈ [1, 2]`. Medi a fronteira: alvo a 95% de hp → VE 0.525, espera; alvo a **90%** de hp →
+      VE 0.550, **CASTA**. Ou seja, a Lâmina destrava assim que o alvo perde ~10% de vida — e em 2v2
+      o somatório sobre dois inimigos destrava antes ainda. O próprio dado do @dev confirma: o Vex
+      castou 2 vezes em 827 ticks, não zero.
+    porque_importa: >-
+      A formulação correta é mais interessante que a original para `e2.5`, não menos. Não é "kit
+      morto"; é **kit adiado**: no espelho Vex-vs-Vex a Lâmina fica estruturalmente indisponível
+      enquanto ninguém está ferido, e portanto acoplada ao progresso da luta em vez de disponível
+      desde o início. Isso é viés de competência do bot emergindo SEM nenhum ramo por personagem —
+      exatamente o que §8.3 prevê e o que a métrica de utilização de kit de §6.3 tem que capturar. E
+      é achado de `e2.5`, não defeito desta story: §2.6 proíbe mexer em `PRESET_ARNES` sem dado, e o
+      @dev acertou em não mexer.
+    suggested_action: >-
+      `e2.5`: a métrica de utilização de kit deve reportar, além de "casts por rodada" e "% de rodadas
+      sem ult", o **tick mediano do primeiro cast de cada slot**. É esse número que separa "kit morto"
+      de "kit adiado", e a Lâmina no espelho Vex é o primeiro caso concreto que o projeto tem para
+      calibrá-lo.
+  - id: 'BOT-004'
+    severity: low
+    category: architecture
+    finding: >-
+      Observação sobre a forma da correção de ARCH-001, registrada para não se perder — não é defeito.
+      `tImpacto = d / v̄` com `v̄` calculado sobre a janela DECLARADA inteira (`S.ms`) é independente
+      de `d`. Como a velocidade real parte de 900 e decai, o tempo real para percorrer um `d` curto é
+      MENOR que `d/v̄`, e para um `d` próximo do alcance máximo é maior. O inverso exato da lei de
+      posição seria `t = −ln(1 − d·(−ln drag)/v0) / (−ln drag)`. Não recomendo trocar: a forma linear
+      em `d` é a de §2.3, o termo alimenta `sigma` (onde superestimar é conservador, e conservador é
+      o que §2.3 escolhe deliberadamente com `|v_e|`), e a exata introduz um domínio de validade novo
+      (o argumento do log pode ficar negativo para `d` além do alcance do dash) que precisaria da sua
+      própria guarda.
+    suggested_action: 'nenhuma ação. Registrado para o @architect no dia em que §2.3 for revisada.'
+  - id: 'BOT-005'
+    severity: low
+    category: process
+    finding: >-
+      Correção de um número que este gate herdou do gate de `e2.2` e que o @dev reutilizou de boa-fé.
+      Medi a velocidade do projétil da Lâmina isolando o deslocamento puro ao longo de 30 ticks:
+      **620.0 px/s de 620 declarados = 100.0%**, não os 98,2% (609 px/s) registrados em e2.2. Aquele
+      número veio de dividir o alcance TOTAL medido (578,7px) pela vida do projétil, e o alcance total
+      embute o deslocamento de spawn (`self.stat.radius`) e um tick final truncado. Projétil não sofre
+      `drag` — a fidelidade é exata por construção.
+    consequencia: >-
+      Nenhuma sobre a decisão. Torna a assimetria ligeiramente MAIOR do que o @dev reporta (≈22pp em
+      vez de 21pp após a correção, ≈40pp em vez de 37pp antes), isto é, os números dele são
+      conservadores na direção certa e a conclusão fica mais forte, não mais fraca.
+    suggested_action: '@architect/@qa: usar 100% (não 98,2%) como fidelidade de referência do `raio` em §6.3.'
+
+design_decisions_reviewed:
+  - decision: 'ARCH-001 corrigido por integral do decaimento, não por constante calibrada'
+    verdict: 'CORRETO — engenharia sólida, matemática verificada por três caminhos, sem objeção'
+    rationale: >-
+      Ver `independent_verification.arch_001_matematica`. A forma é a integral exata da lei que
+      `physics.ts:18` roda, não uma aproximação inventada; usa só dado já declarado; degrada em vez de
+      produzir NaN; e não introduz nenhum número por personagem. A alternativa (fator 0.61) teria
+      reintroduzido a opção C rejeitada em §2.2 disfarçada de fórmula. O resíduo é a IA de movimento,
+      e o @dev está certo em não modelá-la: RF-12 a torna autoral e lê-la seria desfazer o motivo de
+      `AimSpec` existir.
+  - decision: '`EstadoBola` fica { proximaDecisaoTick, prontoDesdeUlt } — a ativa não ganha memória'
+    verdict: 'correto, e resolve o Should-Fix do @po pela raiz'
+    rationale: >-
+      `self.abilityReadyAt` (`types.ts:58`) É o instante exato em que o cooldown terminou, e está no
+      `WorldView`. Copiá-lo para `EstadoBola` criaria uma segunda fonte de verdade para um número que
+      já existe — o pecado C3 pelo qual este projeto já pagou duas vezes. Verifiquei o caso de borda
+      que o @dev cita: no tick 0, `abilityReadyAt = 0` dá `esperaMs = view.time`, que é a semântica
+      certa (a ativa está disponível desde o começo). A ult de fato não tem campo equivalente
+      (`ultCharge`/`ultThreshold` são um limiar, não um instante), e é a única que ganha memória.
+      O atraso de observação de até ~250ms sobre uma escala de 8 000ms é 3%, igual para os dois times,
+      e o @dev o registrou em vez de escondê-lo.
+  - decision: '`erroAlcance` (§2.3) implementado como `erroMira`, sua generalização'
+    verdict: 'correto — é a única leitura que faz §2.3 e §2.4 coexistirem'
+    rationale: >-
+      §2.3 define o termo só para o inimigo mirado; §2.4 soma sobre todos. Sem generalizar, o
+      somatório fica indefinido para quem não é o alvo. `dist(pontoDeImpacto, prev(e))` reduz-se
+      exatamente a `|dPrev − alcanceEf|` no caso de §2.3 (o ponto de impacto está sobre o raio até o
+      alvo), então nenhuma palavra de §2.3 deixa de valer. O @dev registrou a divergência em vez de
+      deixá-la implícita, que é o comportamento certo para uma linha de arquitetura.
+  - decision: 'ponto de impacto derivado de `mag`, e não `mag` derivado da distância clampada'
+    verdict: 'correto, e por um motivo melhor do que parece'
+    rationale: >-
+      `direcionado` (`:537-540`) usa `alcance = min + (max−min)·mag`, que é literalmente `aimFrom`
+      (`world.ts:422`). O ponto que o bot AVALIA é assim, por construção, o ponto que o motor vai
+      CALCULAR. Clampar a distância direto divergiria quando `maxRange < minRange` — configuração que
+      nenhum personagem declara hoje, o que é exatamente por que ninguém notaria.
+  - decision: 'BOT_VERSION mantido em heuristic-1 apesar da correção de ARCH-001'
+    verdict: 'correto'
+    rationale: >-
+      O AC 2 fixa a string, e nenhuma matriz foi produzida ainda — não existe resultado anterior de
+      que esta correção divirja. `BOT_VERSION` existe para separar matrizes comparáveis de
+      incomparáveis; sem matriz emitida, não há o que separar. Incrementar agora gastaria a versão
+      sem informação.
+  - decision: 'desempate por `id` em porValorEsperado e maisProximo, redundante com a ordem de view.balls'
+    verdict: 'correto — redundância barata e deliberada'
+    rationale: >-
+      Como `view.balls` está em ordem crescente de `id` e a invariante de `world.balls` proíbe
+      reordenar, `alvo.id < melhorId` nunca dispara hoje: o primeiro (menor id) vence os empates. É
+      exatamente o comportamento que §3.3 pede, e a linha continua sendo a proteção que sobra no dia
+      em que alguém violar a invariante. O @dev comentou a redundância em vez de deixá-la parecendo
+      código morto.
+  - decision: 'CodeRabbit não executado'
+    verdict: 'aceito — limitação de máquina, como em debt.*, e2.0, e2.1 e e2.2'
+    rationale: >-
+      WSL ausente. Substituído por `npm run check`, `npm run sim:check`, greps de fronteira e — o que
+      de fato importa aqui — 60+ asserções independentes deste gate sobre comportamento em runtime,
+      que é a categoria que o CodeRabbit não cobriria de qualquer forma num arquivo cujo único risco
+      real é fórmula errada.
+
+blocking: false
+blocks_downstream: false
+downstream_note: >-
+  `e2.4`, `e2.5`, `e2.6` e `e2.7` estão LIBERADAS. O bot compila, é determinístico entre execuções,
+  não escreve no mundo, saca do stream certo na ordem certa e joga os dois lados com o mesmo código —
+  que é a fundação inteira de que as quatro dependem.
+  Entradas obrigatórias herdadas deste gate: `e2.4` leva BOT-001 (o limiar aceita `VE = NaN`; a
+  correção é de uma linha e `e2.4` é onde ela fica testável, com o bot no laço); `e2.5` leva BOT-002
+  (`Object.freeze` no preset, antes de o CLI existir) e BOT-003 (a métrica de utilização de kit de
+  §6.3 precisa do tick mediano do primeiro cast, não só da contagem — a Lâmina no espelho Vex é o
+  caso de calibração); `e2.6` leva a metade de raiz de BOT-001 (validar `itemBonus` com
+  `Number.isFinite` na entrada). ARCH-001 está ENCERRADO: tratado, verificado e aprovado.
+push_recommendation: >-
+  Liberado para o @devops considerar no push. Empacotamento: o working tree acumula agora QUATRO
+  stories Done e não commitadas — e2.0 (`tools/harness.ts` novo + `tools/determinism.ts`), e2.1
+  (`sim/world.ts`), e2.2 (`sim/types.ts`, `chars/golem.ts`, `chars/vex.ts`) e e2.3
+  (`src/bot/heuristic.ts`, arquivo novo e único delta). São quatro commits distintos, nessa ordem;
+  não misturar. O de e2.3 é o mais limpo dos quatro: um arquivo novo, zero linhas alteradas fora
+  dele.
+
+waiver: { active: false }
