@@ -36,7 +36,7 @@ const MAX_SLOW = 0.85
  * maior janela conhecida, não apenas encosta nela. Código ainda inalcançável hoje (o teto
  * de cdSpeed mantém todo cooldown do roster bem acima disso) — mudança não altera hash.
  */
-const MIN_ABILITY_CD_MS = 500
+export const MIN_ABILITY_CD_MS = 500
 
 export interface PickSetup {
   charId: string
@@ -66,6 +66,7 @@ export function createWorld(chars: Record<string, CharDef>, setup: RoundSetup): 
     over: false,
     winner: -1,
     chars,
+    phase: 'tick',
   }
 
   for (const team of [0, 1] as Team[]) {
@@ -114,6 +115,7 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     abilityIndex: pick.abilityIndex,
     passiveIndex: pick.passiveIndex,
     memory: {},
+    contact: null,
 
     // camada de stats (debt.1, completada em debt.3 — única fonte de verdade agora).
     // debt.5: restBall/restWall ganham fonte própria opcional no CharDef; ausência usa
@@ -281,6 +283,19 @@ export function makeCtx(world: World): SimCtx {
       self.bonusPassive[key] += amount
     },
 
+    // debt.6 — abre a janela declarada; resolveContactWindow (dentro de collideBalls) faz
+    // o resto. windowDef ausente falha em silêncio (não abre nada) em vez de lançar.
+    // LIMITAÇÃO CONHECIDA (QA-002, gate de debt.6): A1 audita só o sentido inverso —
+    // que todo contactWindows[i].source bate com uma ability/ult — não que todo CALL SITE
+    // de openContactWindow(self, source) tenha um contactWindows correspondente. Um
+    // personagem que digitasse o source errado aqui não seria pego por nenhuma camada
+    // hoje. Fechar isso é auditoria de roster em escala — Fase 2/6, não escopo de debt.6.
+    openContactWindow: (self, source) => {
+      const windowDef = charOf(world, self).contactWindows?.find((w) => w.source === source)
+      if (!windowDef) return
+      self.contact = { source, endsAt: world.time + windowDef.ms, lastHitAt: -Infinity }
+    },
+
     rand: world.rng,
   }
   return ctx
@@ -301,6 +316,18 @@ function dealDamage(
   amount: number,
   source: Ball | null,
 ): void {
+  // debt.6 — Camada 2 de auditoria do Pilar 3 (D-07). Pega qualquer chamada SÍNCRONA a
+  // dealDamage durante phase === 'collide', direta ou indireta. NÃO pega dano aplicado via
+  // Effect (ctx.apply(fx.dot(...))), que só materializa no tick seguinte sob phase ===
+  // 'effect' — limitação conhecida (QA-001, gate de debt.6), sem regressão hoje porque
+  // nenhum personagem do roster faz isso. Roda sempre, inclusive em produção — modo de
+  // teste diferente de produção seria fonte de divergência de determinismo, o que não pode
+  // existir na Fase 4. `charId` identifica o INFRATOR (quem chamou de dentro de on.collide),
+  // não a vítima.
+  if (world.phase === 'collide') {
+    const charId = source ? charOf(world, source).id : '(sem source)'
+    throw new Error(`Pilar 3: dano por contato fora de janela declarada · ${charId}`)
+  }
   if (!target.alive || amount <= 0) return
 
   let amt = amount
@@ -338,6 +365,30 @@ function dealDamage(
       charOf(world, source).on?.kill?.(ctx, source, target)
     }
   }
+}
+
+/**
+ * debt.6 — resolve a janela de dano por contato de `self` contra `other`, dentro do
+ * callback de `collideBalls`. Segue architecture.md §4.2 literalmente. `world.phase` já
+ * foi ajustada para 'contact' pelo chamador (ver step()); reafirmada aqui porque esta
+ * função é o único lugar que efetivamente chama dealDamage por contato — não depender só
+ * do chamador lembrar de ajustar a fase primeiro.
+ */
+function resolveContactWindow(world: World, ctx: SimCtx, self: Ball, other: Ball): void {
+  if (!self.contact) return
+  if (world.time >= self.contact.endsAt) {
+    self.contact = null
+    return
+  }
+  if (other.team === self.team) return
+  const w = charOf(world, self).contactWindows?.find((cw) => cw.source === self.contact!.source)
+  if (!w) return
+  if (world.time - self.contact.lastHitAt < w.reHitMs) return
+  self.contact.lastHitAt = world.time
+  world.phase = 'contact'
+  dealDamage(world, ctx, other, w.dmg, self)
+  ctx.knockback(other, other.x - self.x, other.y - self.y, w.knockback)
+  w.onHit?.(ctx, self, other)
 }
 
 // ---------------------------------------------------------------- casts
@@ -527,12 +578,17 @@ export function step(world: World, commands: Command[] = []): void {
   world.events = []
   const ctx = makeCtx(world)
 
+  // debt.6 — world.phase marca cada bloco do pipeline (AC 8). Só 'collide' tem
+  // consequência hoje (dealDamage recusa), mas todas as fases existem para auditabilidade
+  // futura. Atribuição direta em cada ponto, nunca try/finally — ver Dev Notes de debt.6.
+  world.phase = 'cast'
   for (const c of commands) {
     if (c.tick === world.tick) castCommand(world, ctx, c)
   }
 
   for (const b of world.balls) {
     if (!b.alive) continue
+    world.phase = 'effect'
     tickEffects(world, ctx, b)
     if (!b.alive) continue
     const def = charOf(world, b)
@@ -542,6 +598,7 @@ export function step(world: World, commands: Command[] = []): void {
     zeroBonus(b.bonusPassive)
     const passiveBonus = def.passives[b.passiveIndex].bonus
     if (passiveBonus) addPartialBonus(b.bonusPassive, passiveBonus)
+    world.phase = 'tick'
     def.passives[b.passiveIndex].onTick?.(ctx, b)
     def.on?.tick?.(ctx, b)
     recomputeStats(b)
@@ -549,14 +606,31 @@ export function step(world: World, commands: Command[] = []): void {
     if (def.ult.charge === 'time') addCharge(world, b, 'time', world.dt * 1000)
   }
 
+  world.phase = 'attack'
   for (const b of world.balls) autoAttack(world, ctx, b)
 
+  world.phase = 'zone'
   tickZones(world, ctx)
+  world.phase = 'projectile'
   tickProjectiles(world, ctx)
 
   integrate(world)
   collideZoneWalls(world)
-  collideBalls(world, (a, other) => charOf(world, a).on?.collide?.(ctx, a, other))
+  collideBalls(world, (a, other) => {
+    // debt.6 (AC 10): resolveContactWindow SEMPRE antes de on.collide, cada fase com sua
+    // própria atribuição direta — nunca as duas juntas sob um único try/finally, senão o
+    // dano legítimo de contato seria recusado por fase='collide' já ligada cedo demais.
+    // Ordem de pares preservada: collideBalls chama onCollide(a,b) depois onCollide(b,a).
+    world.phase = 'contact'
+    resolveContactWindow(world, ctx, a, other)
+    world.phase = 'collide'
+    charOf(world, a).on?.collide?.(ctx, a, other)
+  })
+  // QA-004 (gate de debt.6): sem isto, world.phase ficava em 'collide' até o próximo
+  // 'cast' do tick seguinte — qualquer dano causado depois daqui (ex.: código futuro após
+  // collideBalls) seria recusado por um falso positivo do Pilar 3. Neutro: nada abaixo
+  // deste ponto deveria estar processando contato.
+  world.phase = 'tick'
   collideWalls(world)
 
   if (world.time >= SUDDEN_DEATH_MS) {

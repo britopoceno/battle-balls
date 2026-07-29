@@ -1,7 +1,20 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { CHARS } from '../chars/index.ts'
 import { dummyCommands } from '../bot/dummy.ts'
-import { createWorld, step, TICK_MS, type RoundSetup, type PickSetup } from '../sim/world.ts'
+import {
+  createWorld,
+  step,
+  TICK_MS,
+  MIN_ABILITY_CD_MS,
+  type RoundSetup,
+  type PickSetup,
+} from '../sim/world.ts'
+import { SIGMA_MAX } from '../sim/stats.ts'
 import type { World } from '../sim/types.ts'
+
+const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
 
 /**
  * Verificação do invariante que sustenta todo o projeto:
@@ -165,6 +178,131 @@ for (const esperado of BUILD_BASELINE) {
   }
 }
 
+// ---------------------------------------------- Pilar 3 (debt.6) — Camada 1: estática
+
+/**
+ * Remove comentários `//` e `/* *\/` antes de varrer código — sem isto, um comentário em
+ * prosa que mencione "collide:" ou "openContactWindow(" confunde a busca textual (achado
+ * real: o próprio comentário de `golem.ts` sobre a migração continha "on.collide:" e
+ * desviava a busca para o bloco errado). Não lida com strings contendo `//`/`/*`, que não
+ * ocorrem nos arquivos de personagem hoje — limitação aceita, coerente com "barata,
+ * incompleta" (Camada 1 nunca pretendeu ser um parser).
+ */
+function semComentarios(texto: string): string {
+  return texto.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+}
+
+/**
+ * Camada 1 de auditoria (architecture.md §4.3): barata, incompleta de propósito. Varre
+ * `src/chars/*.ts` e confirma que nenhum bloco `on.collide` contém a substring `damage(`.
+ * Não pega chamada indireta, helper compartilhado, nem dano via efeito de 1 tick — quem
+ * pega isso é a Camada 2 (checagem de fase em dealDamage, sempre ativa). `ctx.apply(
+ * fx.slow(...))` dentro de on.collide continua permitido: o Pilar 3 fala de dano, não de
+ * efeito.
+ */
+function auditarCamada1(): string[] {
+  const violacoes: string[] = []
+  const arquivos = readdirSync(CHARS_DIR).filter((f) => f.endsWith('.ts') && f !== 'index.ts')
+  for (const arquivo of arquivos) {
+    const texto = semComentarios(readFileSync(join(CHARS_DIR, arquivo), 'utf8'))
+    const idxCollide = texto.indexOf('collide:')
+    if (idxCollide === -1) continue
+    const idxSeta = texto.indexOf('=>', idxCollide)
+    const idxAbre = texto.indexOf('{', idxSeta)
+    if (idxAbre === -1) continue
+    let profundidade = 0
+    let idxFecha = -1
+    for (let i = idxAbre; i < texto.length; i++) {
+      if (texto[i] === '{') profundidade++
+      else if (texto[i] === '}') {
+        profundidade--
+        if (profundidade === 0) {
+          idxFecha = i
+          break
+        }
+      }
+    }
+    if (idxFecha === -1) continue
+    const corpo = texto.slice(idxAbre, idxFecha)
+    if (corpo.includes('damage(')) {
+      violacoes.push(`  ✗ camada 1: ${arquivo} tem on.collide chamando damage( diretamente`)
+    }
+  }
+  return violacoes
+}
+
+// ------------------------------------------------- Pilar 3 (debt.6) — Camada 3: roster
+
+/**
+ * Camada 3 de auditoria (architecture.md §4.3) — o artefato que D-07 pede: tabela legível
+ * das janelas de contato declaradas do roster, e 3 verificações automáticas.
+ *   A1 — todo contactWindows[i].source corresponde a uma ability ou à ult do personagem
+ *   A2 — contactWindows[i].ms ≤ cd_efetivo_mínimo(source) — fecha a invariante de debt.4
+ *   A4 — nenhum personagem sem contactWindows chama ctx.openContactWindow (estático)
+ * A5 (a story original pedia "o arnês", redefinido em v1.0.2 — arnês é Fase 2, não existe
+ * ainda): as 40 seeds + BASELINE + BUILD_BASELINE acima já rodam com a checagem de fase
+ * (Camada 2) sempre ativa — se qualquer uma tivesse violado o Pilar 3, o script já teria
+ * lançado a exceção antes de chegar aqui. Não precisa de código adicional.
+ */
+function auditarCamada3(): { violacoes: string[]; tabela: string[] } {
+  const violacoes: string[] = []
+  const tabela: string[] = ['janelas de dano por contato (Pilar 3)']
+  const cdSpeedMax = 1 + SIGMA_MAX.cdSpeed
+
+  for (const char of Object.values(CHARS)) {
+    const janelas = char.contactWindows ?? []
+    if (janelas.length === 0) {
+      tabela.push(`  ${char.id.padEnd(6)} —         (nenhuma)`.padEnd(72) + '✓')
+      continue
+    }
+    for (const w of janelas) {
+      const idsAbility = char.abilities.map((a) => a.id)
+      const fonteValida = idsAbility.includes(w.source) || w.source === char.ult.id
+      if (!fonteValida) {
+        violacoes.push(
+          `  ✗ A1: ${char.id}.contactWindows source '${w.source}' não corresponde a nenhuma ability/ult`,
+        )
+      }
+
+      const ability = char.abilities.find((a) => a.id === w.source)
+      let cdMinStr = '—'
+      let ok = fonteValida
+      if (ability) {
+        const cdEfetivoMinimo = Math.max(MIN_ABILITY_CD_MS, ability.cd / cdSpeedMax)
+        cdMinStr = `${cdEfetivoMinimo.toFixed(0)}ms`
+        ok = ok && w.ms <= cdEfetivoMinimo
+        if (w.ms > cdEfetivoMinimo) {
+          violacoes.push(
+            `  ✗ A2: ${char.id}.${w.source} janela ${w.ms}ms > cd_efetivo_mínimo ${cdEfetivoMinimo.toFixed(0)}ms`,
+          )
+        }
+      }
+      tabela.push(
+        `  ${char.id.padEnd(6)} ${w.source.padEnd(9)} ${String(w.ms).padStart(4)}ms  dmg ${w.dmg}  kb ${w.knockback}  re-hit ${w.reHitMs}ms   cd_min ${cdMinStr}  ${ok ? '✓' : '✗'}`,
+      )
+    }
+  }
+
+  const arquivos = readdirSync(CHARS_DIR).filter((f) => f.endsWith('.ts') && f !== 'index.ts')
+  for (const arquivo of arquivos) {
+    const charId = arquivo.replace(/\.ts$/, '')
+    const char = CHARS[charId]
+    if (!char) continue
+    const temJanelas = (char.contactWindows?.length ?? 0) > 0
+    if (temJanelas) continue
+    const texto = semComentarios(readFileSync(join(CHARS_DIR, arquivo), 'utf8'))
+    if (texto.includes('openContactWindow(')) {
+      violacoes.push(`  ✗ A4: ${arquivo} chama openContactWindow sem declarar contactWindows`)
+    }
+  }
+
+  return { violacoes, tabela }
+}
+
+const violacoesCamada1 = auditarCamada1()
+const { violacoes: violacoesCamada3, tabela: tabelaJanelas } = auditarCamada3()
+const violacoesPilar3 = [...violacoesCamada1, ...violacoesCamada3]
+
 duracoes.sort((x, y) => x - y)
 const mediana = duracoes[Math.floor(duracoes.length / 2)]
 
@@ -181,6 +319,13 @@ console.log(
 console.log(`espelho 2v2    time0 ${v0} · time1 ${v1} · empate ${empates}   (esperado ~50/50)`)
 console.log(`duração        mediana ${mediana.toFixed(1)}s · min ${duracoes[0].toFixed(1)}s · max ${duracoes[duracoes.length - 1].toFixed(1)}s`)
 console.log('')
+for (const linha of tabelaJanelas) console.log(linha)
+console.log('')
+console.log(
+  `pilar 3        ${violacoesPilar3.length === 0 ? '✓ ok — camadas 1 e 3 sem violação' : `✗ ${violacoesPilar3.length} violação(ões)`}`,
+)
+if (violacoesPilar3.length) for (const v of violacoesPilar3) console.log(v)
+console.log('')
 
 if (divergentes > 0) throw new Error('simulação não é determinística')
 if (desvios.length > 0) {
@@ -195,5 +340,10 @@ if (desviosBuild.length > 0) {
     `comportamento divergiu da cobertura de build em ${desviosBuild.length} campo(s). ` +
       'Isso pega regressão em ramos de código (2ª ativa/passiva) que o BASELINE principal ' +
       'não exercita — ver o comentário de ARCH-001 acima de BUILD_BASELINE.',
+  )
+}
+if (violacoesPilar3.length > 0) {
+  throw new Error(
+    `Pilar 3 (D-07) violado em ${violacoesPilar3.length} ponto(s) — ver camadas 1/3 acima.`,
   )
 }

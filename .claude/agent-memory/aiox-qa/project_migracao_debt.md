@@ -91,4 +91,28 @@ declara querer ("mesma hidden class no V8"). É invisível no diff, no `tsc` e n
 `Object.keys(b.base).join() === STAT_KEYS.join()`. Medir antes de escalar a severidade: em
 `debt.5` o custo real foi 0,66% em 4M chamadas de `recomputeStats`, ou seja, ruído.
 
+**QA-001 de `debt.4` está FECHADA (gate de `debt.6`):** com `MIN_ABILITY_CD_MS = 500` e a maior janela
+de contato em 450 ms, nenhuma ability pode satisfazer A2 vacuamente. Verificado forçando `cd: 800`
+(⇒ `cd/2 = 400 < 500`, o piso vira o termo dominante) e vendo A2 reprovar `ms: 550`.
+
+**Buraco conhecido no Pilar 3, aberto depois de `debt.6` (achado QA-001 daquele gate):** `architecture.md`
+§4.3 afirma que a Camada 2 (checagem de fase em `dealDamage`) é "exata, pega qualquer caminho de código".
+**Não é.** Um `on.collide` que faz `ctx.apply(other, fx.dot(840, 17), self)` (~14 de dano em 1 tick)
+atravessa as três camadas: sem `damage(` no bloco (Camada 1), e o dano materializa no tick seguinte em
+`tickEffects` sob `phase === 'effect'` (Camada 2). Junto com isso, `openContactWindow` com `source` que
+não corresponde a nenhuma janela declarada é silêncio total — A4 só olha personagens **sem**
+`contactWindows`. Os dois só são pegos pelo golden hash, que tem roster congelado. Ao revisar `debt.7`,
+a Fase 2 ou qualquer personagem novo, verificar se algum deles foi fechado.
+
+**Técnica nova do gate de `debt.6` — provar que uma correção é necessária, não cosmética.** Quando o
+@dev alega ter corrigido um bug numa *ferramenta de verificação*, construir um caso que a ferramenta
+deveria pegar, confirmar que pega, e então **reverter só a correção** mantendo o mesmo caso. Se o caso
+continua sendo pego, a "correção" era cosmética. Em `debt.6` (correção `semComentarios` na Camada 1),
+sem a correção a violação passava despercebida — correção load-bearing, confirmada.
+
+**Reentrância e fase: harness sem tocar em `src/`.** Clonar `CHARS` em memória para injetar `on.kill`
+que causa mais dano, e zerar `atk.dmg` do atacante para que a morte venha do mecanismo sob teste (o
+melee mata antes, senão, e o teste passa pelo caminho errado — custou uma rodada). Depois posicionar as
+bolas à mão a cada tick e castar pelo caminho real de produção (`step(world, [cmd])`).
+
 Ver também [[feedback-verificacao-independente]].

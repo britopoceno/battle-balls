@@ -49,7 +49,10 @@ export const golem: CharDef = {
       cast: (ctx, self, aim) => {
         self.vx = aim.dx * 900
         self.vy = aim.dy * 900
-        self.memory.dashAte = ctx.now + 450
+        // debt.6: era self.memory.dashAte = ctx.now + 450 + o.collide do Golem tratando o
+        // resto (10 linhas ilegíveis de fora deste arquivo). Agora a janela é declarada em
+        // contactWindows abaixo, e o motor resolve genericamente dentro de collideBalls.
+        ctx.openContactWindow(self, 'sismico')
       },
     },
     {
@@ -103,6 +106,11 @@ export const golem: CharDef = {
     },
   ],
 
+  // debt.6 — janela de dano por contato do dash, declarada e auditável (Pilar 3/D-07).
+  // Valores idênticos ao antigo on.collide: dmg 14, knockback 520, re-hit a cada 250ms,
+  // dentro dos 450ms de duração do dash.
+  contactWindows: [{ source: 'sismico', ms: 450, dmg: 14, knockback: 520, reHitMs: 250 }],
+
   ult: {
     id: 'muralha',
     name: 'Muralha',
@@ -128,18 +136,6 @@ export const golem: CharDef = {
         expiresAt: ctx.now + 5000,
         ownerColor: COR,
       })
-    },
-  },
-
-  on: {
-    collide: (ctx, self, other) => {
-      if (other.team === self.team) return
-      if (ctx.now >= (self.memory.dashAte ?? 0)) return
-      // um acerto a cada 250ms para o dash não virar metralhadora de contato
-      if (ctx.now - (self.memory.dashUltimoAcerto ?? -9999) < 250) return
-      self.memory.dashUltimoAcerto = ctx.now
-      ctx.damage(other, 14, self)
-      ctx.knockback(other, other.x - self.x, other.y - self.y, 520)
     },
   },
 }

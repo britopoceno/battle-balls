@@ -37,13 +37,17 @@ export const DEFAULT_STATS: Pick<
   knockbackTaken: 1.0,
 }
 
-/** Teto do somatório de bônus (passiva + item), por campo. `architecture.md` §1.4. */
-const SIGMA_MIN: StatBlock = {
+/**
+ * Teto do somatório de bônus (passiva + item), por campo. `architecture.md` §1.4.
+ * Exportado (debt.6) — a auditoria A2 do roster precisa de `SIGMA_MAX.cdSpeed` para
+ * calcular `cdSpeedMax = 1 + ΣMAX[cdSpeed]`, fechando a invariante deixada em `debt.4`.
+ */
+export const SIGMA_MIN: StatBlock = {
   maxHp: -0.5, radius: -0.2, mass: -0.5, maxSpeed: -0.85, steer: -0.4, drag: -0.6,
   restBall: -0.6, restWall: -0.6, dmg: -0.75, dmgTaken: -0.6, atkSpeed: -0.6,
   cdSpeed: -0.5, range: -0.5, knockbackTaken: -0.75,
 }
-const SIGMA_MAX: StatBlock = {
+export const SIGMA_MAX: StatBlock = {
   maxHp: 1.0, radius: 0.3, mass: 1.5, maxSpeed: 0.6, steer: 0.6, drag: 1.2,
   restBall: 0.45, restWall: 0.45, dmg: 1.0, dmgTaken: 1.0, atkSpeed: 1.0,
   cdSpeed: 1.0, range: 0.6, knockbackTaken: 1.0,

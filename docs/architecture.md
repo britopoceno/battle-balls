@@ -563,9 +563,19 @@ e `dealDamage` verifica, na primeira linha:
 se world.phase === 'collide'  →  lançar Error(`Pilar 3: dano por contato fora de janela declarada · ${charId}`)
 ```
 
-Isso é **exato, não heurístico**: pega chamada indireta, helper, qualquer caminho de código, porque
-verifica o fato (dano ocorreu durante o callback de colisão) e não a sintaxe. O dano legítimo da
-janela roda sob `phase = 'contact'` e passa.
+Isso é exato para chamada **síncrona** de `dealDamage` durante `phase === 'collide'` — pega chamada
+indireta, helper, qualquer caminho de código que passe por `dealDamage` naquele instante, porque
+verifica o fato, não a sintaxe. O dano legítimo da janela roda sob `phase = 'contact'` e passa.
+
+*Correção (QA-001, gate de `debt.6`): a formulação original chamava isto de "exato" sem qualificação —
+impreciso. Um `on.collide` que aplique um `Effect` de dano (`ctx.apply(fx.dot(...))`) em vez de chamar
+`ctx.damage` direto **atravessa** esta camada: o dano só materializa no tick seguinte, sob
+`phase === 'effect'`, não `'collide'`. Provado com teste dirigido pelo @qa. Não é regressão desta
+story — nenhum personagem do roster faz isso hoje — mas é uma lacuna real de cobertura, não coberta
+por nenhuma das 3 camadas. Registrada como limitação conhecida (ver também QA-002 do mesmo gate: uma
+janela `openContactWindow`'d com `source` que não corresponde a nenhum item de `contactWindows`
+também falha em silêncio). Fechar as duas é trabalho de telemetria/auditoria de roster em escala —
+Fase 2 ou Fase 6, não escopo de `debt.6`.*
 
 Custo: uma comparação de string por chamada de `dealDamage` — que roda dezenas de vezes por rodada,
 não por tick. **Recomendo deixar sempre ligada, inclusive em produção.** Um modo de teste diferente

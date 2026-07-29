@@ -15,6 +15,30 @@ export interface Effect {
   sourceId: number
 }
 
+/**
+ * debt.6 — janela de dano por contato declarada. Resolve D-07/C1: o Pilar 3 reformulado
+ * ("colisão passiva causa 0 dano; dano por contato só dentro de janela explícita de
+ * habilidade, declarada no personagem") deixa de depender de ler `on.collide` linha a
+ * linha e vira campo tipado, auditável pelo motor.
+ */
+export interface ContactWindowDef {
+  /** id da ability ou da ult que abre esta janela — auditado contra CharDef (A1) */
+  source: string
+  ms: number
+  dmg: number
+  knockback: number
+  /** trava de re-hit — global por atacante, não por par atacante-alvo (ver Dev Notes de debt.6) */
+  reHitMs: number
+  onHit?: (ctx: SimCtx, self: Ball, other: Ball) => void
+}
+
+/** Estado runtime de uma janela aberta numa bola — `lastHitAt` único, não por alvo. */
+export interface ContactState {
+  source: string
+  endsAt: number
+  lastHitAt: number
+}
+
 export interface Ball {
   id: number
   charId: string
@@ -37,8 +61,10 @@ export interface Ball {
   effects: Effect[]
   abilityIndex: 0 | 1
   passiveIndex: 0 | 1
-  /** rascunho livre por personagem (contadores, cooldowns internos) */
+  /** rascunho livre por personagem (contadores, cooldowns internos) — o motor NUNCA lê daqui */
   memory: Record<string, number>
+  /** debt.6 — janela de contato aberta, ou null. Campo tipado que o motor lê; memory não é */
+  contact: ContactState | null
 
   // --- camada de stats (debt.1, completada em debt.3 — mods e os campos diretos foram
   // removidos; esta é a única fonte de verdade agora). Ver sim/stats.ts e architecture.md §1.
@@ -122,6 +148,14 @@ export interface World {
   over: boolean
   winner: Team | -1
   chars: Record<string, CharDef>
+  /**
+   * debt.6 — fase corrente do pipeline do tick. Camada 2 de auditoria do Pilar 3:
+   * `dealDamage` recusa dano quando `phase === 'collide'`, porque colisão passiva não
+   * pode causar dano — só contato mediado por janela declarada (fase 'contact') pode.
+   * Restaurado por atribuição direta em cada ponto do pipeline, nunca por try/finally —
+   * há reentrância real (dano da janela → morte → on.kill → mais dano).
+   */
+  phase: 'cast' | 'tick' | 'effect' | 'attack' | 'zone' | 'projectile' | 'contact' | 'collide'
 }
 
 /** Comando de jogador, agendado para um tick específico (input delay). */
@@ -217,6 +251,8 @@ export interface CharDef {
   abilities: [AbilityDef, AbilityDef]
   passives: [PassiveDef, PassiveDef]
   ult: UltDef
+  /** debt.6 — janelas de dano por contato declaradas. Ausência = nunca causa dano por contato */
+  contactWindows?: ContactWindowDef[]
   on?: {
     tick?: (ctx: SimCtx, self: Ball) => void
     collide?: (ctx: SimCtx, self: Ball, other: Ball) => void
@@ -254,6 +290,13 @@ export interface SimCtx {
 
   /** soma em self.bonusPassive[key] — nunca sobrescreve. Resolve C3 pela raiz (debt.3). */
   addBonus: (self: Ball, key: StatKey, amount: number) => void
+
+  /**
+   * debt.6 — abre a janela de dano por contato declarada em `source` (id de ability/ult
+   * do próprio personagem). O motor resolve o contato dentro de `collideBalls`; nenhum
+   * `on.collide` de personagem deve chamar `damage` diretamente (Pilar 3/D-07).
+   */
+  openContactWindow: (self: Ball, source: string) => void
 
   rand: () => number
 }
