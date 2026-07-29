@@ -1,0 +1,413 @@
+schema: 1
+story: 'e2.5'
+gate: CONCERNS
+status_reason: >-
+  Os 20 ACs passam sob verificação independente, e as três entradas obrigatórias herdadas dos gates
+  anteriores (MNT-001, BOT-003, BOT-006) não só foram entregues como reproduzi cada uma do zero:
+  a auditoria de roster reprova em 5 direções distintas (o @dev testou 3) sempre em ~260ms contra os
+  8,3s de uma execução limpa — a reprovação é, medida, ANTES de qualquer confronto; a tabela de
+  utilização de kit inteira foi reimplementada por mim de forma independente sobre exatamente as
+  mesmas seeds e bate DÍGITO A DÍGITO (golem 1.75/0.75/25.0%/0.0% · 4.2s/11.7s; vex
+  0.72/0.70/30.0%/32.5% · 7.1s/12.0s); e BOT-006 reproduzi por `PickSetup.itemBonus {dmg: NaN}` —
+  a porta que `e2.6` vai alimentar de string — com "% sem ativa" saltando 0.0% → 50.0% no golem e
+  36.7% → 50.0% no vex.
+  A adaptação de §4.2 que o @dev sinalizou como o ponto que ele mais provavelmente errou está
+  APROVADA, e não por deferência: "metade das DECIDIDAS" é MAIS fiel à propriedade que §4.2 exige do
+  que a leitura literal "metade das seeds". §4.2 justifica o cancelamento com "as duas metades são
+  amostras da mesma distribuição com o MESMO n"; sob a leitura literal, se a taxa de empate depender
+  do lado as metades ficam com n_dec diferentes e o cancelamento QUEBRA. Construí exatamente esse
+  cenário (lado 0 empata 60% das seeds, lado 1 nunca, time 0 sempre vence quando decide): a
+  implementação do @dev dá 50,0000% exatos, e a leitura literal daria 28,57% com metades de n_dec 80
+  e 200. A adaptação preserva a propriedade; a forma literal não a preservaria.
+  O que segura o PASS é uma classe única de achado, e ela é de COBERTURA, não de defeito: as guardas
+  permanentes do CLI cobrem veredito, aritmética de pares e contabilidade de troca de lado, e não
+  cobrem a fiação entre elas nem a instrumentação de §4.5. Perturbei `icPp(nDec)` para `icPp(nSeeds)`
+  — o número sobre o qual RF-48 é literalmente escrito — e as 14 asserções dos três autotestes
+  passam, a tabela sai plausível e o EXIT é 0. O mesmo vale para o teto de seeds (remover
+  `gastas < teto` passa tudo), para a borda superior de 45–55% e para os quatro contadores de §4.5.
+  Hoje o código está correto em todos esses pontos — provei cada um por fora, inclusive um canário
+  que mostra que o contador de morte súbita está VIVO (19,5% com limiar de 20s contra 0,0% com o de
+  60s, mesmas 41 rodadas). O risco é para `e2.6`/`e2.7`, que é justamente onde §8.7 diz que a força
+  da mutação muda a taxa de empate — e é a taxa de empate que separa `n_dec` de `n_seeds`.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  working tree sobre commit:4835863 ·
+  src/tools/balance.ts sha256:609bb64eab42b9cf83fb28970f41571f1ba592c8a7f9a45d2ca9964ad4c95b10 (novo) ·
+  src/bot/heuristic.ts sha256:f113a8e0f8dda20879109976618c6453293cd86ff224c8eecb2c53a30f924cff (IDÊNTICO ao gate de e2.4) ·
+  src/tools/determinism.ts sha256:f2953f7695cdf788c568b1d1467df157f387aefa9bead41c87893efef41dd755 (IDÊNTICO ao gate de e2.4) ·
+  src/tools/harness.ts sha256:2936e1abbaa502918d2831a7ab1aca582d32ef381ce875613e75599333644f11 (registrado agora, para o gate de e2.6) ·
+  src/chars/golem.ts sha256:1bff89467a4b75aee8b10d9f6b4ed13141849bbfc17716bbfd95d986e289db9b ·
+  src/chars/vex.ts sha256:94ac3e80484e6d21d958a4a298c2b0f3c9fd2810b14adcb41f1fc95c11157648 ·
+  src/sim/world.ts sha256:adf6944253e12aa2f2425ac1a1c9949da6090a8f2f6da5f32ea59f04085a3b99 ·
+  src/sim/types.ts sha256:f0641379f5d17214317bf320a8ec68e1d13bef8c8552dfe17444b6965c5ba2c9 ·
+  árvore src/ inteira sha256:861d376b8532cfc88f32d3832702b8146841b28db6570dd686fba8f5112290b4 (20 arquivos)
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      `balance.ts` não contém regra de simulação: zero ocorrências de `createWorld`, `step(`,
+      `physics`, `collide`, `MAX_ROUND_TICKS`, `rng`, `mulberry`; o único `while` do arquivo é o laço
+      de SEEDS de `rodarFase`, não um laço de partida. Os imports são `chars/index.ts`,
+      `bot/heuristic.ts`, dois tipos + duas constantes de `sim/world.ts`, tipos de `sim/types.ts` e
+      `runRound`/`RoundDriver` de `./harness.ts`. Toda partida passa por `runRound`.
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `git diff package.json` é exatamente +1 linha (`"balance": "node src/tools/balance.ts"`) e a
+      vírgula da linha anterior. Nada mais.
+  - id: AC3
+    verdict: PASS
+    evidence: '`src/tools/balance.ts`. Convenção de pacote único mantida.'
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      Os dois geradores existem e rodam. Os números 210/378 são inverificáveis com roster 2, e o
+      autoteste os exercita sobre um roster sintético de 8 em toda invocação — perturbei
+      `paresDeComposicao` (`j = i+1` → sobreposição) e o autoteste reprova antes de qualquer
+      confronto.
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      `--plano`, `--comp` e `--repete-personagem` conferidos em execução. `--plano=xpto`,
+      `--comp=golem,zzz` e `--comp=` são rejeitados com mensagem própria.
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      `--plano=pares-de-composicao` (com e sem `--repete-personagem`) emite a nota do gerador e a
+      célula única de espelho, rotulada como diagnóstico e fora da matriz. A matriz sai explicitamente
+      vazia com a referência a §4.1. É a leitura que o @po fixou no AC.
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      Verificado por ensaios PRÓPRIOS sobre as funções reais de `balance.ts` (extraí o prefixo
+      byte-idêntico do arquivo, até a marca `main`, e o dirigi com executores roteirizados meus):
+      viés de lado PURO dá 50,00% exatos em n = 10, 100, 801 e 1000; as duas metades ficam com n_dec
+      idêntico (`2·ceil(n/2)`) inclusive com n ímpar; vantagem de composição pura sai 100% e, com o
+      vencedor invertido, 0%; um cenário misto (C0 vence 90% no lado 0 e 70% no lado 1) converge para
+      80,00%, a média dos dois lados, e não para nenhum dos dois. Ver
+      `independent_verification.troca_de_lado`.
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      Espelho é diagnóstico em três lugares e verifiquei os três: seção própria, coluna `leitura` em
+      vez de veredito, e `veredito: "diagnostico-de-lado"` no JSON. E, o que importa mais, verifiquei
+      que ele NÃO cancela: com viés puro de 73% roteirizado, o espelho reporta 73,15% — o número que a
+      seção existe para preservar. Perturbei `const espelho = a.rotulo === b.rotulo` nos dois sentidos
+      (`false` e `true`) e o autoteste reprova nos dois.
+  - id: AC9
+    verdict: PASS
+    evidence: >-
+      Empate não entra no denominador (n_dec 100 com n_seeds 134 num ensaio com 25% de empate) e
+      consome seed. Seeds contíguas e crescentes a partir da base, a 2ª metade retomando onde a 1ª
+      parou — perturbei `f0.proximaSeed` → `seedBase` e o autoteste acusa seeds sobrepostas. Teto de
+      seeds exercitado NO CLI REAL por injeção de falha (toda rodada vira empate): parou em 400 seeds
+      = 2·ceil(20/2)·20, imprimiu `⚠ teto de seeds atingido` e `truncado: true` no JSON, em 4s.
+      Reprodutibilidade: `--seed=500 --n=100` duas vezes → `100 / 105 / 58.00%` idêntico; `--seed=1`
+      → `100 / 103 / 62.00%`.
+  - id: AC10
+    verdict: PASS
+    evidence: >-
+      Taxa de empate reportada agregada (2,8% — 23 de 823) e por confronto. Os dois números vêm de
+      fontes DIFERENTES (`inst.empates/inst.rodadas` contra `(nSeeds−nDec)/nSeeds`) e concordam —
+      redundância útil, e foi ela que denunciou o ponto de injeção do meu próprio teste de teto.
+  - id: AC11
+    verdict: PASS
+    evidence: >-
+      Fórmula literal, recalculada por mim sem usar o código: `1,96·√(0,25/800)·100 = 3,464823`,
+      idêntico a `icPp(800)` até a 12ª casa; `icPp(10000) = 0,98`. Os três estados foram produzidos
+      numa MATRIZ real com troca de lado ativa (49,63% → `dentro`; 53,00% → `inconclusivo`; 61,75% e
+      39,50% → `fora`). Localizei o ponto de virada exato — 51,5352% = 55 − 3,4648 — e confirmei
+      `dentro` logo abaixo e `inconclusivo` logo acima. Cenário forçado do 3º estado com o MESMO ponto
+      e n variável: p=0,535 dá `inconclusivo` a n=800 e n=3000 e `dentro` a n=10000 e n=20000.
+  - id: AC12
+    verdict: PASS
+    evidence: '`--n` é piso: com n ímpar o CLI entrega n+1 decididas, nunca menos. `--n=1` e `--n=0` rejeitados.'
+  - id: AC13
+    verdict: PASS
+    evidence: >-
+      Reimplementei a tabela inteira de forma independente (instrumentação própria sobre `runRound`,
+      sem usar `anotar`) sobre as mesmas seeds 1..20 e bate DÍGITO A DÍGITO em todas as 14 grandezas:
+      `rodadas 20 · mediana 17.6s · min 12.8s · max 26.7s`, `morte súbita 0.0%`, `empates 0.0% — 0 de
+      20`, golem `1.75 / 0.75 / 25.0% / 0.0% · 4.2s · 11.7s`, vex `0.72 / 0.70 / 30.0% / 32.5% · 7.1s
+      · 12.0s`. Canário do contador de morte súbita: com limiar de 20s no lugar de
+      `SUDDEN_DEATH_MS`, as mesmas 41 rodadas dão 19,5% — o contador está vivo e o 0,0% do Risco #6 é
+      medição, não zero preso.
+  - id: AC14
+    verdict: PASS
+    evidence: >-
+      `arnês de balanceamento · bot heuristic-1 · preset arnes · plano … · seed base … · n alvo …` em
+      toda execução, inclusive quando a auditoria de roster reprova depois. No `--json`,
+      `botVersion` e `preset` são campos de primeiro nível. `BOT_VERSION` vem de `heuristic.ts:31`.
+  - id: AC15
+    verdict: PASS
+    evidence: 'Colunas `n_dec` e `n_seeds` separadas na tabela e `nDec`/`nSeeds` separados no JSON, em todos os casos, inclusive no truncado.'
+  - id: AC16
+    verdict: PASS
+    evidence: '`--seed` e `--json` conferidos; `--help` também existe. JSON completo e bem formado.'
+  - id: AC17
+    verdict: PASS
+    evidence: >-
+      `--pacote`, `--alvo`, `--mutacao` e `--risco-1b` rejeitados um a um, cada um com mensagem
+      nomeando a story que os traz (e2.6/e2.7). `--nao-existe` também.
+  - id: AC18
+    verdict: PASS
+    evidence: 'Nenhum vestígio de draft, loja, economia, Bo5 ou telemetria. O CLI mede rodadas isoladas.'
+  - id: AC19
+    verdict: PASS
+    evidence: >-
+      `npm run check` EXIT=0 e `npm run sim:check` EXIT=0, rodados por mim do zero, antes e depois de
+      toda a bateria. Golden hash não aceito do "✓ ok": extraí os arrays `BASELINE` e `BUILD_BASELINE`
+      do arquivo atual e de `git show HEAD:src/tools/determinism.ts` e comparei texto contra texto →
+      IDÊNTICOS. As 5 seeds do baseline (1, 2, 3, 7, 11) continuam batendo.
+  - id: AC20
+    verdict: PASS
+    evidence: >-
+      Grep próprio em `src/sim/*` por `from '../{bot,chars,client,tools}/` → nenhuma ocorrência. RF-19
+      mantido. Nenhum arquivo de `sim/` tem mtime posterior a `e2.2`.
+
+entradas_obrigatorias_dos_gates_anteriores:
+  MNT-001:
+    verdict: PASS
+    evidence: >-
+      Reproduzi a bateria do zero em cópia isolada de `src/`, com um substituidor que FALHA com
+      EXIT=9 se o alvo não existir (a armadilha do `python` que o @dev registrou; meta-controle
+      rodado primeiro, e ele de fato dá 9). O @dev testou 3 direções; testei 5, todas EXIT=1:
+      (a) `aim.ms` 450→400 → B1; (b) `contactWindows.ms` 450→500, a outra mão → B1;
+      (c) `sismico` deixa de declarar `dash` (vira `reposicao`) → B2;
+      (d) `contactWindows` do golem removido inteiro (dash SEM janela) → B1, ramo que o @dev não
+      exercitou; (e) `vex.lamina` ganha uma janela de contato sem ser `dash` → B2 em outro
+      personagem. Em todos, `⚠ nenhuma seção de confronto impressa` e tempo de 256–307ms contra
+      8332ms de uma execução limpa — a reprovação é, medida, ANTES de rodar qualquer confronto.
+      Controle limpo antes e depois; `src/` real com sha256 idêntico ao início.
+  BOT-003:
+    verdict: PASS
+    evidence: >-
+      O número aparece, é plausível e é REPRODUZÍVEL por fora. Minha instrumentação independente
+      sobre as mesmas seeds dá exatamente `ativa 4.2s` para o golem e `7.1s` para o vex (o CLI a
+      n=823 dá 4.1s e 6.6s). A mediana é condicional a ter castado, que é o que separa kit adiado de
+      kit morto — a Lâmina do Vex sai ~2,5s depois do Impacto Sísmico E com menos da metade dos casts
+      (0,72 contra 1,75 por bola), confirmando a desconfiança do gate de `e2.3`. A coluna "% sem
+      ativa" ao lado de "% sem ult" é acréscimo correto: o golem tem ult de `utilidade`, então só a
+      coluna de ativa denuncia o caso dele.
+  BOT-006:
+    verdict: PASS
+    evidence: >-
+      Reproduzido por mim pela porta que a missão pediu — `PickSetup.itemBonus` não-finito, que é a
+      superfície que o CLI de `e2.6` vai alimentar de string — e não por `hp = NaN` em `createWorld`.
+      Com `{dmg: NaN}` no time 1, sobre 60 seeds: golem "% sem ativa" 0,0% → 50,0% e "% sem ult"
+      32,5% → 65,8%; vex "% sem ativa" 36,7% → 50,0% e "% sem ult" 36,7% → 51,7%. Os 50,0% são
+      exatamente a metade dos pares (rodada × bola), o sinal limpo que o @dev descreveu. Nenhuma
+      correção extra necessária.
+      ACHADO NOVO, de graça: `{maxHp: NaN}` NÃO produz o sinal (golem segue com 0,0% sem ativa) e
+      `{dmg: Infinity}` produz um sinal INTERMEDIÁRIO (golem "% sem ult" 32,5% → 56,7%). Ou seja, a
+      métrica captura o caminho de `dmg` e a validação de `Number.isFinite` de `e2.6` não pode ser
+      justificada só por ela. Entrada para `e2.6`.
+
+issues:
+  - id: QA-E25-001
+    severity: medium
+    category: tests
+    description: >-
+      A fiação `nDec → icPp` não tem guarda. Perturbei `icPp: icPp(nDec)` para `icPp: icPp(nSeeds)`
+      em `rodarConfronto` e as 14 asserções dos três autotestes passam, a tabela sai plausível e o
+      EXIT é 0 — e `n_seeds` é exatamente o número sobre o qual RF-48 e §4.3 dizem que o critério NÃO
+      é. O autoteste de veredito chama `vereditoDe(w, n)` direto e nunca através de `rodarConfronto`,
+      então o par (winrate, n) que de fato vai para a tabela nunca é conferido. Magnitude hoje: com
+      2,8% de empate, `icPp(823)` contra `icPp(800)` = 3,416 contra 3,465, erro de 0,05pp. Com os
+      11,1% que §1.3 mediu, ou com o `711/800` do exemplo de §6.3, o erro vai a 0,21pp — e §8.7 diz
+      explicitamente que a força da mutação muda a taxa de empate, que é a variável que separa os dois
+      números. O erro subestima o IC, que é a direção que transforma `? inconclusivo` em `✓ dentro`:
+      exatamente a aprovação falsa que o 3º estado existe para impedir.
+    recommendation: >-
+      Em `e2.6`, uma linha em `autotesteTrocaDeLado`: o ensaio (3) já produz `nDec 10 / nSeeds 15`;
+      basta acrescentar `conferir('(3) IC sobre decididas', t3.res.icPp === icPp(t3.res.nDec), …)`.
+  - id: QA-E25-002
+    severity: low
+    category: tests
+    description: >-
+      O teto de seeds não tem guarda de regressão. Removi `gastas < teto` da condição de
+      `rodarFase` e tudo passa, porque com o roster e o bot atuais o teto nunca é alcançado. AC 9
+      torna "não girar indefinidamente" critério explícito, e `e2.6`/`e2.7` vão injetar mutações que
+      podem elevar muito a taxa de empate (§8.7). Um CLI que trava sem diagnóstico é o mesmo modo de
+      falha que o gate de `e2.0` registrou para `runRound` sem `!world.over`.
+    recommendation: >-
+      Um ensaio com executor que sempre empata, afirmando `truncado === true` e
+      `nSeeds === 2·ceil(n/2)·TETO_SEEDS_POR_DECIDIDA`. Rodei esse ensaio no gate e ele passa —
+      é só torná-lo permanente.
+  - id: QA-E25-003
+    severity: low
+    category: tests
+    description: >-
+      Cobertura assimétrica das bordas de 45–55%. `CASOS_VEREDITO` fixa a borda INFERIOR (o caso
+      `w=0,45`, que reprova tanto `<` → `<=` quanto a remoção da checagem de baixo no IC), e não fixa
+      a SUPERIOR: perturbar `winrate > ALVO_MAX` para `>=` passa 7/7. O comportamento real do código
+      em `w = 0,55` exato está CORRETO (verifiquei: `inconclusivo`), e `440/800` é um valor
+      perfeitamente alcançável — só não está pinado.
+    recommendation: 'Um caso `{ n: 800, w: 0.55, esperado: "inconclusivo" }` em `CASOS_VEREDITO`.'
+  - id: QA-E25-004
+    severity: low
+    category: code
+    description: >-
+      A guarda da auditoria de roster é fail-OPEN se `process.exit` não existir, ao contrário de
+      `falhar()`, que é fail-closed (tem `throw new Error(msg)` depois de `sair(codigo)`). O bloco de
+      `main` só chama `sair(1)`. Medido: com `process.exit` removido e o roster divergente, o CLI
+      imprime "Nenhum confronto foi rodado" e em seguida roda todos os confrontos e imprime a tabela
+      completa, com EXIT=0 — a frase vira mentira ao lado de uma tabela de aparência autoritativa.
+      Sob `node` a condição não é alcançável, e a garantia de hoje está provada (5 perturbações,
+      EXIT=1, ~260ms). O problema é de coerência: o arquivo usa `p?.exit?.()` justamente por NÃO
+      assumir que `process` existe, e depois confia nessa mesma chamada como único freio.
+    recommendation: 'Trocar o `sair(1)` do bloco de auditoria por `falhar(...)`, ou acrescentar o `throw` que `falhar()` já tem.'
+  - id: QA-E25-005
+    severity: low
+    category: requirements
+    description: >-
+      `--comp` não valida o TAMANHO da composição. `--comp=golem` (1v1), `--comp=golem,vex,golem`
+      (3v3) e uma composição de 4 rodam e imprimem tabela para um modo de jogo que não existe — o
+      jogo é 2v2. O próprio CLI enuncia o princípio contrário ao rejeitar `--pacote`: "devolver uma
+      tabela sem mutação nenhuma seria pior do que devolver um erro". `--comp=golem,golem`
+      (tamanho 2, homogênea) deve continuar permitida: §1.2 mediu esse caso de propósito, e é o
+      diagnóstico degenerado que o documento discute.
+    recommendation: 'Exigir `comp.length === 2` em `lerFlags`, com mensagem citando §4.1.'
+  - id: QA-E25-006
+    severity: low
+    category: tests
+    description: >-
+      A instrumentação de §4.5 e de BOT-003 não tem nenhuma guarda permanente. Passam sem detecção:
+      mediana → média nos quantis de duração; denominador de "por rodada" trocado de (rodada × bola)
+      para rodadas; "1º cast" registrando o ÚLTIMO cast; e o contador de morte súbita zerado — este
+      último é o mais insidioso, porque o valor verdadeiro HOJE é 0,0% e um contador morto também
+      reporta 0,0%. Fechei os quatro POR FORA neste gate (reimplementação independente batendo dígito
+      a dígito, mais o canário de limiar 20s que dá 19,5%), mas nada disso fica no repositório. São os
+      números que alimentam D-02, o Risco #6 e o detector de viés de competência de §8.3.
+    recommendation: >-
+      Um autoteste de `fechar()` com 3–4 rodadas sintéticas e valores esperados escritos à mão:
+      pega os quatro de uma vez e custa microssegundos, como os outros três já custam.
+  - id: QA-E25-007
+    severity: low
+    category: docs
+    description: >-
+      ARCH-002 (imprimir o alcance EFETIVO do dash ao lado de `maxRange`) não implementado — decisão
+      ACEITA para esta story, mas a justificativa da Completion Note 9 está um pouco forte.
+      `velEfetivaDash` é `function velEfetivaDash(...)` em `heuristic.ts:449`: acrescentar `export`
+      é edição de efeito nulo em runtime e não pode mover o golden hash, então "exigiria editar
+      `bot/`" não é o obstáculo que a nota sugere. A razão boa é a outra: `heuristic.ts` é artefato
+      Done, ancorado por sha256 nos gates de `e2.3`/`e2.4`, e reabri-lo numa story de CLI custa mais
+      do que rende. O custo de adiar é real e vale escrito: a tabela imprime `140–280` para o dash
+      enquanto a janela de contato acaba por volta de 247px (achado do gate de `e2.2`), ou seja o
+      auditor humano que MNT-001 existe para servir lê uma faixa ~12% mais larga que a que causa dano.
+    recommendation: 'Fica para `e2.6`, que já vai tocar `bot/`. Não bloqueia.'
+
+decisao_sobre_a_adaptacao_de_4_2:
+  questao: '"metade das SEEDS" (literal de §4.2) contra "metade das DECIDIDAS" (implementado)'
+  veredito: APROVADA
+  raciocinio: >-
+    §4.2 não pede a forma pela forma: ela justifica o cancelamento com "as duas metades são amostras
+    da mesma distribuição com o MESMO n". Sob a leitura literal esse "mesmo n" é o número de SEEDS, e
+    o denominador do winrate é o de DECIDIDAS (§4.3) — as duas metades entram no estimador com pesos
+    diferentes assim que a taxa de empate depender do lado, e a condição que §4.2 invoca deixa de
+    valer. A implementação do @dev faz as metades terem exatamente o mesmo número de DECIDIDAS, que é
+    a leitura que torna a frase de §4.2 verdadeira.
+  prova: >-
+    Cenário construído por mim, com a partida substituída por um executor roteirizado: lado 0 empata
+    60% das seeds, lado 1 nunca empata, o time 0 sempre vence quando decide (viés de lado PURO).
+    Implementado: 50,0000% exatos, n_dec 400, n_seeds 700. Leitura literal (200 seeds por metade):
+    28,57%, com metades de n_dec 80 e 200. O viés puro só cancela na versão implementada.
+  nao_enviesamento_do_estimador: >-
+    A regra de parada olha apenas o indicador DECIDIDA/EMPATE, nunca o vencedor: as `k` rodadas
+    decididas de cada metade são `k` ensaios de Bernoulli i.i.d. na probabilidade condicional
+    "C0 vence | decidiu", logo `V_i ~ Binom(k, p_i)` exatamente e `E[(V0+V1)/2k] = (p0+p1)/2`.
+    Amostragem inversa não introduz viés aqui. Confirmado numericamente: cenário com p0 = 0,9 e
+    p1 = 0,7 (viés de lado de 20pp) converge para 80,00%, a média verdadeira.
+  ressalva: >-
+    As duas metades usam seeds DIFERENTES (a 2ª retoma onde a 1ª parou), como na forma literal.
+    Um desenho pareado (mesma seed nos dois lados) cancelaria mais variância, mas §4.2 não o pede e
+    trocá-lo agora seria decisão de arquitetura, não de story. Registrado, sem ação.
+
+independent_verification:
+  ambiente: >-
+    Nada foi assumido. `node --version` → v24.13.1, conferido antes de qualquer coisa. Todos os
+    testes rodaram em Node/bash reais. O substituidor da bateria FALHA com EXIT=9 se o alvo não
+    existir ou for ambíguo, e rodei um meta-controle com alvo inexistente primeiro, que de fato deu
+    9 — a armadilha do `python` que o @dev registrou (e que o gate de `e2.2` já tinha registrado)
+    não se repetiu, e não por sorte.
+  isolamento: >-
+    Toda perturbação em cópia de `src/` no scratchpad. Fingerprint sha256 da árvore `src/` real
+    (20 arquivos, conteúdo + caminho) tomado antes de tudo e recomputado ao fim:
+    `861d376b8532cfc88f32d3832702b8146841b28db6570dd686fba8f5112290b4` nos dois — `src/` real
+    intocado por este gate.
+  execucoes_proprias: >-
+    `npm run check` EXIT=0 e `npm run sim:check` EXIT=0 no início e no fim. `npm run balance` padrão
+    reproduzido do zero, batendo o relato do @dev linha por linha (800 dec / 823 seeds / 53,00% ±3,46,
+    2,8% de empate, 0,0% de morte súbita, 8,3s). `--plano=pares-de-composicao --n=20` → 20/20/65,00%,
+    idêntico ao relatado.
+  troca_de_lado: >-
+    Dirigi as funções REAIS de `balance.ts` a partir de um prefixo byte-idêntico do arquivo (corte na
+    marca `main`, sem tocar em nenhum corpo de função), com executores roteirizados meus. 13 ensaios,
+    todos passando: viés puro cancela em 4 valores de n; metades com n_dec idêntico inclusive com n
+    ímpar; empate assimétrico por lado (o caso decisivo, ver `decisao_sobre_a_adaptacao_de_4_2`);
+    vantagem de composição íntegra nos dois sentidos; mistura de viés + vantagem converge para a média
+    verdadeira; espelho preserva 73,15% de viés bruto; empate consome seed e não entra no denominador;
+    seeds contíguas; teto de seeds respeitado ao seed exato.
+  bateria_negativa_propria: >-
+    17 perturbações em `balance.ts`, escolhidas para atacar as METADES que a bateria de 8 do @dev não
+    cobre. 11 DETECTADAS (EXIT=1, nenhuma tabela impressa): `ceil` → `floor` na metade; 2ª metade
+    reiniciando na seed base; z 1,96 → 1,645; vitória sempre para o time 0; espelho sempre falso;
+    espelho sempre verdadeiro; empate deixa de ser pulado; borda inferior `<` → `<=`; IC só olhando a
+    borda de cima. 6 NÃO detectadas, que são os achados QA-E25-001, 002, 003 e 006. Controle limpo
+    antes e depois.
+  reimplementacao_independente: >-
+    Reescrevi do zero a tabela de utilização e os quantis de §4.5 — instrumentação própria sobre
+    `runRound`, sem usar `anotar`/`fechar` — e rodei sobre exatamente as mesmas seeds. 14 grandezas,
+    14 iguais dígito a dígito. É a verificação que fecha AC 13 e BOT-003 sem depender do código
+    revisado.
+  canario_de_metrica_viva: >-
+    Trocar `SUDDEN_DEATH_MS` por 20000 no comparador faz o mesmo conjunto de 41 rodadas reportar
+    19,5% em vez de 0,0%. O contador de Risco #6 está vivo; o 0,0% é medição.
+
+escopo_verificado:
+  metodo_1_sha256: >-
+    `src/bot/heuristic.ts` (`f113a8e0…`) e `src/tools/determinism.ts` (`f2953f76…`) batem DÍGITO A
+    DÍGITO os sha256 que o gate de `e2.4` registrou. Esta story não tocou nenhum dos dois — é a
+    técnica que o gate de `e2.4` inaugurou, e ela funcionou de novo. Registro agora
+    `harness.ts` (`2936e1ab…`) e `balance.ts` (`609bb64e…`) para o gate de `e2.6`.
+  metodo_2_git_diff: >-
+    `git diff package.json` é exatamente a linha do script `balance`. `BASELINE` e `BUILD_BASELINE`
+    extraídos do `determinism.ts` atual e de `git show HEAD:` e comparados texto a texto: IDÊNTICOS.
+  metodo_3_mtime: >-
+    Só `package.json` (05:28) e `src/tools/balance.ts` (05:34) têm mtime posterior a `e2.4`
+    (`determinism.ts` 05:03, `heuristic.ts` 05:01). Todo `src/sim/*` e `src/chars/*` ficou em
+    03:52–04:08, de `e2.1`/`e2.2`. Os dois arquivos da File List, e nenhum outro.
+
+blocking: false
+blocks_downstream: false
+downstream_note: >-
+  `e2.6` e `e2.7` estão LIBERADAS. O instrumento que elas montam em cima existe, mede e reprova:
+  a auditoria de roster barra antes de simular, o veredito tem os três estados e discrimina por n, a
+  troca de lado cancela viés de lado de fato, e a instrumentação de §4.5 está verificada por
+  reimplementação independente.
+  Entradas OBRIGATÓRIAS que `e2.6` carrega deste gate, no mesmo formato que funcionou para MNT-001 /
+  BOT-003 / BOT-006 nesta story:
+  (1) QA-E25-001 — pinar `icPp` sobre `nDec` num autoteste (uma linha; o ensaio 3 já cria o estado);
+  (2) QA-E25-002 — pinar o teto de seeds, que `e2.6`/`e2.7` podem de fato alcançar via §8.7;
+  (3) QA-E25-006 — um autoteste de `fechar()` cobrindo os quatro contadores de §4.5.
+  Entradas herdadas ainda abertas: BOT-002 (`Object.freeze` no `PRESET_ARNES`, que segue `Readonly`
+  só de tipo — o cabeçalho promete "preset arnes" sem que nada garanta o conteúdo em runtime);
+  `Number.isFinite` em `itemBonus` na entrada do CLI, agora com o dado novo de que `{maxHp: NaN}` NÃO
+  aparece na tabela de utilização e `{dmg: Infinity}` aparece só parcialmente — a validação na raiz não
+  pode ser justificada pelo detector; ARCH-002 (QA-E25-007); e o LOW aberto desde `e2.0`
+  (`src/tools/inspect.ts:18` com a terceira cópia do laço e o literal `60 * 180`, fora do `sim:check`).
+  Números novos, medidos pela primeira vez e confirmados por mim, que vão para o @pm: empate com o bot
+  heurístico 2,8% (contra 11,1% de §1.3 e 17,5% do `dummy`); morte súbita 0,0% em 823 rodadas, máximo
+  35,1s; viés de lado de `[golem,vex]` 53,00% ±3,46 (IC cruza a borda — inconclusivo, e isso é
+  informação); custo ~10,3ms/rodada, que extrapola para ~6h no portão de 210 células × 10 000 de §1.1.
+push_recommendation: >-
+  Liberado para o @devops considerar no push. O working tree acumula agora SEIS stories Done e não
+  commitadas — e2.0 (`tools/harness.ts` novo + `tools/determinism.ts`), e2.1 (`sim/world.ts`), e2.2
+  (`sim/types.ts`, `chars/golem.ts`, `chars/vex.ts`), e2.3 (`bot/heuristic.ts`), e2.4
+  (`bot/heuristic.ts` 1 linha + `tools/determinism.ts` bloco aditivo) e e2.5 (`tools/balance.ts` novo
+  + `package.json` +1 script). Seis commits distintos, nessa ordem; não misturar. O de e2.5 é o mais
+  limpo do conjunto: dois arquivos, nenhum compartilhado com story anterior.
+
+waiver: { active: false }
