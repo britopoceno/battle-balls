@@ -1,0 +1,194 @@
+schema: 1
+story: 'e2.1'
+gate: CONCERNS
+status_reason: >-
+  Os 8 ACs passam sob verificação independente: golden hash recomputado por arnês próprio bate a
+  tabela de architecture.md §6.0, e a bola sem itemBonus é bit-a-bit idêntica à de HEAD em 5 seeds
+  × 400 ticks. CONCERNS não é defeito da entrega — são dois itens que o mecanismo torna alcançáveis
+  pela primeira vez (itemBonus.maxHp vs hp inicial; NaN atravessando o clamp) e que precisam estar
+  registrados antes de e2.6/Fase 3.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: 'working tree sobre commit:4835863'
+updated: '2026-07-29T03:20:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: '`npm run check` rodado por mim — `tsc --noEmit` sem saída, exit 0'
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` rodado por mim — determinismo, golden hash 5 seeds, build coverage 5
+      variantes, replay 5 seeds, Pilar 3, todos verdes. Verificado ADEMAIS que o diff de
+      determinism.ts (entrega de e2.0) não toca as tabelas BASELINE/BUILD_BASELINE, e que a
+      tabela BASELINE do arquivo é literalmente igual à de architecture.md §6.0 — o "✓ ok" não
+      está se comparando com um baseline movido.
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      `src/sim/world.ts:49-54` — `itemBonus?: Partial<BonusBlock>` com o comentário literal de
+      architecture-e2.md §5.1. `BonusBlock` importado como `type` de `./stats.ts` (import de valor
+      já existia; nenhum import de runtime novo).
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      `world.ts:162` `if (pick.itemBonus) addPartialBonus(b.bonusItem, pick.itemBonus)` — alvo é
+      `b.bonusItem` (não `bonusPassive`, não campo direto), posicionado ENTRE o literal da bola e o
+      `recomputeStats(b)` da linha 164 que já existia. Provado numericamente: `{ dmg: 0.30 }` →
+      `stat.dmg` 1.3 já no tick 0 (se a soma viesse depois, seria 1.0 no tick 0).
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Nenhum `clamp` novo no diff; o valor só é lido por `recomputeStats` (stats.ts:112), que já
+      soma `bonusPassive[k] + bonusItem[k]` dentro do mesmo clamp. Os TRÊS tetos exercitados por
+      mim com itemBonus real: ΣMAX (`{dmg:1.50}` → stat.dmg 2.0, cortado em SIGMA_MAX.dmg=1.0),
+      ΣMIN (`{maxHp:-5}` → stat.maxHp 50), e ABS_MAX DEPOIS do Σ (`{restBall:9}` → Σ daria 0.9425,
+      stat.restBall = 0.92 = ABS_MAX). Nada vaza.
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      grep próprio em `src/**`: `itemBonus` aparece só nas 2 linhas novas (world.ts:53, 162).
+      `bonusItem` é escrito em exatamente 2 pontos (`makeStatBlock(0)` na criação e a linha nova);
+      `zeroBonus` só é chamado sobre `bonusPassive` (world.ts:619).
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      `git diff --stat` → único arquivo de código desta story é `src/sim/world.ts` (+23/-1).
+      `src/tools/determinism.ts` (M) e `src/tools/harness.ts` (??) são a entrega de e2.0, Done e
+      ainda não commitada — confirmado lendo o diff deles (extração de runRound/hash, zero menção
+      a itemBonus). `stats.ts` intocado.
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      `world.ts` sem `Math.random`; todos os imports são `./rng.ts ./effects.ts ./physics.ts
+      ./stats.ts ./types.ts` — nenhum de `chars/`, `bot/`, `client/`.
+
+independent_verification:
+  bit_for_bit_regression:
+    detail: >-
+      Cópia de src/ com `git show HEAD:src/sim/world.ts` (versão pré-story) carregada lado a lado
+      com a versão do working tree no mesmo processo. Comparação de estado COMPLETO das 4 bolas
+      (x,y,vx,vy,ax,ay,hp,alive,facing,cooldowns,ultCharge,effects,contact,base,bonusPassive,
+      bonusItem,stat + ordem das chaves) a cada tick.
+    seeds: [1, 2, 3, 7, 11]
+    ticks_per_seed: 400
+    divergences: 0
+  golden_hash_recomputed:
+    detail: >-
+      5 hashes recomputados por `runRound` chamado do meu próprio script, contra a tabela de
+      architecture.md §6.0 transcrita à mão (não lida de determinism.ts).
+    result: '96de1201/753/1 · f66a7416/961/0 · a8db9c28/830/0 · cb77dbe0/831/0 · 6aede2d9/1168/-1 — 5/5'
+  hidden_class:
+    detail: >-
+      Ordem das 14 chaves de `bonusItem` com itemBonus aplicado é idêntica à de HEAD — nenhuma
+      chave nova, nenhuma reordenação (architecture.md §7.1).
+  aliasing:
+    detail: >-
+      Um mesmo objeto de pacote passado a 2 picks × 2 times: objeto original não mutado, e as 4
+      bolas recebem 0.3 cada (sem acumular). É o padrão que e2.6 vai usar com PACOTES.fisico.
+  no_op_cases:
+    detail: '`itemBonus` ausente e `itemBonus: {}` → bonusItem zerado, stat idêntico ao controle.'
+  persistence:
+    detail: >-
+      300 ticks com dummy driver: `bonusItem.dmg`/`.mass` e `stat.dmg` inalterados, enquanto
+      `step()` zera `bonusPassive` a cada tick (world.ts:619). "Congelado na rodada" confirmado.
+
+top_issues:
+  - id: 'REL-001'
+    severity: medium
+    category: reliability
+    finding: >-
+      `itemBonus.maxHp` sobe `stat.maxHp` mas NÃO o `hp` inicial (`b.hp = def.maxHp`, world.ts:116).
+      Medido: `{maxHp: +0.5}` → base 100, stat.maxHp 150, hp 100 → a bola NASCE com 66,7% de vida.
+      Isso não é só "o HP inicial não sobe": cinco leitores usam a FRAÇÃO `hp / stat.maxHp` como
+      gatilho — world.ts:216 (`weakestEnemy` do bot), vex.ts:41, vex.ts:92 (+28% de dano em alvo
+      abaixo de 50%), vex.ts:102, golem.ts:105 (mitigação de 0,82 enquanto acima de 50%). No teto
+      (`ΣMAX.maxHp = 1.0`) a bola nasce em 50% exatos: o golem perderia a mitigação da própria
+      passiva no primeiro dano e viraria alvo preferencial do bot inimigo. Um item de vida mediria
+      PIOR que a linha-base, e a leitura seria "trilha de vida nasce morta" — conclusão de produto
+      invertida por um bug de inicialização. Verificado que nenhuma passiva do roster hoje toca
+      `maxHp`, ou seja: `stat.maxHp != base.maxHp` é um estado que o jogo NUNCA produziu até esta
+      story — e2.1 é o que o torna alcançável pela primeira vez.
+    scope_verdict: >-
+      Fora de escopo desta story, corretamente. AC 7 proíbe tocar qualquer linha além do campo e da
+      soma, e §5.2 (fisico/dano/nenhum) e P2.2 (vex:dmg) não usam maxHp — e2.6 e e2.7 não são
+      afetados. Não bloqueia e2.2/e2.3.
+    suggested_action: >-
+      @architect/@po: registrar como pré-requisito bloqueante de QUALQUER story que introduza item,
+      pacote ou mutação de `maxHp` (Fase 3 / loja, ou uma bateria de e2.7 ampliada). A correção
+      natural é `hp` nascer de `stat.maxHp` após o `recomputeStats` de `makeBall` — que é mudança de
+      comportamento e MOVE o golden hash se algum dia uma passiva ganhar `maxHp`, então precisa de
+      story própria, não de remendo.
+  - id: 'REL-002'
+    severity: low
+    category: reliability
+    finding: >-
+      `NaN` em `itemBonus` atravessa `clamp` (stats.ts:71-73: as duas comparações são falsas) e
+      envenena `stat`, o hash e a medição — silenciosamente, sem lançar. CORREÇÃO FACTUAL ao Dev
+      Agent Record, que diz "`NaN`/`Infinity`": medi os três casos e **`Infinity` é clampado
+      corretamente** (`{dmg: Infinity}` → stat.dmg 2.0 = ΣMAX) e `-Infinity` também (→ 0.25 = ΣMIN).
+      O único vazamento real é `NaN`. A superfície é menor do que o relato sugere.
+    scope_verdict: >-
+      Aceito para esta story. O argumento do @dev procede: (i) hoje é inalcançável — nenhum chamador
+      passa o campo; (ii) `bonusPassive` tem o mesmo buraco desde debt.1, mas é alimentado por
+      literais de `chars/`, não por texto de usuário; (iii) validação de entrada em `sim/` seria
+      guarda para um campo só, e `sim/` é camada de entrada confiável por desenho. Não é o "caminho
+      de exceção" que o AC 5 proíbe (guarda não é bypass de clamp), mas é ruído no lugar errado.
+    suggested_action: >-
+      e2.6 DEVE rejeitar no parse, com mensagem, qualquer valor não-finito vindo de `--mutacao` /
+      `--pacote` (`Number.isFinite` cobre NaN e ±Infinity de uma vez). Sem isso, um `--mutacao
+      vex:dmg:abc` produz `NaN` → hash `NaN` → rodada inteira de arnês descartada sem diagnóstico.
+  - id: 'ARCH-001'
+    severity: low
+    category: architecture
+    finding: >-
+      O Dev Agent Record afirma que o aviso de clamp de e2.6 "já é derivável comparando
+      `pick.itemBonus[k]` com `SIGMA_MAX[k]`, sem tocar em `sim/`". Isso é verdade só enquanto
+      nenhuma passiva escrever no mesmo campo do pacote: o clamp real é sobre
+      `bonusPassive[k] + bonusItem[k]` (stats.ts:112), e `bonusPassive` varia por tick. Hoje as
+      passivas do roster tocam `maxSpeed` (vex.ts:102, condicional a hp<40%) e `knockbackTaken`
+      (golem.ts:99), e os pacotes de §5.2 usam mass/drag/dmg — zero sobreposição, então a
+      afirmação vale HOJE. Deixa de valer no minuto em que uma passiva nova ou um pacote novo
+      colidir de campo, e o aviso passaria a sub-reportar corte.
+    scope_verdict: 'Nada a fazer nesta story — o aviso é de e2.6, que não existe.'
+    suggested_action: >-
+      e2.6: derivar o aviso do estado REAL (`b.bonusItem[k] + b.bonusPassive[k]` vs `SIGMA_MAX[k]`
+      na bola criada), não do pacote pedido. Custa a mesma linha e não pode ficar errado.
+
+design_decisions_reviewed:
+  - decision: 'REUSE de `addPartialBonus` em vez de laço próprio'
+    verdict: 'correto'
+    rationale: >-
+      Assinatura `(BonusBlock, Partial<BonusBlock>)` é exatamente a forma do campo; itera
+      `STAT_KEYS` (não as chaves do parcial), então uma chave espúria no objeto do usuário é
+      ignorada em vez de virar propriedade nova — proteção de forma de objeto de graça. Só lê o
+      `partial`, o que sustenta o compartilhamento de pacote que e2.6 vai fazer (verificado).
+  - decision: 'comentário de 10 linhas para 1 linha de código'
+    verdict: 'razoável'
+    rationale: >-
+      Documenta a proibição do caminho de exceção no ponto exato onde alguém tentaria criá-lo, e
+      registra por que `bonusItem` não é zerado por `step()`. É a informação que a próxima pessoa
+      precisa e que o código sozinho não diz.
+  - decision: 'self-critique inline em vez de plan/self-critique-e2.1.json'
+    verdict: 'aceito'
+    rationale: >-
+      AC 7 é explícito sobre escopo de arquivos; o artefato de processo não vale a violação, e o
+      conteúdo está integralmente no Dev Agent Record — que é onde o gate lê.
+  - decision: 'CodeRabbit pre-commit não executado'
+    verdict: 'aceito — limitação de máquina, não omissão'
+    rationale: >-
+      WSL ausente nesta máquina (mesma constatação dos gates de debt.* e e2.0). Substituído por
+      verificação independente própria, que nesta story foi mais forte do que o CodeRabbit seria:
+      comparação bit-a-bit contra HEAD.
+
+blocking: false
+blocks_downstream: false
+downstream_note: >-
+  e2.2 e e2.3 estão liberadas. `PickSetup.itemBonus` existe, é opcional, e não altera nenhum
+  chamador — e2.2 (AimSpec) e e2.3 (bot) não tocam neste campo.
+push_recommendation: >-
+  Liberado para @devops considerar no push. Observação de empacotamento: o working tree contém a
+  entrega de e2.0 (determinism.ts + harness.ts) junto com a de e2.1 — são duas stories Done e dois
+  commits distintos; não misturar.
+
+waiver: { active: false }

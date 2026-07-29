@@ -1,7 +1,14 @@
 import { mulberry32 } from './rng.ts'
 import { sumEffects, type EffectSpec } from './effects.ts'
 import { integrate, collideBalls, collideWalls, collideZoneWalls } from './physics.ts'
-import { DEFAULT_STATS, addPartialBonus, makeStatBlock, recomputeStats, zeroBonus } from './stats.ts'
+import {
+  DEFAULT_STATS,
+  addPartialBonus,
+  makeStatBlock,
+  recomputeStats,
+  zeroBonus,
+  type BonusBlock,
+} from './stats.ts'
 import type {
   Aim,
   Ball,
@@ -42,6 +49,8 @@ export interface PickSetup {
   charId: string
   abilityIndex: 0 | 1
   passiveIndex: 0 | 1
+  /** bônus JÁ AGREGADOS, aditivos, congelados na rodada — a mesma porta que a loja usará */
+  itemBonus?: Partial<BonusBlock>
 }
 
 export interface RoundSetup {
@@ -140,6 +149,18 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     bonusItem: makeStatBlock(0),
     stat: makeStatBlock(0), // populado abaixo, nunca lido não-inicializado
   }
+
+  // e2.1 — metade `sim/` do passo 8 da migração da dívida (`architecture.md` §1.3,
+  // `architecture-e2.md` §5.1): bônus de item entram AQUI, uma vez, na criação da bola, e
+  // não são zerados por `step()` (que só zera `bonusPassive`) — é o que "congelado na
+  // rodada" significa. Mesma mecânica aditiva de `bonusPassive` (`addPartialBonus`), e o
+  // valor cai no MESMO `recomputeStats` abaixo: passa por `SIGMA_MIN`/`SIGMA_MAX` e pelos
+  // clamps absolutos como qualquer outro bônus. Não há — e não pode haver — caminho de
+  // exceção para este campo: um mutante do arnês da Fase 2 que escapasse dos tetos estaria
+  // medindo uma configuração que o jogo real nunca produz. Sem consumidor de produção ainda
+  // (a loja da Fase 3 e o CLI de `e2.6` são os consumidores previstos).
+  if (pick.itemBonus) addPartialBonus(b.bonusItem, pick.itemBonus)
+
   recomputeStats(b)
   return b
 }
