@@ -8,8 +8,8 @@ import { NOMES_PACOTE, PACOTES, type NomePacote, type Pacote } from './packages.
 
 /**
  * ARNÊS DE BALANCEAMENTO — o CLI (`npm run balance`). Implementa `docs/architecture-e2.md`
- * §4 (confronto, matriz, troca de lado, IC), §5 (mutação de stats e protocolo A/B), §6.2 (flags)
- * e §6.3 (saída). Stories `e2.5` (§4) e `e2.6` (§5).
+ * §4 (confronto, matriz, troca de lado, IC), §5 (mutação de stats e protocolo A/B), §5.4 (bateria
+ * do Risco #1b), §6.2 (flags) e §6.3 (saída). Stories `e2.5` (§4), `e2.6` (§5) e `e2.7` (§5.4).
  *
  * FRONTEIRA (§6.1): este arquivo **orquestra** e não contém regra de simulação. Toda partida
  * passa por `harness.runRound`; não existe aqui um segundo laço de partida, e nem pode existir —
@@ -75,6 +75,7 @@ interface Flags {
   pacote: NomePacote | null
   alvo: string | null
   mutacoes: Mutacao[]
+  risco1b: boolean
 }
 
 const USO = `
@@ -88,21 +89,25 @@ npm run balance -- [flags]
   --pacote=nenhum         ${NOMES_PACOTE.join(' | ')}                  (§5.2 — protocolo A/B)
   --alvo=vex              a qual personagem do lado modificado o pacote se aplica
   --mutacao=vex:dmg:+0.30 mutação por campo, para P2.2 (repetível; mesmo personagem)
+  --risco-1b              bateria completa de §5.4: controle + físico + dano, para CADA personagem
+                          da composição; reporta o PAR DE DELTAS por personagem (§9/R-04)
   --json                  saída legível por máquina, além da tabela
 
   --pacote e --mutacao disparam o protocolo A/B de §5.3: a MESMA composição dos dois lados, o
   pacote em UM personagem de UM lado, metade das seeds com o pacote no time 0 e metade no time 1.
   O winrate reportado é o do LADO MODIFICADO sobre as rodadas decididas.
+
+  --risco-1b roda esse mesmo protocolo em bateria (um controle e dois pacotes por personagem) e
+  imprime, por personagem, delta_fisico e delta_dano contra o controle DAQUELE personagem.
 `.trim()
 
 /**
- * Flags de `docs/architecture-e2.md` §6.2 que existem no desenho e NÃO neste binário. Rejeitar com
- * mensagem é a diferença entre "esta medição não existe ainda" e uma tabela sem mutação nenhuma que
- * parece boa: quem digitasse a flag estaria pedindo uma medição que este binário não sabe fazer.
+ * Flags de `docs/architecture-e2.md` §6.2 que existem no desenho e NÃO neste binário. Vazio desde
+ * `e2.7`, que trouxe a última (`--risco-1b`) — §6.2 não lista mais nenhuma pendente, e o passo 8
+ * do plano (§7) são contadores no rodapé, não flags. O mecanismo fica: rejeitar com mensagem é a
+ * diferença entre "esta medição não existe ainda" e uma tabela sem mutação nenhuma que parece boa.
  */
-const FUTURAS: Record<string, string> = {
-  '--risco-1b': 'a bateria do Risco #1b (§5.4) chega no passo 7 do plano de construção (§7)',
-}
+const FUTURAS: Record<string, string> = {}
 
 function lerFlags(argv: readonly string[]): Flags {
   const f: Flags = {
@@ -115,6 +120,7 @@ function lerFlags(argv: readonly string[]): Flags {
     pacote: null,
     alvo: null,
     mutacoes: [],
+    risco1b: false,
   }
 
   for (const arg of argv) {
@@ -177,6 +183,9 @@ function lerFlags(argv: readonly string[]): Flags {
         f.mutacoes.push(m)
         break
       }
+      case '--risco-1b':
+        f.risco1b = true
+        break
       case '--json':
         f.json = true
         break
@@ -191,6 +200,27 @@ function lerFlags(argv: readonly string[]): Flags {
   }
 
   // --------- coerência entre as flags de mutação (§5.3: UM pacote, UM personagem, UM lado)
+
+  /*
+   * `--risco-1b` monta a própria bateria (§5.4): um controle e dois pacotes POR PERSONAGEM, todos
+   * partindo da mesma seed base. Somar a isso um `--pacote`/`--mutacao` avulso colocaria na mesma
+   * tabela A/B duas medições com LINHAS-BASE diferentes, e a coluna `delta` deixaria de dizer
+   * contra o quê cada número foi medido. Rejeitar é a única leitura honesta.
+   */
+  if (f.risco1b && (f.pacote !== null || f.mutacoes.length > 0)) {
+    falhar(
+      '--risco-1b já roda o controle e os dois pacotes de §5.4 por personagem; somar --pacote/--mutacao ' +
+        'misturaria na mesma tabela A/B linhas com controles diferentes e a coluna delta ficaria ambígua. ' +
+        'Rode um por vez.',
+    )
+  }
+  if (f.risco1b && f.alvo !== null) {
+    falhar(
+      `--risco-1b percorre TODOS os personagens da composição como alvo (§5.4 é uma tabela por personagem); ` +
+        `--alvo='${f.alvo}' restringiria a bateria a um só e o resultado não seria a bateria que o ` +
+        'indicador #1b pede. Para medir um personagem isolado use --pacote=... --alvo=...',
+    )
+  }
 
   if (f.pacote !== null && f.mutacoes.length > 0) {
     falhar(
@@ -1316,6 +1346,376 @@ function autotesteClamp(): string[] {
   return problemas
 }
 
+// ---------------------------------------------------------------- bateria do Risco #1b (§5.4)
+
+/**
+ * BATERIA DO RISCO #1b — `--risco-1b` (`docs/architecture-e2.md` §5.4, §6.3; story `e2.7`).
+ *
+ * Para cada personagem da composição: controle (pacote vazio) + pacote físico + pacote de dano,
+ * com AQUELE personagem como alvo, e o par de deltas contra o controle DELE. Nada além disso —
+ * e o "nada além disso" é o ponto da story, não uma omissão:
+ *
+ * §9/R-04, resolução do usuário de 2026-07-28: **"agregação adiada"**. O indicador aprovado está
+ * escrito de forma global ("físico < +2pp **e** dano > +5pp → a trilha física nasce morta"), mas a
+ * medição preliminar de §5.4 mostra os deltas INVERTENDO entre personagens — físico rende mais no
+ * Golem, dano rende muito mais no Vex. Agregar dois efeitos de sinais opostos numa média produz um
+ * número que não descreve nenhum dos dois. A regra de agregação é decisão do @pm, na Fase 5, com o
+ * roster maior. Este arquivo, portanto, avalia o gatilho **por personagem** (que é o que §6.3
+ * imprime, literalmente) e **não calcula nem imprime** média, maioria ou qualquer combinação entre
+ * personagens. Inventar essa regra aqui seria decidir por quem não delegou.
+ */
+
+/** O pacote de CONTROLE: é contra ele que todo delta de §5.4 é medido. Tem de vir primeiro. */
+const CONTROLE_1B: NomePacote = 'nenhum'
+/** Os dois pacotes que o gatilho do indicador #1b nomeia (`docs/prd.md` §6, aprovado). */
+const FISICO_1B: NomePacote = 'fisico'
+const DANO_1B: NomePacote = 'dano'
+
+/** Limiares do indicador #1b, em pontos percentuais: `físico < +2pp` **e** `dano > +5pp`. */
+const LIMIAR_FISICO_PP = 2
+const LIMIAR_DANO_PP = 5
+
+/** `fisico` é chave de dado; `físico` é o rótulo de §6.3. Só a saída leva acento. */
+const ROTULO_PACOTE: Record<string, string> = { fisico: 'físico' }
+function rotularPacote(nome: string): string {
+  return ROTULO_PACOTE[nome] ?? nome
+}
+
+/**
+ * A ORDEM da bateria — controle primeiro, sempre.
+ *
+ * QA-E26-003 (gate de `e2.6`, entrada obrigatória desta story): o TSDoc de `packages.ts` promete
+ * que `NOMES_PACOTE` está na ordem em que `e2.7` percorre os pacotes ("o controle primeiro"), mas
+ * `autotestePacotes` compara CONJUNTOS (`sort().join()`), não ordem — nada no repositório garante
+ * hoje que `NOMES_PACOTE[0]` seja o controle. Esta função é a resposta: a ordem é fixada AQUI, por
+ * construção, e não herdada da declaração em `packages.ts`; se alguém reordenar aquela lista, a
+ * bateria continua medindo o delta contra o controle.
+ *
+ * O que continua vindo de `packages.ts` é a COMPOSIÇÃO do conjunto — um pacote novo declarado lá
+ * entra na bateria automaticamente, que é o contrato que o TSDoc de lá anuncia. Só a posição do
+ * controle é imposta daqui.
+ *
+ * Pura sobre a lista recebida, e não sobre `NOMES_PACOTE` direto, para que o autoteste possa
+ * passar a lista na ordem ERRADA e provar que a saída sai certa mesmo assim.
+ */
+function ordemDaBateria(nomes: readonly NomePacote[]): NomePacote[] {
+  return [CONTROLE_1B, ...nomes.filter((n) => n !== CONTROLE_1B)]
+}
+
+interface DeltaPacote {
+  nome: NomePacote
+  /** `winrate(pacote) − winrate(controle)` em pp; `null` se alguma das duas não teve decididas */
+  deltaPp: number | null
+  res: ResultadoConfronto
+}
+
+interface Bateria1b {
+  charId: string
+  controle: ResultadoConfronto
+  tratamentos: DeltaPacote[]
+  /** `true`/`false` do gatilho DESTE personagem; `null` quando não é avaliável (sem decididas) */
+  gatilho: boolean | null
+  /** por que não foi avaliável, quando `gatilho` é `null` */
+  motivo: string | null
+}
+
+/**
+ * `winrate(tratamento) − winrate(controle)`, em pp, **arredondado às 2 casas que §6.3 imprime**.
+ * `null` sem decididas — 0/0 não é delta, e imprimir 0 seria fabricar uma medição.
+ *
+ * O arredondamento não é cosmético, é o que mantém a saída legível de si mesma. Os limiares do
+ * indicador são pp exatos (+2 e +5) e um delta pode cair exatamente neles: com `n_dec = 800`, uma
+ * diferença de 16 vitórias É +2,00pp. Em ponto flutuante, `(0.5 − 0.45)·100` vale
+ * `4.999999999999999`, e `(0.5 − 0.48)·100` vale `2.0000000000000018` — o mesmo fato numérico cai
+ * dos dois lados da borda conforme a sorte do binário. Sem arredondar, o CLI imprimiria
+ * `+2.00pp   → gatilho: SIM` e ninguém conseguiria explicar a linha.
+ *
+ * Arredondando aqui, e não na formatação, todo consumidor (tabela, gatilho, `--json`) enxerga o
+ * MESMO número. Quem precisar de precisão cheia tem `winrate` dos dois lados no `--json`.
+ */
+function deltaPp(tratamento: ResultadoConfronto, controle: ResultadoConfronto): number | null {
+  if (tratamento.nDec <= 0 || controle.nDec <= 0) return null
+  return Math.round((tratamento.winrate - controle.winrate) * 100 * 100) / 100
+}
+
+/**
+ * O gatilho do indicador #1b, avaliado sobre UM personagem — a assinatura recebe os tratamentos de
+ * um personagem só, e é de propósito: não existe caminho neste arquivo por onde os deltas de dois
+ * personagens cheguem juntos a uma decisão (AC 4 / §9/R-04).
+ *
+ * Os dois comparadores são ESTRITOS, como o indicador está escrito: `< +2pp` e `> +5pp`. Um delta
+ * exatamente em +2,00pp não dispara a primeira condição, e um exatamente em +5,00pp não dispara a
+ * segunda — é a leitura literal, e as duas bordas estão no autoteste.
+ */
+function avaliarGatilho1b(tratamentos: readonly DeltaPacote[]): { gatilho: boolean | null; motivo: string | null } {
+  const fis = tratamentos.find((t) => t.nome === FISICO_1B)
+  const dano = tratamentos.find((t) => t.nome === DANO_1B)
+  if (!fis || !dano) {
+    return { gatilho: null, motivo: `bateria sem o pacote '${!fis ? FISICO_1B : DANO_1B}' — o gatilho nomeia os dois` }
+  }
+  if (fis.deltaPp === null || dano.deltaPp === null) {
+    return { gatilho: null, motivo: 'alguma linha ficou sem rodadas decididas — o delta não existe' }
+  }
+  return { gatilho: fis.deltaPp < LIMIAR_FISICO_PP && dano.deltaPp > LIMIAR_DANO_PP, motivo: null }
+}
+
+/**
+ * Roda a bateria e ALIMENTA a tabela A/B de §5.3 (`linhas`) com as mesmas linhas — não uma segunda
+ * tabela. Cada medição aqui é uma chamada de `rodarAb`, que é o protocolo A/B de `e2.6` intocado:
+ * troca de lado, denominador de decididas, teto de seeds, IC e aviso de clamp já estão lá. Esta
+ * função só decide QUEM roda contra QUEM e QUAL número é subtraído de qual.
+ *
+ * Todas as linhas partem da MESMA seed base, inclusive entre personagens: o delta é a diferença
+ * entre duas medições sobre a mesma sequência de partidas (§5.3), e é isso que cancela a variância
+ * comum. Corolário útil: com pacote vazio o alvo não muda a partida, então os controles de todos
+ * os personagens têm de sair NUMERICAMENTE IDÊNTICOS — conferido na impressão.
+ */
+function rodarBateria1b(
+  comp: readonly string[],
+  n: number,
+  seedBase: number,
+  inst: Instrumentacao,
+  linhas: LinhaAb[],
+): Bateria1b[] {
+  const ordem = ordemDaBateria(NOMES_PACOTE)
+  // `--comp=golem,golem` é composição legal para o CLI; personagem repetido é o MESMO personagem
+  // e mediria a mesma bateria duas vezes.
+  const personagens = [...new Set(comp)]
+  const out: Bateria1b[] = []
+
+  for (const charId of personagens) {
+    let controle: ResultadoConfronto | null = null
+    const tratamentos: DeltaPacote[] = []
+
+    for (const nome of ordem) {
+      console.error(`  … risco #1b: ${charId} · pacote ${nome}`)
+      const linha = rodarAb(comp, charId, PACOTES[nome], nome, n, seedBase, inst)
+      const ehControle = nome === CONTROLE_1B
+
+      if (!ehControle && controle === null) {
+        // Inalcançável por `ordemDaBateria`, e é justamente por isso que a guarda existe: sem ela,
+        // uma reordenação futura mediria o delta contra o pacote errado sem nada aparecer na saída.
+        falhar(
+          `bateria #1b: o pacote '${nome}' foi medido antes do controle '${CONTROLE_1B}' — todo delta de ` +
+            '§5.4 é medido CONTRA o controle e não existe delta sem ele.',
+        )
+      }
+
+      const delta = ehControle ? null : deltaPp(linha.res, controle!)
+      linhas.push({
+        rotulo: nome,
+        alvo: charId,
+        controle: ehControle,
+        res: linha.res,
+        deltaPp: delta,
+        avisos: linha.avisos,
+        nota: ehControle ? `#1b — controle de ${charId} (§5.4)` : `#1b — ${rotularPacote(nome)} em ${charId} (§5.4)`,
+      })
+
+      if (ehControle) controle = linha.res
+      else tratamentos.push({ nome, deltaPp: delta, res: linha.res })
+    }
+
+    const { gatilho, motivo } = avaliarGatilho1b(tratamentos)
+    out.push({ charId, controle: controle!, tratamentos, gatilho, motivo })
+  }
+
+  return out
+}
+
+/** `+4.32pp` / `-5.90pp` / `n/d` — a célula de delta de §6.3. */
+function celulaDelta(pp: number | null): string {
+  return pp === null ? 'n/d' : `${pp >= 0 ? '+' : ''}${pp.toFixed(2)}pp`
+}
+
+/**
+ * A seção "risco #1b (delta por personagem)" de §6.3, literal:
+ *
+ *     risco #1b (delta por personagem)
+ *       vex     físico +4.32pp · dano +23.78pp   → gatilho (fis<+2 e dano>+5): NÃO
+ *       golem   físico +8.77pp · dano  +4.24pp   → gatilho: NÃO
+ *
+ * A legenda dos limiares sai na PRIMEIRA linha e as demais só dizem `gatilho:` — é o formato do
+ * exemplo, e a legenda por extenso em toda linha empurraria o dado para a direita. O alinhamento
+ * é por COLUNA (cada pacote com a própria largura), que é o que produz o `dano  +4.24pp` do
+ * exemplo alinhado com `dano +23.78pp`.
+ *
+ * O que NÃO existe aqui, e a ausência é o requisito: nenhuma linha de total, média, maioria ou
+ * veredito único da bateria. Cada linha fala de um personagem e de mais ninguém (§9/R-04).
+ */
+function imprimirRisco1b(bateria: readonly Bateria1b[]): void {
+  console.log('risco #1b (delta por personagem)')
+
+  const larguraChar = Math.max(6, ...bateria.map((b) => b.charId.length))
+  const larguraDelta = new Map<string, number>()
+  for (const b of bateria) {
+    for (const t of b.tratamentos) {
+      const w = celulaDelta(t.deltaPp).length
+      larguraDelta.set(t.nome, Math.max(larguraDelta.get(t.nome) ?? 0, w))
+    }
+  }
+
+  let primeira = true
+  for (const b of bateria) {
+    const pares = b.tratamentos
+      .map((t) => `${rotularPacote(t.nome)} ${celulaDelta(t.deltaPp).padStart(larguraDelta.get(t.nome) ?? 0)}`)
+      .join(' · ')
+    const legenda = primeira ? ` (fis<+${LIMIAR_FISICO_PP} e dano>+${LIMIAR_DANO_PP})` : ''
+    const veredito = b.gatilho === null ? `n/d — ${b.motivo}` : b.gatilho ? 'SIM' : 'NÃO'
+    console.log(`  ${b.charId.padEnd(larguraChar)}  ${pares}   → gatilho${legenda}: ${veredito}`)
+    primeira = false
+  }
+
+  /*
+   * O controle de cada personagem mede a MESMA coisa: `itemBonus` vazio não muda a partida e todas
+   * as linhas partem da mesma seed base. Se dois controles divergirem, ou o alvo vazou para dentro
+   * da simulação ou o determinismo quebrou — e nos dois casos TODO delta acima é lixo, porque cada
+   * um foi medido contra um controle diferente. É barato conferir e invisível se não se conferir.
+   */
+  const controles = bateria.map((b) => `${b.controle.vitorias}/${b.controle.nDec}`)
+  if (new Set(controles).size > 1) {
+    console.log(
+      `  ⚠ os controles dos personagens DIVERGIRAM (${bateria.map((b, i) => `${b.charId} ${controles[i]}`).join(' · ')}). ` +
+        'Com pacote vazio e a mesma seed base eles têm de ser idênticos: o alvo não muda a partida. ' +
+        'Enquanto isso não fechar, os deltas acima estão medidos contra controles diferentes e não são comparáveis.',
+    )
+  }
+
+  console.log(
+    `                 delta = winrate(pacote) − winrate(controle) do MESMO personagem, mesma seed base (§5.4)`,
+  )
+  console.log(
+    '                 o gatilho é avaliado POR PERSONAGEM. Nenhuma agregação entre personagens é ' +
+      'calculada aqui —\n                 §9/R-04 (resolução do usuário, 2026-07-28): a regra de ' +
+      'agregação global é decisão da Fase 5,\n                 com o bot heurístico e roster maior. ' +
+      'Os deltas invertem entre personagens, e uma média dos dois\n                 não descreveria nenhum deles.',
+  )
+  console.log(
+    `                 ⚠ os limiares (+${LIMIAR_FISICO_PP}pp / +${LIMIAR_DANO_PP}pp) são finos perto do IC de cada winrate ` +
+      `(±${icPp(800).toFixed(2)}pp a n=800, §4.4):\n                   um gatilho lido no piso de RF-48 é leitura de ruído. Suba --n antes de decidir por ele.`,
+  )
+  console.log('')
+}
+
+/**
+ * AUTOTESTE da bateria (§5.4) e do gatilho do indicador #1b. Roda em toda execução, inclusive
+ * quando `--risco-1b` não foi pedido, porque os dois erros que ele pega são invisíveis na saída:
+ *
+ *   (a) ORDEM — QA-E26-003. Se o controle deixar de vir primeiro, o delta passa a ser medido
+ *       contra um pacote, e a tabela sai com a mesma cara. O ensaio passa `NOMES_PACOTE` na ordem
+ *       invertida de propósito: é o que prova que a ordem é imposta aqui e não herdada.
+ *   (b) COMPARADOR — o gatilho é `< +2` e `> +5`, ESTRITOS. Trocar por `<=`/`>=` muda o veredito
+ *       exatamente na borda, que é onde ele importa. As duas bordas estão na tabela.
+ *
+ * Os quatro números de §5.4 entram como caso porque §6.3 publica o veredito deles ("NÃO" nos dois
+ * personagens): se a implementação do gatilho divergir do que a arquitetura imprimiu, quebra aqui.
+ * São números de `dummy` e não valem como leitura de risco — valem como caso de teste da REGRA.
+ */
+const CASOS_GATILHO_1B: { fis: number; dano: number; esperado: boolean; porque: string }[] = [
+  { fis: 4.32, dano: 23.78, esperado: false, porque: '§5.4/§6.3 — vex: físico acima de +2pp, não dispara' },
+  { fis: 8.77, dano: 4.24, esperado: false, porque: '§5.4/§6.3 — golem: nenhuma das duas condições' },
+  { fis: 1.0, dano: 6.0, esperado: true, porque: 'as duas condições — é o caso que a trilha física nasce morta' },
+  { fis: 1.0, dano: 4.0, esperado: false, porque: 'físico dispara, dano não: o indicador exige as DUAS' },
+  { fis: 3.0, dano: 6.0, esperado: false, porque: 'dano dispara, físico não' },
+  { fis: 2.0, dano: 6.0, esperado: false, porque: 'borda: +2.00 não é < +2 (comparador estrito)' },
+  { fis: 1.0, dano: 5.0, esperado: false, porque: 'borda: +5.00 não é > +5 (comparador estrito)' },
+  { fis: -5.9, dano: 6.0, esperado: true, porque: 'físico negativo (a leitura literal do PRD, §5.2) dispara' },
+]
+
+function autotesteRisco1b(): string[] {
+  const problemas: string[] = []
+  const conferir = (rotulo: string, ok: boolean, detalhe: string): void => {
+    if (!ok) problemas.push(`  ✗ risco #1b — ${rotulo}: ${detalhe}`)
+  }
+
+  // (a) ordem: imposta aqui, não herdada de `packages.ts` — QA-E26-003
+  const invertida = [...NOMES_PACOTE].reverse()
+  const ordemInvertida = ordemDaBateria(invertida)
+  const ordemNormal = ordemDaBateria(NOMES_PACOTE)
+  conferir(
+    '(a) controle primeiro com a lista na ordem certa',
+    ordemNormal[0] === CONTROLE_1B,
+    `${ordemNormal.join(',')} — o delta de §5.4 é medido CONTRA o controle`,
+  )
+  conferir(
+    '(a) controle primeiro com a lista INVERTIDA',
+    ordemInvertida[0] === CONTROLE_1B,
+    `${ordemInvertida.join(',')} a partir de [${invertida.join(',')}] — a ordem tem de ser imposta aqui`,
+  )
+  conferir(
+    '(a) nenhum pacote some nem duplica',
+    [...ordemNormal].sort().join(',') === [...NOMES_PACOTE].sort().join(',') && ordemNormal.length === NOMES_PACOTE.length,
+    `[${ordemNormal.join(',')}] != conjunto de [${NOMES_PACOTE.join(',')}]`,
+  )
+  conferir(
+    '(a) os dois pacotes do gatilho existem',
+    ordemNormal.includes(FISICO_1B) && ordemNormal.includes(DANO_1B),
+    `o indicador nomeia '${FISICO_1B}' e '${DANO_1B}'; a bateria tem [${ordemNormal.join(',')}]`,
+  )
+  conferir(
+    '(a) o controle é o pacote VAZIO',
+    Object.keys(PACOTES[CONTROLE_1B]).length === 0,
+    `PACOTES.${CONTROLE_1B} = ${JSON.stringify(PACOTES[CONTROLE_1B])} — um controle com campo mede um tratamento`,
+  )
+
+  // (b) o comparador do gatilho, com as duas bordas
+  const res = (fis: number, dano: number): ReturnType<typeof avaliarGatilho1b> => {
+    const stub = (nome: NomePacote, pp: number): DeltaPacote => ({
+      nome,
+      deltaPp: pp,
+      res: { confronto: confronto(composicao(['golem']), composicao(['vex'])), nDec: 800, nSeeds: 800, vitorias: 400, winrate: 0.5, icPp: icPp(800), veredito: 'dentro', truncado: false },
+    })
+    return avaliarGatilho1b([stub(FISICO_1B, fis), stub(DANO_1B, dano)])
+  }
+  for (const c of CASOS_GATILHO_1B) {
+    const obtido = res(c.fis, c.dano).gatilho
+    if (obtido !== c.esperado) {
+      problemas.push(
+        `  ✗ risco #1b — gatilho(físico ${c.fis}pp, dano ${c.dano}pp): esperado ${c.esperado ? 'SIM' : 'NÃO'}, ` +
+          `obtido ${obtido === null ? 'n/d' : obtido ? 'SIM' : 'NÃO'} (${c.porque})`,
+      )
+    }
+  }
+
+  // (c) delta sem decididas não é 0: é ausência de medição, e imprimir 0 seria fabricar um dado
+  const vazio: ResultadoConfronto = {
+    confronto: confronto(composicao(['golem']), composicao(['vex'])),
+    nDec: 0,
+    nSeeds: 100,
+    vitorias: 0,
+    winrate: 0,
+    icPp: icPp(0),
+    veredito: 'inconclusivo',
+    truncado: true,
+  }
+  const cheio: ResultadoConfronto = { ...vazio, nDec: 800, nSeeds: 800, vitorias: 400, winrate: 0.5, truncado: false }
+  conferir('(c) delta com controle sem decididas', deltaPp(cheio, vazio) === null, `${deltaPp(cheio, vazio)} != null`)
+  conferir('(c) delta com tratamento sem decididas', deltaPp(vazio, cheio) === null, `${deltaPp(vazio, cheio)} != null`)
+
+  /*
+   * (c) as duas bordas em PONTO FLUTUANTE, que é o modo de falha real do gatilho: `(0.5−0.45)·100`
+   * vale `4.999999999999999` e `(0.5−0.48)·100` vale `2.0000000000000018`. Sem o arredondamento de
+   * `deltaPp`, a tabela imprimiria `+2.00pp` e o gatilho decidiria por `1.999…` — ou o contrário,
+   * conforme o binário. As duas linhas abaixo são exatamente os dois limiares do indicador.
+   */
+  const de = (w: number): ResultadoConfronto => ({ ...cheio, winrate: w })
+  conferir('(c) borda +5.00pp sobrevive ao float', deltaPp(de(0.5), de(0.45)) === 5, `${deltaPp(de(0.5), de(0.45))} != 5`)
+  conferir('(c) borda +2.00pp sobrevive ao float', deltaPp(de(0.5), de(0.48)) === 2, `${deltaPp(de(0.5), de(0.48))} != 2`)
+  conferir('(c) delta negativo', deltaPp(de(0.45), de(0.5)) === -5, `${deltaPp(de(0.45), de(0.5))} != -5`)
+  conferir('(c) 2 casas, como §6.3 imprime', deltaPp(de(0.535512), de(0.49232)) === 4.32, `${deltaPp(de(0.535512), de(0.49232))} != 4.32`)
+
+  // (d) gatilho não avaliável não vira `false` — "não deu para medir" != "não disparou"
+  const semDano = avaliarGatilho1b([{ nome: FISICO_1B, deltaPp: 1, res: cheio }])
+  conferir('(d) bateria incompleta', semDano.gatilho === null && semDano.motivo !== null, JSON.stringify(semDano))
+  const semDelta = avaliarGatilho1b([
+    { nome: FISICO_1B, deltaPp: null, res: vazio },
+    { nome: DANO_1B, deltaPp: 6, res: cheio },
+  ])
+  conferir('(d) delta ausente', semDelta.gatilho === null && semDelta.motivo !== null, JSON.stringify(semDelta))
+
+  return problemas
+}
+
 // ---------------------------------------------------------------- auditoria de roster (§6.3)
 
 interface SlotAuditado {
@@ -1474,6 +1874,7 @@ const problemasAutoteste = [
   ...autotesteMutacao(),
   ...autotesteAb(),
   ...autotesteClamp(),
+  ...autotesteRisco1b(),
 ]
 if (problemasAutoteste.length > 0) {
   for (const p of problemasAutoteste) console.error(p)
@@ -1577,7 +1978,7 @@ if (flags.pacote !== null || flags.mutacoes.length > 0) {
   if (flags.pacote !== null) {
     Object.assign(bonusPedido, PACOTES[flags.pacote])
     rotuloPedido = flags.pacote
-    notaTratamento = `#1b — pacote '${flags.pacote}' (§5.2)`
+    notaTratamento = `#1b — pacote '${flags.pacote}' (§5.2); bateria completa por personagem: --risco-1b`
   } else {
     for (const m of flags.mutacoes) bonusPedido[m.key] = (bonusPedido[m.key] ?? 0) + m.valor
     rotuloPedido = descreverBonus(bonusPedido)
@@ -1613,6 +2014,16 @@ if (flags.pacote !== null || flags.mutacoes.length > 0) {
     })
   }
 }
+
+/**
+ * §5.4 — a bateria. Ela ALIMENTA `linhasAb` (a tabela A/B acima), em vez de montar uma tabela
+ * própria: `n_dec`, `n_seeds`, IC, veredito de 3 estados, aviso de clamp e aviso de truncamento
+ * são os mesmos de qualquer linha A/B e já estão formatados lá. A seção `risco #1b` que vem depois
+ * é só a leitura de §6.3 por cima desses mesmos números — não uma segunda medição.
+ */
+const bateria1b: Bateria1b[] = flags.risco1b
+  ? rodarBateria1b(flags.comp, flags.n, flags.seed, inst, linhasAb)
+  : []
 
 if (linhasAb.length > 0) {
   const larguraPacote = Math.max(16, ...linhasAb.map((l) => l.rotulo.length))
@@ -1662,6 +2073,8 @@ if (linhasAb.length > 0) {
    * `--n` é piso por RF-48, não alvo. Medido nesta story: 52,25% ±3,46 a n=800 (inconclusivo),
    * 51,15% ±2,19 a n=2000 e 49,58% ±1,39 a n=5000 (os dois, dentro).
    */
+  // A bateria de §5.4 traz um controle POR PERSONAGEM, então o aviso deixou de ser sobre "a"
+  // linha-base. Com uma só (`--pacote`/`--mutacao`), o texto é o mesmo de `e2.6`, sem sufixo.
   const controles = linhasAb.filter((l) => l.controle)
   for (const ctrl of controles) {
     if (ctrl.res.veredito !== 'inconclusivo') continue
@@ -1674,6 +2087,10 @@ if (linhasAb.length > 0) {
   }
   console.log('')
 }
+
+// --------------------------------------------------- risco #1b (§5.4 · §6.3) — delta por personagem
+
+if (bateria1b.length > 0) imprimirRisco1b(bateria1b)
 
 // --------------------------------------------------- instrumentação de graça (§4.5)
 
@@ -1734,7 +2151,9 @@ console.log(
     `                 instrumentação §4.5 ✓ 3 rodadas sintéticas (4 contadores) · pacotes ✓ sinal de drag + ΣMIN/ΣMAX · ` +
     `--mutacao ✓ ${CASOS_MUTACAO.length} casos (NaN, Infinity, 1e400, 0x10, vazio)\n` +
     '                 protocolo A/B ✓ um personagem de um lado, outro lado intocado, não vira espelho · ' +
-    `clamp ✓ 5 ensaios + ${NOMES_PACOTE.length * ROSTER.length} pacotes×roster`,
+    `clamp ✓ 5 ensaios + ${NOMES_PACOTE.length * ROSTER.length} pacotes×roster\n` +
+    `                 risco #1b ✓ controle primeiro mesmo com NOMES_PACOTE invertido (QA-E26-003) · ` +
+    `gatilho ✓ ${CASOS_GATILHO_1B.length} casos (as duas bordas, +${LIMIAR_FISICO_PP}pp e +${LIMIAR_DANO_PP}pp)`,
 )
 console.log('')
 
@@ -1788,6 +2207,38 @@ if (flags.json) {
             sigmaMax: SIGMA_MAX[a.key],
           })),
         })),
+        /*
+         * §5.4/§6.3 — a leitura do Risco #1b, por personagem. Só existe quando `--risco-1b` foi
+         * pedido; `null` é "não medido", não "não disparou".
+         *
+         * `nota` está aqui e não só no console de propósito: um consumidor de máquina é
+         * exatamente quem tentaria reduzir `personagens[]` a um booleano único. A regra que faria
+         * essa redução não existe — §9/R-04 a devolveu ao @pm, para a Fase 5.
+         */
+        risco1b:
+          bateria1b.length === 0
+            ? null
+            : {
+                leitura: 'delta-por-personagem',
+                limiaresDoGatilho: { fisicoMenorQuePp: LIMIAR_FISICO_PP, danoMaiorQuePp: LIMIAR_DANO_PP },
+                nota:
+                  'gatilho avaliado POR PERSONAGEM. Nenhuma agregação entre personagens é calculada — ' +
+                  '§9/R-04 (resolução do usuário, 2026-07-28): a regra de agregação global é decisão da Fase 5.',
+                personagens: bateria1b.map((b) => ({
+                  charId: b.charId,
+                  controle: { winrate: b.controle.winrate, nDec: b.controle.nDec, truncado: b.controle.truncado },
+                  deltas: b.tratamentos.map((t) => ({
+                    pacote: t.nome,
+                    deltaPp: t.deltaPp,
+                    winrate: t.res.winrate,
+                    nDec: t.res.nDec,
+                    icPp: t.res.icPp,
+                    truncado: t.res.truncado,
+                  })),
+                  gatilho: b.gatilho,
+                  gatilhoNaoAvaliavel: b.motivo,
+                })),
+              },
         instrumentacao: {
           rodadas: inst.rodadas,
           empates: inst.empates,

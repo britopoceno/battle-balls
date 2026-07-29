@@ -1,0 +1,316 @@
+schema: 1
+story: 'e2.7'
+story_title: '--risco-1b — bateria completa, delta por personagem'
+gate: CONCERNS
+status_reason: >-
+  Os seis ACs passam e foram verificados de forma independente: golden hash idêntico, escopo provado
+  por sha256 (só `balance.ts` mudou), QA-E26-003 resolvido de ponta a ponta e nenhuma agregação global
+  em lugar nenhum. Dois achados médios: o SINAL do delta é decidido num call site que nenhuma asserção
+  cobre, e a guarda de divergência dos controles não existe no `--json`. Um achado empírico de peso
+  para a Fase 5: o gatilho do golem INVERTE de NÃO para SIM ao trocar só a base de seed.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  working tree sobre commit:4835863 ·
+  src/tools/balance.ts sha256:1f41891cd1cb9a9d8d16cd447532b434cf9f1acf2e1aedf20c72a952ac0662d3
+    (modificado; era 1f289e86… no gate de e2.6 — ÚNICO arquivo alterado por esta story) ·
+  src/tools/packages.ts sha256:6d8edda95907cbf9dd0cba455157b7cd52d6e058b9de81984ffd93599b71b538 (IDÊNTICO a e2.6) ·
+  src/tools/harness.ts sha256:2936e1abbaa502918d2831a7ab1aca582d32ef381ce875613e75599333644f11 (IDÊNTICO a e2.5/e2.6) ·
+  src/bot/heuristic.ts sha256:f113a8e0f8dda20879109976618c6453293cd86ff224c8eecb2c53a30f924cff (IDÊNTICO a e2.4/e2.5/e2.6) ·
+  src/tools/determinism.ts sha256:f2953f7695cdf788c568b1d1467df157f387aefa9bead41c87893efef41dd755 (IDÊNTICO a e2.4/e2.5/e2.6) ·
+  src/sim/world.ts sha256:adf6944253e12aa2f2425ac1a1c9949da6090a8f2f6da5f32ea59f04085a3b99 (IDÊNTICO) ·
+  src/sim/types.ts sha256:f0641379f5d17214317bf320a8ec68e1d13bef8c8552dfe17444b6965c5ba2c9 (IDÊNTICO) ·
+  src/sim/stats.ts sha256:7493f054ca26b50b0999cde3015c94fa6c3dc23ef20632d33a74efa559e56b90 (IDÊNTICO) ·
+  src/sim/physics.ts sha256:32e5832da4be5b5d41fa6b35589e51baead8ec9536ef8e86005f455018cf6ff2 (IDÊNTICO) ·
+  src/sim/rng.ts sha256:c6854d2b0dcf4705414a585351d66ac6294cb0e8006dec7f31100bf548127e7c (IDÊNTICO) ·
+  src/sim/effects.ts sha256:e517efb0115111ba4393da26074115e032f2f93522d5a4e1b6e6ae2419780a07 (IDÊNTICO — o gate de e2.6 registrou este hash com um '0' a mais no início, erro de transcrição meu, corrigido aqui) ·
+  src/sim/index.ts sha256:a772d2bdf76f5771e7afe418cd0a9f06ad886edc3ef3f119a0c6bda8240e5b52 (IDÊNTICO) ·
+  src/bot/dummy.ts sha256:99ca652cc65c0e85c0ab3c262bbbdedbdb371154cc7d4783dcefc7f750497f71 (IDÊNTICO) ·
+  src/chars/golem.ts sha256:1bff89467a4b75aee8b10d9f6b4ed13141849bbfc17716bbfd95d986e289db9b (IDÊNTICO) ·
+  src/chars/vex.ts sha256:94ac3e80484e6d21d958a4a298c2b0f3c9fd2810b14adcb41f1fc95c11157648 (IDÊNTICO) ·
+  src/chars/index.ts sha256:ac78ea2363a60038b211f22f7f9aa2a59c368e59826e5cbb8ff00bab21fef6e9 (IDÊNTICO) ·
+  package.json sha256:0a279866f0cb8ff6491c088c1b70ba40d2392f27d6a2c06825eedd8bac40b89c (IDÊNTICO)
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      Reexecutado do zero. `npm run check` EXIT=0 (tsc --noEmit, sem saída). `npm run sim:check`
+      EXIT=0 com "golden hash ✓ ok — 5 seeds batem o baseline". Conferido que o `BASELINE` de
+      `src/tools/determinism.ts:78-84` é exatamente {1:96de1201, 2:f66a7416, 3:a8db9c28, 7:cb77dbe0,
+      11:6aede2d9} — as cinco seeds que o AC enumera — e que `determinism.ts` está byte-idêntico
+      (sha256 f2953f76…) aos gates de e2.4/e2.5/e2.6, ou seja o baseline não foi reescrito para
+      caber no resultado. Todas as demais linhas do sim:check (determinismo, build coverage,
+      espelho 2v2 19/14/7, replay, bot dupla exec, bot replay, guarda BOT-001, pilar 3) verdes.
+
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run balance -- --risco-1b` EXIT=0. O stderr mostra as SEIS medições na ordem exigida —
+      golem·{nenhum,fisico,dano} depois vex·{nenhum,fisico,dano} — e a tabela A/B traz as 6 linhas
+      correspondentes. Reuso do protocolo A/B de e2.6 confirmado por leitura: `rodarBateria1b`
+      (balance.ts:1473-1524) tem ~50 linhas e a única chamada de medição é `rodarAb(...)`; não há
+      troca de lado, contagem de decididas, teto de seeds nem IC próprios. As 6 linhas entram no
+      MESMO array `linhasAb` da tabela de e2.6, não numa segunda tabela.
+
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      Par de deltas por personagem, sempre contra o controle DAQUELE personagem
+      (`deltaPp(linha.res, controle!)`, com `controle` reiniciado a cada personagem —
+      balance.ts:1487). Reproduzido: golem físico +2.62pp · dano +10.63pp; vex físico +8.38pp ·
+      dano +17.63pp. Nenhum número agregado: `bateria1b` aparece em 4 lugares (balance.ts:2024,
+      2093, 2218, 2226) e em nenhum deles sofre `reduce`, média ou combinação — só `.length` e
+      `.map` por personagem. Grep por reduce/média/maioria/every/some no arquivo inteiro: as
+      ocorrências de `mediana`/`média` são todas de duração e instrumentação (§4.5), nenhuma toca
+      delta ou gatilho.
+
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      Esta é a linha vermelha da story e ela se sustenta. `avaliarGatilho1b` (balance.ts:1450)
+      recebe os tratamentos de UM personagem — a assinatura é a barreira, como o @dev alega, e o
+      único chamador (linha 1519) está dentro do laço `for (const charId of personagens)`. Nenhuma
+      agregação no console (verificado na saída real) nem no `--json`: inspecionei o objeto
+      `risco1b` serializado e ele tem só {leitura, limiaresDoGatilho, nota, personagens[]} — não há
+      booleano global, contagem de disparos nem maioria. Perturbações confirmam que o comparador é
+      o do indicador aprovado e não uma paráfrase: trocar `<`/`>` por `<=`/`>=` é barrado
+      (EXIT=1, as duas bordas +2.00 e +5.00); trocar FISICO_1B por DANO_1B na busca é barrado
+      (EXIT=1, 2 casos). O gatilho também não é decorativo — a n=6 e a n=20 ele imprime SIM.
+
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Conferido contra o bloco de §6.3 posição a posição: cabeçalho `risco #1b (delta por
+      personagem)` literal; indentação de 2; `charId` em padEnd(6) (10 colunas antes de `físico`,
+      igual ao exemplo); rótulo acentuado `físico` só na saída (`fisico` continua chave de dado);
+      separador ` · `; alinhamento por coluna via padStart por pacote (reproduzido o `dano  +4.24pp`
+      do exemplo em ensaio a n=800 com larguras diferentes); legenda `(fis<+2 e dano>+5)` só na 1ª
+      linha, `→ gatilho: NÃO` nas demais. A ORDEM das linhas segue `--comp` (golem, vex) e não a do
+      exemplo de §6.3 (vex, golem) — é determinística e correta, registrado como informativo.
+
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      Provado por sha256, não por declaração. TODOS os arquivos de `src/sim/` (world, types, stats,
+      physics, rng, effects, index), `src/bot/` (dummy, heuristic), `src/chars/` (golem, vex, index),
+      `src/tools/harness.ts`, `src/tools/packages.ts`, `src/tools/determinism.ts` e `package.json`
+      batem dígito a dígito os hashes registrados no gate de e2.6. O único arquivo de código com
+      hash diferente é `src/tools/balance.ts`. Os 7 arquivos que aparecem como modificados em
+      `git status` são das 6 stories anteriores ainda não commitadas — nenhum foi tocado por e2.7.
+
+top_issues:
+  - id: 'QA-E27-001'
+    severity: medium
+    category: tests
+    finding: >-
+      O SINAL do delta é decidido num call site que nenhuma asserção cobre. `deltaPp()` tem 4
+      asserções dedicadas (as duas bordas de float, o delta negativo, as 2 casas) — mas a ORDEM DOS
+      ARGUMENTOS que `rodarBateria1b` passa para ela não é asserida em lugar nenhum. Medido: trocar
+      `deltaPp(linha.res, controle!)` por `deltaPp(controle!, linha.res)` roda limpo, EXIT=0, e
+      imprime uma tabela plausível (`golem físico +0.00pp · dano -33.33pp → gatilho: NÃO`). Como a
+      coluna `delta` da tabela A/B e a seção `risco #1b` são alimentadas pela MESMA variável, as
+      duas invertem juntas e nada cruza. O sinal é o conteúdo inteiro do indicador — `físico < +2pp`
+      é comparação com sinal — então um delta invertido leria "a trilha física nasce morta" quando
+      o dado diz o contrário. Terceira ocorrência desta classe no épico (QA de e2.5: "a fiação entre
+      partes testadas não é testada"; QA de e2.6: "perturbar a fiação que lê a constante").
+    suggested_action: >-
+      Asserir o sinal onde ele é usado, não onde é calculado: no momento da impressão (ou num
+      autoteste que dirija `rodarBateria1b` com um `rodarAb` de stub), conferir
+      `Math.sign(deltaPp) === Math.sign(winrate_tratamento − winrate_controle)` para cada linha. É
+      uma linha e fecha a única perturbação desta story que passou despercebida.
+
+  - id: 'QA-E27-002'
+    severity: medium
+    category: requirements
+    finding: >-
+      A guarda de divergência dos controles é só de console; o `--json` não a expõe. Forcei a
+      divergência (controle do vex rodado com `seedBase+1`): o console imprimiu o ⚠ com o conteúdo
+      certo ("os controles dos personagens DIVERGIRAM (golem 11/20 · vex 9/20)"), logo a guarda é
+      viva e não vácua. Mas na mesma execução o `--json` trouxe `risco1b` sem nenhum vestígio —
+      `JSON.stringify(risco1b).includes('diverg') === false` — e os dois personagens com
+      `gatilho: true, gatilhoNaoAvaliavel: null`, como se a medição fosse válida. A justificativa
+      que a própria story dá para a guarda existir ("falha invisível", "a tabela inteira é lixo") se
+      aplica literalmente ao caminho de máquina, que é justamente o consumidor que não lê o rodapé.
+      No console o processo também sai 0 e imprime SIM/NÃO como se valessem.
+    suggested_action: >-
+      Acrescentar `controlesDivergiram: boolean` (com os pares vitórias/decididas por personagem) ao
+      objeto `risco1b` do `--json` e, quando divergirem, emitir `gatilho: null` com
+      `gatilhoNaoAvaliavel` preenchido — a regra "não deu para medir ≠ não disparou" que o código já
+      aplica corretamente ao caso sem decididas.
+
+  - id: 'QA-E27-003'
+    severity: low
+    category: code
+    finding: >-
+      O arredondamento de `deltaPp()` a 2 casas é a correção CERTA para a borda que ele nomeia, e a
+      alegação do @dev foi confirmada de forma independente: `(0.5−0.45)·100` vale
+      `4.999999999999999` e `(0.5−0.48)·100` vale `2.0000000000000018` — o mesmo fato cai dos dois
+      lados da borda. No caminho aritmético REAL (`vitorias/nDec`) é pior do que o @dev descreveu:
+      `440/800 − 400/800` dá `5.000000000000004`, e o comparador estrito `> 5` DISPARA num delta que
+      é matematicamente +5,00pp exatos, quando a leitura literal do indicador manda não disparar.
+      Remover o `Math.round` é barrado por asserção viva (EXIT=1, com esses mesmos valores na
+      mensagem). Dois resíduos, nenhum bloqueante: (a) a n=800 a granularidade do delta é 0,125pp,
+      então todo múltiplo ÍMPAR de 0,125 cai exatamente no empate de 2 casas e o `Math.round` o
+      resolve por poeira de float, não por regra — os próprios números publicados por esta story
+      mostram isso: golem físico é matematicamente +2,625pp e sai `+2.62pp` (para BAIXO) enquanto
+      golem dano é +10,625pp e sai `+10.63pp` (para CIMA), o mesmo empate decidido nos dois sentidos
+      em linhas vizinhas da mesma tabela. Inofensivo para o gatilho (os limiares 2 e 5 são múltiplos
+      exatos de 0,125, isto é 16 e 40 vitórias), mas o não-determinismo de float foi DESLOCADO do
+      limiar inteiro para o meio-centavo, não removido. (b) Com `n` maior — que é o que o próprio
+      rodapé do CLI manda usar antes de decidir — o arredondamento pode INVERTER o gatilho: medido a
+      n=20000, um delta verdadeiro de +1,995pp (`< 2` → arma) arredonda para exatamente 2,00
+      (`< 2` → desarma). Confirmada a mitigação que o @dev alega: o `--json` preserva mesmo os
+      `winrate` e `nDec` cheios dos dois lados, então dá para recomputar exato.
+    suggested_action: >-
+      Manter o arredondamento para IMPRESSÃO e decidir o gatilho no domínio inteiro, onde não há
+      float nenhum: com `n_dec` igual nas duas linhas, `delta < 2pp` é exatamente
+      `100·(v_trat − v_ctrl) < 2·n`. Exato em qualquer `n`, dispensa regra de arredondamento e
+      elimina os dois resíduos de uma vez.
+
+  - id: 'QA-E27-004'
+    severity: medium
+    category: requirements
+    finding: >-
+      O rodapé sobre limiares finos EXISTE (é o que o gate anterior pediu, e é progresso real), mas
+      nomeia uma grandeza que não é a que está sendo testada: "os limiares (+2pp/+5pp) são finos
+      perto do IC de CADA WINRATE (±3.46pp a n=800)". O que é comparado contra o limiar é o DELTA, e
+      o CLI nunca imprime o intervalo do delta em lugar nenhum.
+      CORREÇÃO DO MEU PRÓPRIO ACHADO ANTERIOR: no gate de e2.6 registrei o IC do delta como ±4,90pp,
+      derivado da fórmula NÃO PAREADA `1,96·√(2·0,25/n)`. Esta story usa desenho pareado (mesma seed
+      base para controle e tratamento), e agora eu MEDI em vez de derivar — na varredura de 4 bases
+      de seed abaixo, o desvio-padrão do delta de golem físico é ≈1,25pp (estimativa grosseira, 4
+      pontos), o que dá IC ≈ ±2,5pp. Ou seja: o pareamento cancela mesmo boa parte da variância
+      comum, o ±4,90pp que registrei em e2.6 SUPERESTIMA, e o ±3,46pp que este rodapé imprime é, por
+      acaso, conservador. O achado sobrevive à correção porque não depende de qual dos três números
+      se usa: ±2,5pp em torno da leitura de golem físico (+2,62pp) dá [+0,12 ; +5,12], que ATRAVESSA
+      o limiar de +2,00pp. O veredito do golem não é decidível a n=800 — e isso não é inferência, é
+      observação direta: ele inverte para SIM na base de seed 3001.
+    suggested_action: >-
+      Imprimir o IC DO DELTA ao lado de cada par (medido, não derivado da fórmula não pareada), ou
+      no mínimo dizer no rodapé que o ±3,46pp da coluna é do winrate e não do delta. Enquanto não
+      houver, nenhuma decisão de Fase 3/5 deve ser tomada sobre o gatilho lido no piso de RF-48.
+
+  - id: 'QA-E27-005'
+    severity: low
+    category: docs
+    finding: >-
+      Duas consequências cosméticas de a ordem de `NOMES_PACOTE` deixar de governar a bateria. Com
+      a lista invertida em `packages.ts`, os NÚMEROS e os VEREDITOS saem idênticos (é o que
+      QA-E26-003 pedia e está resolvido), mas a ordem do PAR dentro da linha impressa passa a ser
+      `dano … · físico …`, enquanto a legenda continua dizendo `(fis<+2 e dano>+5)` — a saída deixa
+      de bater com §6.3 sem que nada acuse. Além disso a ordem das LINHAS segue `--comp`, então a
+      saída real sai (golem, vex) e o exemplo de §6.3 sai (vex, golem). Nenhum dos dois afeta
+      medição.
+    suggested_action: >-
+      Se a fidelidade a §6.3 importa como contrato, impor também a ordem de apresentação do par
+      (físico antes de dano) da mesma forma que `ordemDaBateria` impõe a do controle. Caso
+      contrário, registrar em §6.3 que a ordem é derivada de `--comp` e de `NOMES_PACOTE`.
+
+verificacao_independente:
+  reexecucao_do_zero:
+    - 'npm run check → EXIT=0'
+    - 'npm run sim:check → EXIT=0, golden hash ✓ ok, 5 seeds (1,2,3,7,11) batem o baseline'
+    - >-
+      npm run balance -- --risco-1b → EXIT=0, 5723 rodadas, saída reproduzida INTEGRALMENTE contra o
+      Debug Log da story, inclusive n_seeds por linha (823/814/808/823/829/803) e os rodapés
+    - >-
+      Os 4 números alegados batem exatamente: golem físico +2.62pp · dano +10.63pp (gatilho NÃO);
+      vex físico +8.38pp · dano +17.63pp (gatilho NÃO)
+  controles_identicos:
+    verdict: CONFIRMADO
+    evidence: >-
+      Os dois controles saíram numericamente idênticos na execução real — `nenhum/golem` e
+      `nenhum/vex` ambos 800 decididas, 823 seeds, 52.25%, `? inconclusivo`. A conferência em runtime
+      compara `vitorias/nDec` e ficou (corretamente) silenciosa. Provei que ela NÃO é vácua rodando
+      o controle do vex com `seedBase+1`: o ⚠ disparou com o texto certo. Ver QA-E27-002 para o
+      buraco que sobra.
+  ordem_dos_pacotes_QA-E26-003:
+    verdict: RESOLVIDO DE PONTA A PONTA
+    evidence: >-
+      Não me contentei com o autoteste do @dev (que exercita só a função pura `ordemDaBateria`).
+      Inverti `NOMES_PACOTE` DE VERDADE em `packages.ts` (`['dano','fisico','nenhum']`) numa cópia
+      isolada e rodei o CLI: o controle continuou sendo medido PRIMEIRO para os dois personagens
+      (stderr: `nenhum` antes de `dano`/`fisico`) e TODOS os deltas e vereditos saíram numericamente
+      idênticos ao baseline (golem físico -10.00 · dano +15.00; vex físico -10.00 · dano +25.00;
+      SIM/SIM). A escolha da opção (a) está correta e a fiação — não só a função — está protegida.
+      Conferi também as duas camadas de defesa: tornar `ordemDaBateria` identidade é barrado pelo
+      autoteste (EXIT=1) ANTES de qualquer rodada, e a guarda `falhar` de `rodarBateria1b` é o
+      segundo freio.
+  perturbacoes:
+    total: 8
+    detectadas: 6
+    passaram_despercebidas: 2
+    detalhe:
+      - 'P1 NOMES_PACOTE invertido em packages.ts → saída correta e idêntica (comportamento desejado, não é perturbação a detectar)'
+      - 'P2 controle do vex com seed+1 → ⚠ de divergência DISPAROU no console (mas não no --json — QA-E27-002)'
+      - 'P3a ordemDaBateria vira identidade → autoteste barra, EXIT=1'
+      - 'P3b identidade + NOMES_PACOTE invertido → autoteste barra, EXIT=1'
+      - 'P5 argumentos de deltaPp invertidos no call site → PASSOU, EXIT=0, tabela plausível (QA-E27-001)'
+      - 'P6 FISICO_1B/DANO_1B trocados na busca do gatilho → autoteste barra, EXIT=1 (2 casos)'
+      - 'P7 comparadores < > viram <= >= → autoteste barra, EXIT=1 (as duas bordas)'
+      - 'P8 Math.round removido de deltaPp → autoteste barra, EXIT=1 (float das duas bordas)'
+    nota: >-
+      A cópia perturbada foi restaurada e conferida por sha256 ao fim (balance.ts 1f41891c…,
+      packages.ts 6d8edda9…). Nenhuma perturbação tocou a árvore de trabalho real.
+  outros_ensaios:
+    - 'Rejeição de --risco-1b com --pacote / --mutacao / --alvo → EXIT=1 nos três, mensagens conforme o Debug Log'
+    - 'Não-regressão de e2.6: --pacote=fisico --alvo=vex → uma linha-base só, aviso SEM sufixo de alvo, nenhuma seção risco #1b impressa'
+    - '--comp=golem (1 personagem) e --comp=golem,golem (dedupe por Set) → uma linha, sem quebrar'
+
+achado_empirico_para_fase5:
+  titulo: 'O gatilho do golem INVERTE ao trocar só a base de seed, com o mesmo n=800'
+  metodo: >-
+    Varredura de base de seed (a técnica que separa "o pipeline é injusto" de "a amostra é azarada",
+    do gate de e2.6). Quatro execuções completas da bateria a n=800, mudando só --seed.
+  tabela: |
+    seed base | golem físico | golem dano | vex físico | vex dano | gatilho golem | gatilho vex
+    1 (padrão)|    +2.62pp   |  +10.63pp  |  +8.38pp   | +17.63pp |      NÃO      |     NÃO
+    1001      |    +4.50pp   |  +11.13pp  |  +8.87pp   | +20.37pp |      NÃO      |     NÃO
+    2001      |    +3.25pp   |   +9.25pp  |  +9.75pp   | +22.88pp |      NÃO      |     NÃO
+    3001      |    +1.50pp   |   +9.75pp  |  +7.13pp   | +19.63pp |      SIM      |     NÃO
+  leitura: >-
+    O veredito do VEX é robusto: o físico dele fica 5–8pp acima do limiar de +2 em todas as bases, e
+    o dano muito acima de +5. O veredito do GOLEM não é: o físico dele varia de +1,50pp a +4,50pp
+    (3,00pp de amplitude, sd ≈ 1,25pp) em torno de um limiar de +2,00pp, e o dano fica sempre acima
+    de +5 — ou seja o gatilho do golem depende INTEIRAMENTE da metade física, que é a metade
+    instável. Na base 3001 ele dispara. Em 4 bases, 1 disparo.
+    A leitura da base padrão (+2,62pp) está a só 0,62pp do limiar enquanto a amplitude observada é
+    quase 5× isso. Isto NÃO é defeito da story — é exatamente o que o rodapé que o @dev acrescentou
+    avisa ("um gatilho lido no piso de RF-48 é leitura de ruído"), e a story é aceita pela FORMA da
+    saída, não pela magnitude. Mas transforma QA-E27-004 de preciosismo em consequência: quem ler
+    "gatilho: NÃO" a n=800 e concluir que a trilha física está viva estará lendo uma moeda.
+  recomendacao: >-
+    Nenhuma decisão de Fase 3 ou Fase 5 sobre o Risco #1b deve ser tomada com n=800. Antes de o @pm
+    decidir a regra de agregação (R-04), rodar a bateria a n ≥ 3000 e em pelo menos 3 bases de seed,
+    e reportar a média entre bases — que é uma agregação sobre REPETIÇÕES do mesmo personagem, não
+    entre personagens, e portanto não é a agregação que §9/R-04 adiou.
+
+pontos_fortes:
+  - >-
+    A linha vermelha da story foi respeitada com folga. `avaliarGatilho1b` recebe os tratamentos de
+    um personagem por assinatura, o `--json` não tem nem sequer um contador de disparos, e o `nota`
+    do JSON explica ao consumidor de máquina POR QUE não há um booleano único. Artigo IV respeitado:
+    a regra de agregação não foi inventada.
+  - >-
+    QA-E26-003 foi resolvido no lugar certo (no consumidor que depende da ordem), sem tocar em
+    `packages.ts`, e com duas camadas — autoteste sobre a função pura + guarda `falhar` no laço. A
+    inversão real de `NOMES_PACOTE` prova que a proteção é da fiação, não só da função.
+  - >-
+    O desvio do arredondamento não foi só documentado: está PROTEGIDO por asserção viva. Remover o
+    `Math.round` derruba o CLI com EXIT=1 e a mensagem traz os valores de float exatos. Documentar um
+    desvio e depois deixá-lo sem rede é o padrão comum; isto é melhor.
+  - >-
+    Reuso integral do protocolo A/B: `rodarBateria1b` não tem uma linha de contabilidade de partida.
+    As 6 medições entram na tabela A/B existente em vez de numa segunda tabela — o que faz IC,
+    veredito de 3 estados, aviso de clamp e de truncamento virem de graça e consistentes.
+  - >-
+    A conferência de controles idênticos é uma ideia boa e barata que o @dev não precisava ter tido:
+    duas medições redundantes que TÊM de bater transformam o custo do controle duplicado em
+    verificação. Falta só levá-la ao `--json` (QA-E27-002).
+
+waiver: { active: false }
+
+recommended_status: 'Done — os 2 achados médios são dívida rastreada, não bloqueio'
+next_agent: '@devops'
+next_command: '*push'
