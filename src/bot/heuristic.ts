@@ -274,7 +274,19 @@ function porValorEsperado(
     }
   }
 
-  if (melhor === null || melhorVE < limiar) return null
+  if (melhor === null) return null
+  // BOT-001 (gate de e2.3, MEDIUM — entrada obrigatória desta story). Era
+  // `if (melhorVE < limiar) return null`, e essa forma tem o defeito exato que as quatro guardas
+  // `!(x > 0)` deste arquivo existem para evitar, só que virado ao contrário: `NaN < limiar` é
+  // `false`, então um `VE` corrompido NÃO era barrado — ele passava, e o bot castava justamente
+  // onde a política manda não castar. A geometria continua sã nesse caminho (o NaN entra por
+  // `peso`, não pela mira), então a rede de finitude de `emitir` também não pegava.
+  // Escrever a condição no sentido POSITIVO ("casta se cruzou o limiar") inverte o ônus: `NaN >=
+  // limiar` é `false`, e o `!` transforma isso em "não casta". Para todo `VE` finito as duas
+  // formas são idênticas — nenhum comportamento de jogo muda.
+  // Isto fecha o ponto de DECISÃO, e portanto qualquer NaN, venha ele de `peso`, de `pAcerto` ou
+  // de um produtor futuro; guardar só o produtor conhecido (`peso`) deixaria os outros abertos.
+  if (!(melhorVE >= limiar)) return null
   return melhor
 }
 

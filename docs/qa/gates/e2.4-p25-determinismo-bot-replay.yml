@@ -1,0 +1,306 @@
+schema: 1
+story: 'e2.4'
+gate: PASS
+status_reason: >-
+  Os 8 ACs passam sob verificação independente, e a peça mais forte deste gate não é um teste: é uma
+  PROVA DE ESCOPO por reversão. Reverti a correção de BOT-001 numa cópia de `src/` e o
+  `src/bot/heuristic.ts` resultante bate byte a byte o sha256 que o gate de `e2.3` registrou
+  (`80dcd986…`) — logo o delta desta story naquele arquivo é EXATAMENTE a linha de BOT-001 mais o
+  comentário de rastreabilidade, e nada mais. Com a correção revertida, `sim:check` falha só na
+  guarda BOT-001 (2 comandos, EXIT=1) e as outras nove linhas de saída ficam idênticas: o teste não
+  é vácuo E a correção não move nenhum hash, provados na mesma execução.
+  Três testes negativos próprios, rodados em cópias perturbadas: `Math.random` no saque de
+  agendamento → 5/5 seeds divergem; `Math.random` nos saques de jitter → 5/5; escrita em
+  `view.balls[0].hp` (N-3) → 4/5 no bloco de replay, reproduzindo os hashes do @dev dígito a dígito.
+  Golden hash e BUILD_BASELINE recomputados por arnês próprio contra `architecture.md` §6.0
+  transcrita à mão: 10/10. A decisão de NÃO guardar `peso` é engenharia sólida e foi verificada nos
+  dois braços do argumento — sem objeção.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  working tree sobre commit:4835863 · src/bot/heuristic.ts sha256:f113a8e0f8dda20879109976618c6453293cd86ff224c8eecb2c53a30f924cff
+  (pré-story: 80dcd986c1e8b8e29a2cabd5fb9e8e372e7835fcee7b2c2e1c53c256fa14dbef) ·
+  src/tools/determinism.ts sha256:f2953f7695cdf788c568b1d1467df157f387aefa9bead41c87893efef41dd755
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: '`npm run check` → `tsc --noEmit`, 0 saída, EXIT=0. Executado por mim, do zero.'
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` EXIT=0. Golden hash NÃO aceito do "✓ ok" do próprio script: recomputei as 5
+      seeds com arnês próprio (`runRound` + `dummyCommands` dos dois times), comparando contra
+      `docs/architecture.md` §6.0 linhas 711-715 transcritas à mão → `96de1201@753/w1` ·
+      `f66a7416@961/w0` · `a8db9c28@830/w0` · `cb77dbe0@831/w0` · `6aede2d9@1168/w-1`, 5/5. As 5
+      variantes de `BUILD_BASELINE` também recomputadas: `19d30541@1091` · `7e6aa71d@860` ·
+      `6c14e971@679` · `f1e405ff@899` · `1c1c71bb@951`, 5/5. O `git diff` de `determinism.ts` confirma
+      que as duas tabelas não aparecem no delta — não foram tocadas, nem "atualizadas para passar".
+      As sete linhas anteriores de saída (`determinismo` … `replay`), o espelho `19/14/7`, as durações
+      `13.8/12.3/19.5` e a tabela do Pilar 3 conferem com o registrado no gate de `e2.3`.
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      Bloco de autoconsistência presente (`determinism.ts:272-290`): para cada seed de `BASELINE`,
+      `rodarHeuristic` duas vezes e comparação de `hash` E `ticks`, mais um terceiro laço de gravação
+      cujo hash é comparado contra a 1ª execução (canário de "gravar alterou a partida"). Zero valores
+      de referência fixos — só igualdade entre execuções, como §3.3 exige. Não-vacuidade medida por
+      mim: os 5 hashes do `heuristic` são distintos (`adc82769`/`c304f0c2`/`f899b3ad`/`6c272a56`/
+      `bebff3a6`), as partidas duram de 766 a 1604 ticks e há vencedor dos dois lados; instrumentando
+      os slots, contei casts por VE de fato ocorrendo (3 na seed 1, 4 na seed 3, além dos casts de
+      `utilidade`). Poder de detecção medido, não suposto — ver `independent_verification`.
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      `rodarHeuristicComGravacao` (`:259-270`) envolve o `heuristicDriver` e anota EXATAMENTE os
+      comandos que a partida consumiu; `rodarReplay` (`:207-211`, de `debt.7`) é reusado sem uma linha
+      de alteração e não chama `botCommands` nenhuma vez — recebe `(seed, Command[])` e roda
+      `() => () => gravados`. A comparação é de hash contra a execução com bot, para as 5 seeds
+      (`:295-300`), com `throw` correspondente em `:550-556`. Verifiquei que a mesma seed é usada nos
+      dois lados (`setup(seed)` em ambos).
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Nenhum laço de partida novo: `heuristicDriver`, `rodarHeuristic` e `rodarHeuristicComGravacao`
+      só produzem drivers e delegam a `runRound`. Grep de `while (` em `determinism.ts` → nenhuma
+      ocorrência de laço de tick. O `heuristicDriver` real (`:245-252`) é o exemplo literal do JSDoc de
+      `RoundDriver` escrito em `e2.0` (`harness.ts:44-51`), e `harness.ts` tem mtime de 00:44 (e2.0),
+      anterior ao gate de `e2.3` às 01:55 — não foi tocado. O risco nominal que o @po registrou na
+      validação (v1.0.1: "se a forma de `driver` de `e2.0` não comportar estado por time, a correção
+      pertence a `e2.0`") está fechado por evidência, não por alegação.
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      Os blocos de `dummy` de `debt.7` (`rodarComGravacao`, `rodarReplay`, laço sobre `BASELINE`)
+      aparecem no `git diff` apenas com o delta de `e2.0` (troca do laço próprio por `runRound`), que
+      é de outra story e já foi aprovado no gate de `e2.0`. O delta de `e2.4` é um bloco contíguo
+      aditivo. Na execução, `determinismo` / `golden hash` / `build coverage` / `replay` continuam ✓.
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      `src/bot/dummy.ts` com mtime 2026-07-28 22:57 e `git diff --stat` vazio — intocado. Confirmado
+      por sha256 (`99ca652c…`) e pelo `git status`, que não o lista como modificado.
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      Grep próprio em `src/sim/` por `from '../{bot,chars,client,tools}/` → nenhuma ocorrência. RF-19
+      mantido. Nenhum arquivo de `sim/` tem mtime posterior ao gate de `e2.3`.
+
+independent_verification:
+  prova_de_escopo_por_reversao: >-
+    A verificação mais forte deste gate. Copiei `src/` para um scratchpad, substituí o bloco de 13
+    linhas (`if (melhor === null) return null` + comentário de BOT-001 + `if (!(melhorVE >= limiar))
+    return null`) pela linha única que a story declara como "ANTES"
+    (`if (melhor === null || melhorVE < limiar) return null`) e computei o sha256 do arquivo
+    resultante: `80dcd986c1e8b8e29a2cabd5fb9e8e372e7835fcee7b2c2e1c53c256fa14dbef` — IDÊNTICO ao que
+    o gate de `e2.3` registrou para `heuristic.ts` antes desta story. Isso prova, sem depender de
+    nenhuma alegação, que o delta de `e2.4` em `heuristic.ts` é exatamente a correção de BOT-001 e o
+    comentário que a explica; zero mudança colateral em qualquer outra das 592 linhas do arquivo.
+    Vale registrar a técnica: quando um arquivo é untracked (novo, ainda não commitado) o `git diff`
+    não ajuda, mas um sha256 registrado num gate anterior transforma "reverter a mudança declarada" em
+    uma prova de escopo completa.
+  bot_001_teste_nao_vacuo: >-
+    Rodei `determinism.ts` na cópia REVERTIDA. Saída: `✗ BOT-001: com hp = NaN o bot emitiu 2
+    comando(s) — o limiar voltou a aceitar VE = NaN`, `guarda BOT-001 ✗ 1 problema(s)`, EXIT=1 com o
+    `throw` correto. Na MESMA execução, as nove outras linhas ficaram idênticas às do `src` corrigido
+    (golden hash ✓, build coverage ✓, espelho 19/14/7, duração 13.8/12.3/19.5, replay ✓, bot dupla
+    exec ✓, bot replay ✓). Duas conclusões numa passada: a guarda tem poder discriminante real, e a
+    correção não move nenhum hash — nem do `dummy`, nem do `heuristic`.
+  bot_001_cadeia_ponta_a_ponta: >-
+    Não me limitei a repetir o cenário do @dev (`hp = NaN` injetado à mão no tick 0). Reproduzi a
+    cadeia inteira pela porta que `e2.1` abriu, numa partida real: `itemBonus: { dmg: NaN }` nos dois
+    picks do time 0 → `stat.dmg = NaN` → `hp` do inimigo vira `NaN` no tick 113 → `peso` NaN → `VE`
+    NaN. Com o código CORRIGIDO, o time 0 emite 0 comandos por VE depois do tick 113 (o único comando
+    da partida inteira é a ult do golem no tick 677, `aim.kind = 'utilidade'`, que por desenho não
+    passa por `VE` — comportamento correto). Com o código REVERTIDO, 7 comandos, o primeiro no tick
+    119, seis ticks depois do NaN aparecer. A correção fecha a cadeia de alcançabilidade que o gate de
+    `e2.3` mapeou, e não só o cenário sintético.
+  hashes_do_heuristic: >-
+    Recomputados por arnês próprio: seed 1 → w0/827/`adc82769`, seed 2 → w0/1159/`c304f0c2`, seed 3 →
+    w1/766/`f899b3ad`, seed 7 → w0/841/`6c272a56`, seed 11 → w1/1604/`bebff3a6`. Os quatro que o gate
+    de `e2.3` mediu de forma independente conferem dígito a dígito DEPOIS da correção de BOT-001.
+  negativo_1_math_random_no_agendamento: >-
+    Cópia perturbada trocando `bot.rand()` por `Math.random()` no saque (1) de §3.2 (o de agendamento,
+    exercitado em TODA decisão, caste-se ou não). Resultado: `bot dupla exec ✗ 10 desvio(s)` — 5/5
+    seeds divergiram na autoconsistência E 5/5 no canário de gravação, EXIT=1. Golden hash e build
+    coverage intactos, o que confirma que os blocos do `heuristic` estão isolados dos do `dummy`.
+  negativo_2_math_random_no_jitter: >-
+    Segunda perturbação, deliberadamente na outra metade: `Math.random()` nos saques (2)-(5), que só
+    são exercitados QUANDO o bot casta. 5/5 seeds divergiram. Fecho assim a lacuna do teste único do
+    @dev (que perturbou "todo comando emitido"): o bloco pega não-determinismo tanto no caminho que
+    sempre roda quanto no que só roda ao castar.
+  negativo_3_escrita_em_view_N3: >-
+    Cópia perturbada com `if (view.tick === 200 && bot.team === 0) view.balls[0].hp -= 5` na entrada
+    de `botCommands`. Resultado: `bot dupla exec ✓ ok` (correto — a perturbação é determinística) e
+    `bot replay ✗ 4 desvio(s)`, com os hashes `434b26e8`/`a2bd0b8b` (seed 1), `43de0222`/`72b2e1df`
+    (seed 2), `50722caf`/`6c272a56` (seed 7), `af5dca6c`/`6db99af9` (seed 11) — os MESMOS números que
+    o @dev reportou. O relato dele é real, não reconstruído de memória. Seed 3 não diverge, como ele
+    registrou. Ver TEST-001 para a correção do MOTIVO.
+  decisao_de_nao_guardar_peso: >-
+    Verificada nos dois braços, e a decisão é SÓLIDA — sem objeção. Braço (i), "o ponto de decisão é
+    o gargalo": confirmado por cadeia de consumidores única — `peso` é chamada só em `valorEsperado`
+    (`:340`), que é chamada só em `porValorEsperado` (`:269`), cujo limiar é o ponto agora fechado.
+    Qualquer NaN vindo de `peso`, de `pAcerto` ou de um produtor futuro atravessa esse mesmo ponto.
+    Braço (ii), "guardar `peso` seria mudança silenciosa de política": confirmado por leitura do
+    clamp — hoje `hp` negativo dá `frac < 0 → 0 → peso = 1 + PESO_FERIDO = 2` (peso MÁXIMO, "quase
+    morto vale mais"); `if (!(frac >= 0)) return 1` o rebaixaria a 1 ("saudável"), invertendo o
+    sentido da política para um estado finito e legítimo do ponto de vista de tipo. O @dev também está
+    certo ao dizer que a forma correta, se algum dia se quiser o cinto além dos suspensórios, é
+    `Number.isFinite(frac)` — e que ela é redundante com o que ficou fechado. Registro dois resíduos
+    como LOW (BOT-006, BOT-007) que REFINAM a decisão sem contradizê-la.
+
+top_issues:
+  - id: 'BOT-006'
+    severity: low
+    category: reliability
+    finding: >-
+      Consequência da correção que vale ficar escrita, porque ela é silenciosa. `valorEsperado` soma
+      `pAcerto·peso` sobre TODOS os inimigos vivos, então um `hp = NaN` em UM inimigo torna `VE` NaN
+      para TODOS os candidatos daquela bola — e, com o limiar agora no sentido positivo, o resultado é
+      não castar NADA por VE. Medido: 7 de 7 casts por VE (3 na seed 1, 4 na seed 3, em estados reais
+      de partida com dois inimigos vivos) foram suprimidos ao injetar NaN no `hp` de um único inimigo.
+      A direção é a segura (fail-closed, nenhum comando corrompido entra na simulação) e é
+      estritamente melhor do que o comportamento anterior (castar onde a política manda não castar).
+      O risco residual é de LEITURA: numa matriz de winrate, "o bot parou de usar o kit" é
+      indistinguível de "o personagem é fraco" — exatamente o modo de falha insidioso que §2.5
+      descreve para a timidez de bot.
+    suggested_action: >-
+      Nenhuma ação nesta story. `e2.6` já leva a metade de raiz (validar `itemBonus` com
+      `Number.isFinite` na entrada do CLI), e a métrica de `e2.5` que BOT-003 pede — tick mediano do
+      primeiro cast por slot — é o detector natural deste estado. Vale que `e2.5` trate "zero casts
+      por VE na rodada inteira" como sinal a REPORTAR, não como dado a agregar em silêncio.
+  - id: 'BOT-007'
+    severity: low
+    category: reliability
+    finding: >-
+      Refinamento do argumento (i) do @dev, não objeção a ele. Fechar o limiar de `porValorEsperado`
+      barra NaN de qualquer origem NO CAMINHO DE VE — que é onde um NaN poderia produzir um cast
+      contra a política. As outras duas formas de `AimSpec` não passam por ali e têm comparador de
+      aceite próprio: `politicaReposicao` (`:485`) decide fuga com `fracHp < cfg.FUGA`, e
+      `NaN < 0.35` é `false`. Medido com `vex.abilityIndex = 1` (Deslize, `aim.kind: 'reposicao'`, o
+      único consumidor do roster hoje): com `hp = 10` o Vex FOGE (`dx -0.998`, afastando-se); com
+      `hp = NaN` ele não casta. Isto é degradação de política, não corrupção — a geometria continua
+      finita e nenhum comando com NaN é emitido. Alcançável pela mesma porta (`itemBonus.dmg` NaN no
+      time ADVERSÁRIO).
+    suggested_action: >-
+      Nenhuma correção obrigatória, e explicitamente NÃO recomendo aplicar `!(frac >= 0)` aqui pelo
+      mesmo motivo que o @dev deu para `peso`. Fica registrado para que a frase "fechar o ponto de
+      decisão barra NaN de qualquer origem" seja lida com o escopo certo (caminho de VE) quando
+      `e2.6` for escrita. A validação de `Number.isFinite` na entrada do CLI fecha os três caminhos de
+      uma vez, que é o argumento a favor de fazê-la na raiz.
+  - id: 'TEST-001'
+    severity: low
+    category: testing
+    finding: >-
+      Correção de uma explicação, não de um teste. O @dev atribui a não-divergência da seed 3 no
+      negativo de N-3 a "a bola perturbada termina morta e o hash final não carrega a perturbação".
+      Medi o estado final da bola 0 nas 5 seeds sob a perturbação: seed 1 `hp 27.56 alive true`,
+      seed 2 `hp 0 alive false`, seed 3 `hp 0 alive false`, seed 7 `hp 113 alive true`, seed 11 `hp 0
+      alive false`. As seeds 2 e 11 também terminam com a bola 0 MORTA e mesmo assim DIVERGEM — morrer
+      é necessário, não suficiente. O mecanismo real na seed 3 é mais forte e mais específico: o hash
+      com bot perturbado é `f899b3ad`, exatamente o hash da execução NÃO perturbada, ou seja os −5 hp
+      não mudaram nada no estado final quantizado (o golpe fatal foi overkill, a bola morreu no mesmo
+      tick com `hp` clampado em 0, e o resto da partida seguiu idêntico).
+    suggested_action: >-
+      A ressalva de fundo continua CORRETA e ACEITÁVEL: é limitação estrutural de um teste baseado em
+      hash de estado FINAL, já registrada em `debt.7`, não defeito desta story — não exijo correção. O
+      que peço é que a explicação fique com o mecanismo certo, para que ninguém construa em cima do
+      modelo errado ("basta a bola sobreviver") ao desenhar o teste de N-3 de uma story futura. A
+      leitura honesta do número é: 4/5 é rede suficiente para este vetor, e o bloco de replay NÃO é
+      prova de N-3 em toda partida — a garantia de N-3 continua sendo arquitetural (`WorldView`) com o
+      replay como segunda linha.
+
+design_decisions_reviewed:
+  - decision: 'BOT-001 corrigido invertendo o limiar para o sentido positivo, e só isso'
+    verdict: 'CORRETO — mínimo, verificado nos dois sentidos, e sem efeito sobre nenhum hash'
+    rationale: >-
+      Para todo `VE` finito `!(melhorVE >= limiar)` e `melhorVE < limiar` são logicamente idênticas, e
+      isso não ficou na teoria: os 5 hashes do `heuristic`, o golden hash e o `BUILD_BASELINE` são
+      idênticos antes e depois. Para `VE = NaN` a primeira barra e a segunda deixa passar, medido em
+      dois vetores independentes (injeção direta e cadeia `itemBonus` completa). É a mesma
+      propriedade que as quatro guardas `!(x > 0)` do arquivo já usavam, aplicada ao quinto ponto onde
+      um NaN decide.
+  - decision: 'NÃO aplicar a guarda espelhada em `peso`'
+    verdict: 'CORRETO — engenharia sólida, sem objeção; os dois braços do argumento verificados'
+    rationale: >-
+      Ver `independent_verification.decisao_de_nao_guardar_peso`. A cadeia de consumidores é única, o
+      que torna o ponto de decisão um gargalo genuíno; e `!(frac >= 0)` inverteria o sentido da
+      política para `hp` negativo. Um @qa que insistisse na guarda estaria pedindo que se troque um
+      buraco fechado por uma mudança de comportamento não pedida. BOT-006 e BOT-007 refinam o escopo
+      da afirmação sem contradizer a decisão.
+  - decision: 'bloco novo SEM valores de referência fixos, só igualdade entre execuções'
+    verdict: 'correto, e é o que §3.3 manda'
+    rationale: >-
+      Um hash congelado aqui reprovaria toda mudança legítima de `PRESET_ARNES` em `e2.5`/`e2.6` —
+      churn de baseline sem informação. O custo declarado (mudança de política passa silenciosa por
+      este bloco) é real e é exatamente o que `BOT_VERSION` existe para carregar. Verifiquei que o
+      bloco novo não introduziu nenhuma constante de hash: os únicos números congelados do arquivo
+      continuam sendo `BASELINE` e `BUILD_BASELINE`, ambos intocados.
+  - decision: 'canário de gravação (hashComBot === a.hash) além da dupla execução'
+    verdict: 'correto, e tem poder de detecção medido'
+    rationale: >-
+      Sem ele, um driver-gravador que alterasse a partida faria o replay comparar contra uma partida
+      que não é a que rodou, e passaria verde pelo motivo errado. Nos dois negativos de `Math.random`
+      o canário disparou nas 5 seeds junto com a autoconsistência — não é linha morta.
+  - decision: 'canário do caso são no `guardaBot001`'
+    verdict: 'correto — protege contra a morte silenciosa do cenário'
+    rationale: >-
+      O cenário só discrimina enquanto o bot NÃO casta com `hp` são no tick 0. Se roster, posições de
+      largada ou `PRESET_ARNES` mudarem isso, o check corrompido passaria verde sem provar nada. O
+      canário faz essa perda de poder falhar em voz alta. Verifiquei que ele mede o que promete: com
+      `hp` são o bot emite 0 comandos no tick 0 (inimigos a ~575px).
+  - decision: '`harness.ts` não alterado'
+    verdict: 'correto, e confirmado por duas vias'
+    rationale: >-
+      O JSDoc de `RoundDriver` escrito em `e2.0` já traz o `heuristicDriver` desta story como exemplo,
+      e o código real ficou idêntico ao exemplo. mtime de `harness.ts` (00:44, e2.0) anterior ao gate
+      de `e2.3` (01:55) confirma que o arquivo não foi tocado.
+  - decision: 'CodeRabbit não executado'
+    verdict: 'aceito — limitação de máquina, como em debt.*, e2.0-e2.3'
+    rationale: >-
+      WSL ausente. Substituído por `npm run check`, `npm run sim:check`, a prova de escopo por
+      reversão de sha256, quatro cópias perturbadas de `src/` e cinco sondas próprias em runtime — a
+      categoria de verificação que importa num delta de uma linha de lógica cujo risco real é
+      semântica de comparação com NaN, e que o CodeRabbit não cobriria de qualquer forma.
+
+escopo_verificado:
+  metodo_1_sha256: >-
+    `src/bot/heuristic.ts` — delta provado ser exatamente BOT-001 (ver
+    `independent_verification.prova_de_escopo_por_reversao`).
+  metodo_2_git_diff: >-
+    `src/tools/determinism.ts` — o delta desta story é um bloco contíguo aditivo (`:225-349`) mais 3
+    linhas de saída, 3 `throw` e um import. `BASELINE` e `BUILD_BASELINE` não aparecem no diff.
+  metodo_3_mtime: >-
+    Somente `src/bot/heuristic.ts` (02:01:50) e `src/tools/determinism.ts` (02:03:23) têm mtime
+    posterior ao gate de `e2.3` (01:55:35). `src/tools/harness.ts` (00:44), `src/bot/dummy.ts`
+    (2026-07-28 22:57), `src/sim/*` e `src/chars/*` (todos ≤ 01:08) são de stories anteriores. Os
+    dois arquivos da File List, e nenhum outro.
+
+blocking: false
+blocks_downstream: false
+downstream_note: >-
+  `e2.5` está LIBERADA. O portão P2.5 está fechado com os dois testes que §3.3 exige, ambos com poder
+  de detecção MEDIDO (autoconsistência 5/5 em dois vetores de não-determinismo; replay 4/5 no vetor de
+  N-3), e BOT-001 — a entrada obrigatória herdada do gate de `e2.3` — está corrigida, testada em
+  permanência no `sim:check` e provada hash-neutra. A rede de segurança que o passo 4 de §7 exige
+  antes do CLI existe de fato.
+  Entradas que `e2.5` continua carregando do gate de `e2.3`: BOT-002 (`Object.freeze` no
+  `PRESET_ARNES`, que é `Readonly` só de tipo) e BOT-003 (tick mediano do primeiro cast por slot na
+  métrica de utilização de kit). Acrescento BOT-006: essa mesma métrica é o detector do estado
+  "fail-closed por NaN", e "zero casts por VE na rodada" deve ser reportado, não agregado em silêncio.
+  `e2.6` continua levando a metade de raiz de BOT-001 (`Number.isFinite` em `itemBonus` na entrada do
+  CLI) e agora também BOT-007: validar na raiz fecha os três caminhos de decisão de uma vez, o que é o
+  argumento a favor de fazê-lo lá e não em cada política.
+  Aberto de gates anteriores, sem dono ainda: `src/tools/inspect.ts:18` mantém uma terceira cópia do
+  laço com o literal `60 * 180` e não roda no `sim:check` (achado LOW de `e2.0`).
+push_recommendation: >-
+  Liberado para o @devops considerar no push. O working tree acumula agora CINCO stories Done e não
+  commitadas — e2.0 (`tools/harness.ts` novo + `tools/determinism.ts`), e2.1 (`sim/world.ts`), e2.2
+  (`sim/types.ts`, `chars/golem.ts`, `chars/vex.ts`), e2.3 (`src/bot/heuristic.ts`) e e2.4
+  (`src/bot/heuristic.ts` 1 linha + `src/tools/determinism.ts` bloco aditivo). São cinco commits
+  distintos, nessa ordem; não misturar. Atenção ao empacotamento: `heuristic.ts` e `determinism.ts`
+  aparecem em DOIS commits cada — o de e2.4 é o delta incremental sobre o de e2.3/e2.0, e a
+  granularidade importa porque o sha256 de `heuristic.ts` no gate de `e2.3` é a âncora que torna o
+  escopo de e2.4 auditável.
+
+waiver: { active: false }

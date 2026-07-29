@@ -3,7 +3,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CHARS } from '../chars/index.ts'
 import { dummyCommands } from '../bot/dummy.ts'
+import { botCommands, createBot } from '../bot/heuristic.ts'
 import {
+  createWorld,
   TICK_MS,
   MIN_ABILITY_CD_MS,
   type RoundSetup,
@@ -220,6 +222,132 @@ for (const esperado of BASELINE) {
   }
 }
 
+// -------------------------------------- P2.5 (e2.4) — determinismo do bot heurístico
+
+/**
+ * P2.5 — "mesma seed + mesma versão de bot → mesmo hash" — provado por DOIS testes, não um
+ * (`docs/architecture-e2.md` §3.3). Os blocos acima cobrem o `dummy`, que é fixture congelado;
+ * estes cobrem o `heuristic`, que é o bot que a matriz de winrate de `e2.5` vai usar.
+ *
+ *   (1) autoconsistência com o bot NO LAÇO — pega N-1 (relógio de parede), N-2 (ordem de
+ *       iteração de container) e qualquer não-determinismo interno da política;
+ *   (2) replay SEM bot — pega N-3 (escrita acidental em `view`, que `Omit` não impede porque é
+ *       raso) e prova o isolamento de stream que é o coração de D-08: se o bot sacasse de
+ *       `world.rng`, a simulação teria consumido números diferentes na execução sem bot.
+ *
+ * **Sem valores de referência fixos, e isso é decisão, não omissão** (§3.3): a política do bot
+ * ainda vai mudar em `e2.5`/`e2.6`, e um hash congelado aqui reprovaria toda mudança legítima de
+ * `PRESET_ARNES` — churn de baseline sem informação nenhuma. O que se exige é IGUALDADE ENTRE
+ * EXECUÇÕES, que é invariante sob qualquer política. Os hashes do `dummy` (BASELINE /
+ * BUILD_BASELINE) continuam sendo os únicos números congelados do arquivo, e este bloco não
+ * encosta neles.
+ */
+const heuristicDriver: RoundDriver = (s) => {
+  // o estado por time nasce UMA vez por partida, com a seed da partida — é exatamente para isto
+  // que `RoundDriver` é fábrica (`harness.ts`, e2.0) e não uma função de tick direta.
+  // Ordem time 0 → time 1, a mesma do `dummyDriver`: a concatenação é contrato (§3.2).
+  const b0 = createBot(s.seed, 0)
+  const b1 = createBot(s.seed, 1)
+  return (view) => [...botCommands(view, b0), ...botCommands(view, b1)]
+}
+
+function rodarHeuristic(seed: number): RoundResult {
+  return runRound(CHARS, setup(seed), heuristicDriver)
+}
+
+/** Mesma forma de `rodarComGravacao` acima, com o driver do `heuristic` no lugar do `dummy`. */
+function rodarHeuristicComGravacao(seed: number): { hash: string; gravados: Command[] } {
+  const gravados: Command[] = []
+  const gravador: RoundDriver = (s) => {
+    const driver = heuristicDriver(s)
+    return (view) => {
+      const cmds = driver(view)
+      gravados.push(...cmds)
+      return cmds
+    }
+  }
+  return { hash: runRound(CHARS, setup(seed), gravador).hash, gravados }
+}
+
+const desviosBotAuto: string[] = []
+const desviosBotReplay: string[] = []
+for (const { seed } of BASELINE) {
+  const a = rodarHeuristic(seed)
+  const b = rodarHeuristic(seed)
+  if (a.hash !== b.hash || a.ticks !== b.ticks) {
+    desviosBotAuto.push(
+      `  ✗ bot autoconsistência seed ${seed}: ${a.hash}@${a.ticks} != ${b.hash}@${b.ticks}`,
+    )
+  }
+
+  const { hash: hashComBot, gravados } = rodarHeuristicComGravacao(seed)
+  // a gravação é observação pura; se ela mudar o resultado, o replay abaixo estaria comparando
+  // contra uma partida que não é a que rodou, e passaria verde pelo motivo errado
+  if (hashComBot !== a.hash) {
+    desviosBotAuto.push(
+      `  ✗ bot gravação seed ${seed}: gravar alterou a partida (${hashComBot} != ${a.hash})`,
+    )
+  }
+
+  // `rodarReplay` é reusado tal e qual: ele não conhece bot nenhum — recebe seed e linha do
+  // tempo de comandos. Que ele sirva aos dois drivers sem uma linha de mudança é a evidência de
+  // que o replay de RF-41 depende só de (seed, comandos), como P4.3 exige.
+  const hashReplay = rodarReplay(seed, gravados)
+  if (hashComBot !== hashReplay) {
+    desviosBotReplay.push(
+      `  ✗ bot replay seed ${seed}: hash com bot ${hashComBot} != hash replay ${hashReplay}`,
+    )
+  }
+}
+
+// ------------------------------------------ guarda de BOT-001 (gate de e2.3, MEDIUM)
+
+/**
+ * Prova em runtime a correção de BOT-001 (`heuristic.ts`, `porValorEsperado`): um `VE` corrompido
+ * (`NaN`) tem que resultar em NÃO CASTAR. Antes da correção o limiar fechava com
+ * `melhorVE < limiar`, e `NaN < limiar` é `false` — o candidato era ACEITO, e o bot castava
+ * exatamente onde a política manda não castar. A geometria continua sã nesse caminho (o `NaN`
+ * entra por `peso`, a partir de `hp`), então o comando saía finito e a rede de finitude de
+ * `emitir` não o pegava.
+ *
+ * O cenário é o mínimo que discrimina: mundo recém-criado (as duas bolas do time 0 decidem no
+ * tick 0, nenhuma ult carregada) com os inimigos a ~575px — longe demais para qualquer slot
+ * cruzar o limiar. Medido nesta story: com `hp` são, 0 comandos; com `hp = NaN` nos inimigos,
+ * 2 comandos ANTES da correção e 0 DEPOIS.
+ *
+ * A checagem do caso são é canário, não redundância: se um dia o roster ou as posições de largada
+ * mudarem a ponto de o bot castar no tick 0 com `hp` normal, o caso corrompido passaria verde sem
+ * provar nada, e este teste teria morrido em silêncio — o modo de falha mais caro de um teste.
+ */
+const SEED_GUARDA = 9001
+
+function comandosNoTick0(corromperHpInimigo: boolean): number {
+  const world = createWorld(CHARS, setup(SEED_GUARDA))
+  if (corromperHpInimigo) {
+    for (const b of world.balls) if (b.team === 1) b.hp = NaN
+  }
+  return botCommands(world, createBot(SEED_GUARDA, 0)).length
+}
+
+function guardaBot001(): string[] {
+  const problemas: string[] = []
+  const sao = comandosNoTick0(false)
+  const corrompido = comandosNoTick0(true)
+  if (sao !== 0) {
+    problemas.push(
+      `  ✗ BOT-001: o cenário perdeu poder discriminante — com hp são o bot já emite ${sao} comando(s) no tick 0`,
+    )
+  }
+  if (corrompido !== 0) {
+    problemas.push(
+      `  ✗ BOT-001: com hp = NaN o bot emitiu ${corrompido} comando(s) — o limiar voltou a aceitar VE = NaN`,
+    )
+  }
+  return problemas
+}
+
+const problemasBot001 = guardaBot001()
+
 // ---------------------------------------------- Pilar 3 (debt.6) — Camada 1: estática
 
 /**
@@ -364,6 +492,18 @@ if (desviosReplay.length) for (const d of desviosReplay) console.log(d)
 console.log(
   `replay         ${desviosReplay.length === 0 ? `✓ ok — ${BASELINE.length} seeds reproduzidas sem bot` : `✗ ${desviosReplay.length} desvio(s)`}`,
 )
+if (desviosBotAuto.length) for (const d of desviosBotAuto) console.log(d)
+console.log(
+  `bot dupla exec ${desviosBotAuto.length === 0 ? `✓ ok — ${BASELINE.length} seeds com heuristic dão hash igual entre execuções` : `✗ ${desviosBotAuto.length} desvio(s)`}`,
+)
+if (desviosBotReplay.length) for (const d of desviosBotReplay) console.log(d)
+console.log(
+  `bot replay     ${desviosBotReplay.length === 0 ? `✓ ok — ${BASELINE.length} seeds do heuristic reproduzidas sem bot` : `✗ ${desviosBotReplay.length} desvio(s)`}`,
+)
+if (problemasBot001.length) for (const p of problemasBot001) console.log(p)
+console.log(
+  `guarda BOT-001 ${problemasBot001.length === 0 ? '✓ ok — VE = NaN não casta (limiar no sentido positivo)' : `✗ ${problemasBot001.length} problema(s)`}`,
+)
 console.log('')
 for (const linha of tabelaJanelas) console.log(linha)
 console.log('')
@@ -397,5 +537,27 @@ if (desviosReplay.length > 0) {
   throw new Error(
     `replay divergiu em ${desviosReplay.length} seed(s) — o bot pode estar consumindo ` +
       'world.rng, quebrando o isolamento de stream (D-08). Ver regra 3 de architecture.md §5.2.',
+  )
+}
+if (desviosBotAuto.length > 0) {
+  throw new Error(
+    `P2.5 (autoconsistência) falhou em ${desviosBotAuto.length} caso(s) — o bot heurístico não é ` +
+      'determinístico entre execuções. Suspeitos, nesta ordem: relógio de parede em bot/ (N-1), ' +
+      'iteração sobre BotState.porBola (N-2), ou Math.random fora do stream próprio. ' +
+      'Ver architecture-e2.md §3.3 — NÃO construir o arnês de balanceamento sobre isto.',
+  )
+}
+if (desviosBotReplay.length > 0) {
+  throw new Error(
+    `P2.5 (replay) falhou em ${desviosBotReplay.length} seed(s) — a partida do heuristic não se ` +
+      'reproduz a partir de (seed, comandos). Suspeitos: o bot escreveu em view (N-3) ou sacou de ' +
+      'world.rng, quebrando o isolamento de stream de D-08. Ver architecture-e2.md §3.3.',
+  )
+}
+if (problemasBot001.length > 0) {
+  throw new Error(
+    `guarda de BOT-001 falhou em ${problemasBot001.length} ponto(s) — ver acima. O limiar de ` +
+      '`porValorEsperado` precisa estar escrito no sentido positivo (`!(melhorVE >= limiar)`), ' +
+      'senão um VE = NaN faz o bot castar onde a política manda não castar.',
   )
 }
