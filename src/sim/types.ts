@@ -209,6 +209,35 @@ export interface AtkDef {
   onHit?: (ctx: SimCtx, self: Ball, target: Ball) => void
 }
 
+/**
+ * e2.2 — geometria grosseira da habilidade, declarada como DADO em vez de viver dentro do
+ * closure `cast`. Precedente direto: `contactWindows` (debt.6) tirou do closure um fato que
+ * outra camada precisava ler. Aqui a "outra camada" é o bot heurístico, não o motor.
+ *
+ * Vocabulário FECHADO. Estender é ato deliberado, revisado, não acidente.
+ *
+ * Duas invariantes que fazem este tipo valer a pena:
+ * - descreve apenas FORMA (raio, velocidade, duração) e NUNCA dano — dano é o número volátil,
+ *   e é onde uma segunda fonte de verdade divergiria da primeira (a lição de C3);
+ * - `sim/` nunca lê este campo. A direção permitida continua sendo `bot → sim` (RF-19).
+ *   `desc`, `name`, `icon` e `color` já são exatamente isto: dado no tipo do personagem,
+ *   consumido por outra camada.
+ *
+ * Não confundir com `Aim` acima: `Aim` é a mira resolvida de um cast (runtime); `AimSpec` é a
+ * descrição estática do que o slot entrega.
+ */
+export type AimSpec =
+  /** área no ponto mirado, com atraso opcional (Tremor; Convergência) */
+  | { kind: 'burst';     radius: number; delayMs: number }
+  /** projétil na direção mirada (Lâmina Fantasma) */
+  | { kind: 'raio';      radius: number; speed: number; ms: number }
+  /** investida do PRÓPRIO corpo que causa dano por contato (Impacto Sísmico) */
+  | { kind: 'dash';      speed: number; ms: number }
+  /** reposicionamento sem dano (Deslize) */
+  | { kind: 'reposicao'; speed: number }
+  /** o bot não sabe avaliar isto (Muralha). Declarar é obrigatório; omitir, não */
+  | { kind: 'utilidade' }
+
 export interface AbilityDef {
   id: string
   name: string
@@ -216,6 +245,13 @@ export interface AbilityDef {
   cd: number
   minRange: number
   maxRange: number
+  /**
+   * e2.2 — OBRIGATÓRIO, não opcional. Esquecer é provável (6 personagens novos na Fase 5) e o
+   * modo de falha é silencioso: o bot nunca casta a habilidade, o personagem perde parte do kit,
+   * e a matriz de balanceamento reporta isso como fraqueza do personagem. `{ kind: 'utilidade' }`
+   * é o escape hatch — mas tem que ser digitado. Mesma lição de `debt.6`.
+   */
+  aim: AimSpec
   cast: (ctx: SimCtx, self: Ball, aim: Aim) => void
 }
 
@@ -232,6 +268,8 @@ export interface UltDef {
   icon: string
   minRange: number
   maxRange: number
+  /** e2.2 — OBRIGATÓRIO, mesma regra de `AbilityDef.aim`. Ver AimSpec. */
+  aim: AimSpec
   cast: (ctx: SimCtx, self: Ball, aim: Aim) => void
 }
 

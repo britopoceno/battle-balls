@@ -46,6 +46,9 @@ export const golem: CharDef = {
       cd: 7000,
       minRange: 140,
       maxRange: 280,
+      // e2.2 — investida do próprio corpo. speed 900 = o multiplicador aplicado a aim abaixo;
+      // ms 450 = a duração da janela declarada em contactWindows (debt.6).
+      aim: { kind: 'dash', speed: 900, ms: 450 },
       cast: (ctx, self, aim) => {
         self.vx = aim.dx * 900
         self.vy = aim.dy * 900
@@ -62,6 +65,9 @@ export const golem: CharDef = {
       cd: 8000,
       minRange: 70,
       maxRange: 230,
+      // e2.2 — área no ponto mirado. radius 110 = `raio` abaixo; delayMs 0 porque o efeito é
+      // resolvido no mesmo tick do cast (a zona de 280ms é só marca visual, sem dano).
+      aim: { kind: 'burst', radius: 110, delayMs: 0 },
       cast: (ctx, self, aim) => {
         const raio = 110
         for (const e of ctx.enemies(self)) {
@@ -120,6 +126,9 @@ export const golem: CharDef = {
     icon: '🩸',
     minRange: 70,
     maxRange: 240,
+    // e2.2 — parede: burstDmg 0, nenhum dano em lugar nenhum. O bot não sabe avaliar controle
+    // de espaço, e declarar isso é obrigatório justamente para que a omissão não passe calada.
+    aim: { kind: 'utilidade' },
     cast: (ctx, self, aim) => {
       ctx.spawnZone({
         kind: 'wall',

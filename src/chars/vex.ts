@@ -50,6 +50,9 @@ export const vex: CharDef = {
       cd: 6000,
       minRange: 200,
       maxRange: 200,
+      // e2.2 — projétil que atravessa. radius 9 e speed 620 são os do spawnProjectile abaixo;
+      // ms 950 é o tempo de vida (expiresAt = now + 950).
+      aim: { kind: 'raio', radius: 9, speed: 620, ms: 950 },
       cast: (ctx, self, aim) => {
         ctx.spawnProjectile({
           ownerId: self.id,
@@ -76,6 +79,9 @@ export const vex: CharDef = {
       cd: 5000,
       minRange: 190,
       maxRange: 320,
+      // e2.2 — reposicionamento puro: nenhum `damage` no cast, só fx.amp no próprio caster.
+      // É exatamente o slot que um estimador genérico erraria (mergulharia o Vex no inimigo).
+      aim: { kind: 'reposicao', speed: 1000 },
       cast: (ctx, self, aim) => {
         self.vx = aim.dx * 1000
         self.vy = aim.dy * 1000
@@ -113,6 +119,9 @@ export const vex: CharDef = {
     icon: '💥',
     minRange: 80,
     maxRange: 300,
+    // e2.2 — vórtice que detona no fim. radius 190 = o raio da zona; delayMs 1300 = o atraso até
+    // o burst (expiresAt = now + 1300). É o único slot do roster com atraso diferente de zero.
+    aim: { kind: 'burst', radius: 190, delayMs: 1300 },
     cast: (ctx, self, aim) => {
       ctx.spawnZone({
         kind: 'vortex',

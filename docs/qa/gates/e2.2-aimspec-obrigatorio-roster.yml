@@ -1,0 +1,292 @@
+schema: 1
+story: 'e2.2'
+gate: CONCERNS
+status_reason: >-
+  Os 9 ACs passam sob verificação independente: bateria própria de 6 testes negativos em sandbox
+  prova que `aim` é estrutural (e que a união é FECHADA e rejeita campo de dano por construção), e o
+  golden hash foi recomputado por script próprio contra a tabela de architecture.md §6.0, 5/5.
+  CONCERNS não é defeito da entrega — é que esta story publica, pela primeira vez, números que um
+  estimador genérico vai consumir, e um deles (`dash.speed`) não significa o que a fórmula de §2.3
+  assume.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: 'working tree sobre commit:4835863'
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      `npm run check` rodado por mim — `tsc --noEmit`, sem saída, EXIT=0. A obrigatoriedade não foi
+      aceita do relato: reproduzida do zero numa CÓPIA do projeto em scratchpad (src/ + tsconfig +
+      junction para node_modules), sem tocar um byte de `src/` real. Ver `negative_battery` abaixo.
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` rodado por mim — determinismo, golden hash (5 seeds), build coverage (5
+      variantes), replay (5 seeds) e Pilar 3, todos verdes, EXIT=0. Verificado ADEMAIS que as tabelas
+      `BASELINE` e `BUILD_BASELINE` de `determinism.ts` são valor a valor idênticas às de
+      `git show HEAD:src/tools/determinism.ts` — o "✓ ok" não está se comparando com um baseline
+      movido pela entrega não-commitada de e2.0. E recomputado independentemente: ver
+      `independent_verification.golden_hash_recomputed`.
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      `src/sim/types.ts:229-238` — 5 variantes, mesmos `kind`, mesmos campos, mesma ordem do bloco
+      literal de `docs/architecture-e2.md` §2.2 (linhas 189-199), conferido termo a termo. O
+      comentário de cabeçalho carrega a frase "Vocabulário FECHADO. Estender é ato deliberado,
+      revisado, não acidente" e — acréscimo útil do @dev, não pedido pela story — distingue
+      explicitamente `AimSpec` (descrição estática do slot) de `Aim` (mira resolvida em runtime,
+      `types.ts:192`), que é a confusão que o leitor seguinte cometeria.
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      `types.ts:254` (`AbilityDef`) e `types.ts:272` (`UltDef`), ambos `aim: AimSpec` sem `?`.
+      Provado nos DOIS caminhos por teste negativo próprio: N1 (remover `aim` de `golem.tremor`) →
+      `src/chars/golem.ts(61,5): error TS2741` apontando o literal do slot certo; N6 (remover de
+      `vex.convergencia`, que é `UltDef`) → `src/chars/vex.ts(113,3): error TS2741`. Arquivo, linha e
+      slot corretos nos dois.
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Os 6 valores conferidos contra o `cast` real (não contra a arquitetura) E medidos num mundo em
+      execução — ver `independent_verification.geometria_medida`. Zero desvios.
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      Mais forte do que a story afirma. A story alega "nenhum campo de dano foi adicionado"; o que
+      medi é que o tipo **impede** que ele seja adicionado no ponto de declaração: N4
+      (`aim: { kind: 'burst', radius: 110, delayMs: 0, dmg: 18 }`) → `TS2353: Object literal may only
+      specify known properties, and 'dmg' does not exist in type`. AC 6 é imposto pelo compilador, não
+      por disciplina. Confirmado também que `burstDmg: 24` (vex.convergencia) e `dmg: 14`
+      (vex.lamina) ficaram de fora do `aim`, como manda §2.2 item 3.
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      Grep próprio em `src/` por `[Aa]im`: dentro de `src/sim/`, as únicas ocorrências são as duas
+      declarações de campo (`types.ts:254`, `:272`), o comentário de `:271`, a interface `Aim`
+      (`:192`) e o PARÂMETRO chamado `aim` das assinaturas de `cast` — que é `Aim`, tipo diferente.
+      `world.ts` toca em `Aim` só via `aimFrom` (`world.ts:417,437,444`), nunca lê `ability.aim`.
+      Nenhum leitor em `client/`, `tools/` ou `bot/`. A invariante `bot → sim` nasce verdadeira.
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      `git diff --stat -- src/` → `golem.ts +9`, `vex.ts +9`, `types.ts +38`, **0 remoções** nos três.
+      `world.ts` (+23/-1, e2.1) e `determinism.ts` (e2.0), mais `harness.ts` (?? , e2.0) são as duas
+      stories Done ainda não commitadas — lidos e confirmados sem uma única menção a `aim`.
+  - id: AC9
+    verdict: PASS
+    evidence: >-
+      O delta em `sim/` é exclusivamente declaração de tipo e um campo de dado; nenhuma linha de
+      import nova, nenhum `Math.random`, nenhuma dependência de `chars/`, `bot/` ou `client/`.
+
+negative_battery:
+  metodo: >-
+    Cópia completa de `src/` + `tsconfig.json` + `vite.config.ts` para scratchpad, com junction para
+    `node_modules`. Todas as perturbações e reversões dentro da cópia — `src/` real nunca tocado
+    (confirmado por `git diff --stat` idêntico antes e depois). Controle: sandbox intacto → EXIT=0.
+    ARMADILHA REGISTRADA: a primeira execução invocou `./node_modules/.bin/tsc` via `execSync`, que no
+    Windows cai em `cmd.exe` e falha com `'.' não é reconhecido` — dando EXIT=1 nos 6 casos E no
+    controle. Perturbação "detectada" por motivo errado é o modo de falha clássico de bateria
+    negativa; só o controle limpo separa um do outro.
+  casos:
+    - id: N1
+      perturbacao: "remover `aim` de golem.tremor (AbilityDef)"
+      resultado: "src/chars/golem.ts(61,5): TS2741 Property 'aim' is missing ... but required in type 'AbilityDef'"
+      cobre: 'AC 4 — obrigatoriedade, caminho AbilityDef; arquivo e linha do slot certo'
+    - id: N2
+      perturbacao: "aim: { kind: 'burst', radius: 110 } (sem delayMs)"
+      resultado: "src/chars/golem.ts(70,7): TS2322 Property 'delayMs' is missing"
+      cobre: 'a variante exige TODOS os seus campos — declarar meio `aim` não passa'
+    - id: N3
+      perturbacao: "aim: { kind: 'explosao', ... } (kind inventado)"
+      resultado: "src/chars/golem.ts(70,14): TS2322 Type '\"explosao\"' is not assignable to type '\"burst\" | \"raio\" | \"dash\" | \"reposicao\" | \"utilidade\"'"
+      cobre: 'AC 3 — a união é de fato FECHADA; o erro ainda enumera o vocabulário permitido'
+    - id: N4
+      perturbacao: "acrescentar `dmg: 18` dentro do aim"
+      resultado: "src/chars/golem.ts(70,54): TS2353 ... 'dmg' does not exist in type"
+      cobre: 'AC 6 — dano é rejeitado por construção, não por convenção'
+    - id: N5
+      perturbacao: "acrescentar `speed: 900` a um `burst` (campo de outra variante)"
+      resultado: "src/chars/golem.ts(70,54): TS2353 ... 'speed' does not exist in type"
+      cobre: 'as variantes não se contaminam entre si'
+    - id: N6
+      perturbacao: "remover `aim` de vex.convergencia (UltDef)"
+      resultado: "src/chars/vex.ts(113,3): TS2741 ... but required in type 'UltDef'"
+      cobre: 'AC 4 no segundo caminho — o teste do @dev cobriu os dois, este confirma independentemente'
+  reversao: 'golem.ts e vex.ts do sandbox byte-idênticos ao original após a bateria; controle final EXIT=0'
+  limitacao_registrada: >-
+    N4/N5 dependem do excess property check, que só vale para literais de objeto. Um
+    `const x = { kind: 'burst' as const, radius: 110, delayMs: 0, dmg: 18 }` atribuído depois a `aim`
+    passaria. Irrelevante hoje (o roster declara literais inline) e insuficiente para virar issue: pôr
+    dano DENTRO de `AimSpec` continua exigindo editar `types.ts`, que é revisão humana por desenho.
+
+independent_verification:
+  golden_hash_recomputed:
+    detail: >-
+      5 hashes recomputados por `runRound` (harness.ts) chamado do meu próprio script, contra a tabela
+      de `docs/architecture.md` §6.0 transcrita à mão das linhas 709-715 — não lida de
+      `determinism.ts`.
+    result: '96de1201/753/1 · f66a7416/961/0 · a8db9c28/830/0 · cb77dbe0/831/0 · 6aede2d9/1168/-1 — 5/5'
+    nota: >-
+      Primeira tentativa reimplementou o driver `dummy` do zero e deu 0/5. Não era regressão: o driver
+      real é `dummyCommands(view,0) ++ dummyCommands(view,1)` de `src/bot/dummy.ts`, com regras de
+      `mag`/faixa próprias. Registrado porque a conclusão apressada seria "o hash mudou".
+  neutralidade_de_runtime_estrutural:
+    detail: >-
+      Prova mais forte que a coincidência de hash. Grep em TODO o `src/` por `Object.keys`,
+      `Object.entries`, `Object.assign`, `JSON.stringify` e `for (const x in ...)`: **zero
+      ocorrências**. Grep por spread de def/ability/ult: zero. Todo acesso a `AbilityDef`/`UltDef` é
+      por campo nomeado (`world.ts:432,441`, `dummy.ts:35,40`, `render.ts:254,333,340,366`,
+      `main.ts:97`, `determinism.ts:302`). Logo, acrescentar uma propriedade aos 6 literais não pode
+      alterar nenhum comportamento — nem por enumeração, nem por serialização. O hash idêntico é
+      consequência, não evidência isolada.
+  geometria_medida:
+    detail: >-
+      Os 6 slots executados num mundo real (script próprio importando `world.ts`/`chars/index.ts`),
+      medindo o que o `cast` de fato produz, em vez de reler o literal.
+    resultados:
+      - 'golem.sismico → dash: vx = 900 no tick do cast; janela de contato em contactWindows[0].ms = 450. Deslocamento medido: 111.6px @150ms · 247.4px @450ms · 401.6px @1500ms'
+      - 'golem.tremor → zona radius 110, duração 263ms, burstDmg 0, pull 0 (marca visual confirmada); dano aplicado no mesmo tick do cast ⇒ delayMs 0 correto'
+      - 'golem.muralha → zone kind wall, burstDmg 0, pull 0, 5s ⇒ utilidade correto'
+      - 'vex.lamina → projétil radius 9, vx 620, vida 950ms, alcance medido 578.7px (velocidade efetiva 609px/s = 98,2% do declarado — projétil não sofre drag)'
+      - 'vex.deslize → vx = 1000, nenhum ctx.damage no cast (só fx.amp no próprio caster) ⇒ reposicao correto'
+      - 'vex.convergencia → zone vortex radius 190, expira em 1300ms, burstDmg 24 e pull 2600 CORRETAMENTE fora do aim'
+    veredito: 'os 6 valores são transcrição fiel do código. Zero desvios.'
+
+top_issues:
+  - id: 'ARCH-001'
+    severity: medium
+    category: architecture
+    finding: >-
+      `dash.speed: 900` é a velocidade INICIAL, e a fórmula de §2.3 usa `tImpacto = d / S.speed` — a
+      mesma linha para `dash` e para `raio`. Medido: em 450ms o Golem percorre 247,4px, ou seja
+      velocidade média de 550px/s, **61% dos 900 declarados** (a velocidade cai a 326px/s no fim da
+      janela, por `drag: 0.3` em `physics.ts:18`). Consequência numérica: para um alvo a 280px
+      (`maxRange` do slot), §2.3 calcula `tImpacto` = 311ms enquanto o percurso real leva ~580ms —
+      subestimativa de ~45%. Como `sigma = |v_e| * (tImpacto + LAG_S) + ...`, `sigma` sai baixo demais
+      e `pAcerto` alto demais: o bot casta o dash com mais confiança do que a geometria sustenta.
+      O ponto que importa não é o erro em si, é a ASSIMETRIA: a mesma fórmula é 98,2% fiel para o
+      `raio` do Vex (projétil, sem drag, medido 609 contra 620px/s) e ~61% fiel para o dash do Golem.
+      Um número — não um ramo de código — reintroduz por baixo o confundidor pelo qual a opção C foi
+      rejeitada em §2.2: o bot joga sistematicamente diferente de um personagem para o outro, e a
+      matriz de winrate reporta isso como desequilíbrio de personagem.
+    scope_verdict: >-
+      Fora de escopo desta story, corretamente. O AC 5 manda declarar a tabela de §2.2 literalmente e
+      900 É o número do código (`golem.ts:53`). Não há nada a corrigir em `golem.ts`. O @dev
+      identificou a nuance sozinho (Completion Note 2) e a registrou como nota de interpretação; o
+      que este gate acrescenta é a MEDIÇÃO e a assimetria entre personagens, que transformam a nota
+      numa restrição verificável.
+    suggested_action: >-
+      e2.3 DEVE tratar isto explicitamente, e o gate de e2.3 deve exigir evidência. O bot já tem o
+      dado necessário sem tocar em `sim/`: `self.stat.drag` está no `WorldView`, e o percurso é
+      fechado (`v(t) = v0 · drag^t`). Duas saídas aceitáveis: (i) derivar a velocidade efetiva média
+      na janela em vez de usar `S.speed` cru; ou (ii) manter a fórmula e registrar no gate de e2.3 o
+      viés medido por personagem, para que §6.3 o imprima ao lado da matriz. O que NÃO é aceitável é
+      passar sem decisão — §8.3 já nomeia viés de competência do bot como o risco de maior
+      consequência do arnês.
+  - id: 'REQ-001'
+    severity: low
+    category: requirements
+    finding: >-
+      Três dos doze números declarados não têm consumidor nenhum na política escrita: §2.3 não lê
+      `dash.ms` nem `raio.ms` (o `ms` não aparece em nenhuma linha do estimador), e a política de
+      `reposicao` em §2.4 não lê `speed` (é direção pura: fugir ou aproximar). São campos declarados,
+      duplicados do `cast`, e que ninguém vai ler — que é exatamente a categoria que apodrece sem
+      alarme. É também o que rebaixa o item (1) do relato do @dev de "risco" para "risco adiado":
+      a duplicação `sismico.aim.ms` × `contactWindows[0].ms` não tem leitor hoje nem em e2.3.
+    scope_verdict: >-
+      Nada a fazer nesta story: o AC 3 prescreve o vocabulário literal de §2.2, campos inclusive, e
+      remover campo seria inventar desenho. Observação para o @architect.
+    suggested_action: >-
+      @architect: ou §2.3 passa a usar `ms` (o caminho natural é limitar o alcance do dash pela
+      janela — ver ARCH-002), ou fica registrado em §2.2 que `ms` existe para a AUDITORIA de §6.3, não
+      para o estimador. As duas respostas servem; a ausência de resposta é que deixa três números sem
+      dono.
+  - id: 'MNT-001'
+    severity: low
+    category: maintainability
+    finding: >-
+      O ponteiro cruzado que o @dev deixou é de mão única. `golem.ts:50` diz "ms 450 = a duração da
+      janela declarada em contactWindows (debt.6)" — mas o comentário de `contactWindows`
+      (`golem.ts:115-117`) fala em "dentro dos 450ms de duração do dash" e **não menciona `aim`**.
+      Quem vai divergir é justamente quem edita `contactWindows` para rebalancear o dash: essa pessoa
+      não passa por `golem.ts:50`. Vale registrar que a duplicação NÃO é exclusiva do sismico — os
+      doze números dos seis `aim` são todos cópias de literais do mesmo arquivo (`radius: 110` ×
+      `const raio = 110`, `speed: 620` × `vx: aim.dx * 620`, etc.). A diferença do sismico é só a
+      distância: 67 linhas e outra construção, contra 2-10 linhas dentro do próprio `cast`.
+    scope_verdict: >-
+      LOW, não Should-Fix — e a decisão é deliberada. Exigir comentário cruzado só neste caso, quando
+      os outros onze números têm a mesma natureza, cria segurança falsa e não é mecanismo: um
+      comentário apodrece igual ao número que ele guarda. O mecanismo já está desenhado (§2.2 e §6.3:
+      a auditoria imprime as duas tabelas lado a lado) e é o que resolve os doze de uma vez. Não
+      justifica reabrir e2.2.
+    suggested_action: >-
+      (a) Barato e imediato: a próxima story que legitimamente tocar `golem.ts` acrescenta ao
+      comentário de `contactWindows` a mão inversa ("ver `aim` do slot sismico — mesmo 450"). Uma
+      linha, sem story própria. (b) O que de fato resolve: e2.5 deve levar a auditoria de roster de
+      §6.3 como AC EXPLÍCITO, imprimindo `aim` ao lado de `contactWindows`, com falha (não aviso) se
+      `dash.ms != contactWindows[source].ms`. Enquanto §6.3 não existir, nada detecta divergência nos
+      doze números.
+  - id: 'ARCH-002'
+    severity: low
+    category: architecture
+    finding: >-
+      Fato de roster que só ficou visível porque a geometria virou dado. A janela de dano por contato
+      do dash dura 450ms, e nesse intervalo o Golem percorre 247px (medido) — mas o slot declara
+      `maxRange: 280`. Os ~12% finais do alcance declarado do Impacto Sísmico são percurso SEM dano de
+      contato: o Golem chega a 280px por volta de 580ms, ~130ms depois de a janela fechar. O bot de
+      e2.3 vai ler `minRange: 140 / maxRange: 280` junto de `kind: 'dash'` e tratar os 280px como
+      alcance útil.
+    scope_verdict: >-
+      Anterior a esta story (vem de debt.6 e do balanceamento original) e fora do escopo dela — e2.2
+      não pode alterar `maxRange`. Registrado aqui porque este gate é o primeiro ponto do projeto em
+      que os dois números ficaram lado a lado.
+    suggested_action: >-
+      @architect/@po: decidir se é bug de balanceamento (alinhar `maxRange` ao alcance efetivo) ou
+      desenho intencional (o dash reposiciona além do alcance de dano). Em qualquer caso, a auditoria
+      de §6.3 deve imprimir alcance efetivo do dash ao lado de `maxRange` — é uma divisão, e é
+      exatamente o tipo de incoerência que a matriz de balanceamento reportaria como fraqueza do
+      Golem sem explicar o motivo.
+
+design_decisions_reviewed:
+  - decision: 'teste negativo do @dev feito com os SEIS slots ausentes, antes de declarar qualquer um'
+    verdict: 'correto, e mais forte do que a story pedia'
+    rationale: >-
+      A Task 5 pedia remover `aim` de UM slot. Fazer com os seis provou de uma vez que o `tsc`
+      enumera arquivo, linha e slot para cada um — que é a propriedade que importa para a Fase 5 (6
+      personagens novos). Reproduzi independentemente em sandbox e cobri a metade que faltava: o @dev
+      provou "o campo é exigido"; faltava provar que a UNIÃO é fechada (N3), que cada variante exige
+      seus campos (N2) e que dano é rejeitado por construção (N4/N5).
+  - decision: 'declarar `tremor.delayMs: 0` apesar da zona visual de 280ms'
+    verdict: 'correto, e confirmado por medição'
+    rationale: >-
+      Medido num mundo real: a zona nasce com `burstDmg: 0` e `pull: 0`, e o `ctx.damage` do Tremor
+      roda no mesmo tick do cast. `delayMs` descreve quando o DANO chega, não quanto tempo o desenho
+      fica na tela. Transcrever 280 seria o erro; o comentário de `golem.ts:68-69` já diz por quê.
+  - decision: 'comentário separando `AimSpec` de `Aim` no cabeçalho do tipo'
+    verdict: 'acréscimo bom, não pedido pela story'
+    rationale: >-
+      `Aim` (types.ts:192) e o parâmetro `aim` de todo `cast` convivem no mesmo arquivo com o campo
+      novo. Sem essa nota, o próximo leitor confunde os dois — e o grep de AC 7 fica ruidoso
+      justamente por causa dessa homonímia.
+  - decision: 'CodeRabbit pre-commit não executado'
+    verdict: 'aceito — limitação de máquina, não omissão'
+    rationale: >-
+      WSL ausente nesta máquina (mesma constatação de debt.*, e2.0 e e2.1). Substituído por
+      verificação independente que, nesta story, cobre mais do que o CodeRabbit cobriria: bateria de
+      6 testes negativos de tipo, medição em runtime dos 6 slots e prova estrutural de neutralidade.
+
+blocking: false
+blocks_downstream: false
+downstream_note: >-
+  e2.3 está liberada e agora tem duas entradas obrigatórias vindas deste gate: ARCH-001
+  (`dash.speed` é inicial, não média — assimetria medida de 61% × 98,2% entre Golem e Vex) e REQ-001
+  (`ms` e `reposicao.speed` sem consumidor na política escrita). e2.5 herda MNT-001 e ARCH-002: a
+  auditoria de roster de §6.3 é o único mecanismo desenhado que detecta divergência entre `aim` e o
+  `cast`, e precisa ser AC explícito, não intenção.
+push_recommendation: >-
+  Liberado para @devops considerar no push. Empacotamento: o working tree acumula TRÊS stories Done e
+  não commitadas — e2.0 (`tools/harness.ts` novo + `tools/determinism.ts`), e2.1 (`sim/world.ts`) e
+  e2.2 (`sim/types.ts`, `chars/golem.ts`, `chars/vex.ts`). São três commits distintos; não misturar.
+
+waiver: { active: false }
