@@ -1,21 +1,29 @@
 import { CHARS, ROSTER } from '../chars/index.ts'
 import { BOT_VERSION, PRESET_ARNES, botCommands, createBot } from '../bot/heuristic.ts'
 import { SUDDEN_DEATH_MS, TICK_MS, type PickSetup, type RoundSetup } from '../sim/world.ts'
+import { SIGMA_MAX, SIGMA_MIN, STAT_KEYS, type StatKey } from '../sim/stats.ts'
 import type { AimSpec, CharDef, WorldView } from '../sim/types.ts'
 import { runRound, type RoundDriver } from './harness.ts'
+import { NOMES_PACOTE, PACOTES, type NomePacote, type Pacote } from './packages.ts'
 
 /**
  * ARNÊS DE BALANCEAMENTO — o CLI (`npm run balance`). Implementa `docs/architecture-e2.md`
- * §4 (confronto, matriz, troca de lado, IC), §6.2 (flags) e §6.3 (saída). Story `e2.5` (§4) — a
- * mutação de stats e o protocolo A/B de §5 são o passo seguinte do plano de construção (§7).
+ * §4 (confronto, matriz, troca de lado, IC), §5 (mutação de stats e protocolo A/B), §6.2 (flags)
+ * e §6.3 (saída). Stories `e2.5` (§4) e `e2.6` (§5).
  *
  * FRONTEIRA (§6.1): este arquivo **orquestra** e não contém regra de simulação. Toda partida
  * passa por `harness.runRound`; não existe aqui um segundo laço de partida, e nem pode existir —
  * é o motivo pelo qual `e2.0` extraiu `runRound`. Se este arquivo tivesse a própria cópia do
  * laço, o golden hash estaria protegendo um jogo e a matriz medindo outro, sem nenhum aviso.
  *
+ * O mesmo vale para a mutação de `e2.6`: ela entra por `PickSetup.itemBonus` (§5.1), o campo que
+ * a loja da Fase 3 vai usar, e não por um "modo mutante" próprio. Um caminho de código exclusivo
+ * de teste é um caminho que a produção nunca exercita — e um mutante que escapasse de
+ * `SIGMA_MIN`/`SIGMA_MAX` provaria a detecção de uma configuração que o jogo real não produz.
+ *
  * O que este arquivo NÃO faz, por decisão de escopo registrada (§6.4 e a própria story):
  *   - draft, loja, economia, Bo5, telemetria de jogadores reais → Fases 3 e 5
+ *   - a regra de AGREGAÇÃO do gatilho do Risco #1b entre personagens → Fase 5 (§9/R-04)
  * Flags de §6.2 que ainda não existissem seriam REJEITADAS com mensagem própria em vez de
  * ignoradas em silêncio (`FUTURAS`): quem as digitasse estaria pedindo uma medição que este
  * binário não sabe fazer, e receber uma tabela sem mutação nenhuma seria pior do que um erro.
@@ -50,6 +58,13 @@ const TETO_SEEDS_POR_DECIDIDA = 20
 
 // ---------------------------------------------------------------- flags (§6.2)
 
+/** Uma mutação por campo, já validada: `--mutacao=vex:dmg:+0.30` (§5.2, para P2.2). */
+interface Mutacao {
+  charId: string
+  key: StatKey
+  valor: number
+}
+
 interface Flags {
   n: number
   seed: number
@@ -57,6 +72,9 @@ interface Flags {
   repetePersonagem: boolean
   comp: string[]
   json: boolean
+  pacote: NomePacote | null
+  alvo: string | null
+  mutacoes: Mutacao[]
 }
 
 const USO = `
@@ -67,7 +85,14 @@ npm run balance -- [flags]
   --plano=espelho-ab      espelho-ab | pares-de-composicao
   --repete-personagem     no plano de pares, permite o mesmo personagem nos dois times
   --comp=golem,vex        composição do plano espelho-ab
+  --pacote=nenhum         ${NOMES_PACOTE.join(' | ')}                  (§5.2 — protocolo A/B)
+  --alvo=vex              a qual personagem do lado modificado o pacote se aplica
+  --mutacao=vex:dmg:+0.30 mutação por campo, para P2.2 (repetível; mesmo personagem)
   --json                  saída legível por máquina, além da tabela
+
+  --pacote e --mutacao disparam o protocolo A/B de §5.3: a MESMA composição dos dois lados, o
+  pacote em UM personagem de UM lado, metade das seeds com o pacote no time 0 e metade no time 1.
+  O winrate reportado é o do LADO MODIFICADO sobre as rodadas decididas.
 `.trim()
 
 /**
@@ -76,9 +101,6 @@ npm run balance -- [flags]
  * parece boa: quem digitasse a flag estaria pedindo uma medição que este binário não sabe fazer.
  */
 const FUTURAS: Record<string, string> = {
-  '--pacote': 'os pacotes de §5.2 e o protocolo A/B de §5.3 chegam no passo 6 do plano (§7)',
-  '--alvo': 'o alvo do pacote só existe junto do protocolo A/B de §5.3 (passo 6 do plano, §7)',
-  '--mutacao': 'a mutação por campo de §5.2 chega no passo 6 do plano de construção (§7)',
   '--risco-1b': 'a bateria do Risco #1b (§5.4) chega no passo 7 do plano de construção (§7)',
 }
 
@@ -90,6 +112,9 @@ function lerFlags(argv: readonly string[]): Flags {
     repetePersonagem: false,
     comp: ['golem', 'vex'],
     json: false,
+    pacote: null,
+    alvo: null,
+    mutacoes: [],
   }
 
   for (const arg of argv) {
@@ -126,6 +151,32 @@ function lerFlags(argv: readonly string[]): Flags {
           if (!CHARS[id]) falhar(`--comp: personagem desconhecido '${id}'. Roster: ${ROSTER.map((c) => c.id).join(', ')}.`)
         }
         break
+      case '--pacote': {
+        // AC 2 / §5.2: NUNCA campo cru aqui. Só nomes definidos em `packages.ts` — é a decisão
+        // de arquitetura que impede a armadilha do sinal (`drag: −0.20` mede o oposto do que o
+        // Risco #1b quer saber, com 10pp e troca de sinal de diferença).
+        if (!(NOMES_PACOTE as readonly string[]).includes(valor)) {
+          falhar(
+            `--pacote desconhecido: '${valor}'. Pacotes de §5.2: ${NOMES_PACOTE.join(', ')}. ` +
+              'O CLI não aceita campo cru em --pacote de propósito (a armadilha do sinal de §5.2); ' +
+              'para mutar um campo nomeado, use --mutacao=personagem:campo:valor.',
+          )
+        }
+        f.pacote = valor as NomePacote
+        break
+      }
+      case '--alvo':
+        if (!CHARS[valor]) {
+          falhar(`--alvo: personagem desconhecido '${valor}'. Roster: ${ROSTER.map((c) => c.id).join(', ')}.`)
+        }
+        f.alvo = valor
+        break
+      case '--mutacao': {
+        const m = analisarMutacao(valor)
+        if (typeof m === 'string') falhar(`--mutacao: ${m}`)
+        f.mutacoes.push(m)
+        break
+      }
       case '--json':
         f.json = true
         break
@@ -139,7 +190,98 @@ function lerFlags(argv: readonly string[]): Flags {
     }
   }
 
+  // --------- coerência entre as flags de mutação (§5.3: UM pacote, UM personagem, UM lado)
+
+  if (f.pacote !== null && f.mutacoes.length > 0) {
+    falhar(
+      '--pacote e --mutacao juntos: são os dois mecanismos de §5.2 e medir os dois de uma vez ' +
+        'produziria uma linha da tabela A/B que não sabe dizer de quem é o delta. Rode um por vez.',
+    )
+  }
+
+  const charsMutados = [...new Set(f.mutacoes.map((m) => m.charId))]
+  if (charsMutados.length > 1) {
+    falhar(
+      `--mutacao aponta para ${charsMutados.length} personagens (${charsMutados.join(', ')}). ` +
+        'O protocolo A/B de §5.3 aplica a mutação a UM personagem de UM lado — mutar dois de uma ' +
+        'vez mede a soma dos dois efeitos e o delta deixa de ser atribuível.',
+    )
+  }
+  if (charsMutados.length === 1) {
+    const alvoDaMutacao = charsMutados[0]!
+    if (f.alvo !== null && f.alvo !== alvoDaMutacao) {
+      falhar(`--alvo='${f.alvo}' contradiz o personagem nomeado em --mutacao ('${alvoDaMutacao}').`)
+    }
+    f.alvo = alvoDaMutacao
+  }
+
+  if (f.alvo !== null && f.pacote === null && f.mutacoes.length === 0) {
+    falhar('--alvo sozinho não mede nada: ele diz A QUEM aplicar, e nenhum --pacote/--mutacao foi pedido.')
+  }
+  // Sem --alvo explícito o pacote vai no primeiro personagem da composição. É escolha arbitrária
+  // e por isso o alvo aparece em COLUNA PRÓPRIA na tabela A/B — nunca implícito na saída.
+  if (f.alvo === null && f.pacote !== null) f.alvo = f.comp[0] ?? null
+
+  if (f.alvo !== null && !f.comp.includes(f.alvo)) {
+    falhar(
+      `--alvo='${f.alvo}' não está na composição ${`[${f.comp.join(',')}]`}. O pacote seria aplicado ` +
+        'a ninguém e o protocolo A/B mediria duas composições idênticas, reportando ~50% como se ' +
+        'fosse controle negativo — falha silenciosa, e é o modo de falha que §5.3 existe para evitar.',
+    )
+  }
+
   return f
+}
+
+/**
+ * Parser de `personagem:campo:valor` — a BORDA onde entrada de usuário vira número que entra na
+ * simulação. Devolve a `Mutacao` ou a MENSAGEM de erro (string), em vez de abortar: assim o
+ * autoteste permanente exercita o caminho de recusa sem derrubar o processo.
+ *
+ * REL-002 (`e2.1`) / BOT-006 e BOT-007 (`e2.4`/`e2.5`), entrada obrigatória desta story: é AQUI
+ * que `NaN`/`Infinity` têm de morrer. O gate de `e2.5` mediu o que acontece quando não morrem —
+ * `{dmg: NaN}` em `PickSetup.itemBonus` faz "% sem ativa" saltar para 50,0% porque todo cast
+ * decidido por valor esperado é suprimido (`NaN >= limiar` é `false`), e `{dmg: Infinity}` produz
+ * um sinal só PARCIAL. Ou seja: o detector de kit morto não é justificativa suficiente para a
+ * validação, porque ele não pega tudo (`{maxHp: NaN}` não aparece nele de forma alguma). A
+ * validação tem de estar na raiz, e a raiz é esta função.
+ *
+ * As duas checagens são complementares, não redundantes: o formato decimal barra `abc`, `0x10` e
+ * a string vazia com mensagem específica; `Number.isFinite` barra `1e400`, que PASSA no formato
+ * decimal e vale `Infinity`. Remover qualquer uma das duas abre um buraco diferente.
+ */
+const FORMATO_VALOR = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+
+function analisarMutacao(bruto: string): Mutacao | string {
+  const partes = bruto.split(':')
+  if (partes.length !== 3) {
+    return `'${bruto}' não tem a forma personagem:campo:valor (ex.: vex:dmg:+0.30).`
+  }
+  const charId = partes[0]!.trim()
+  const campo = partes[1]!.trim()
+  const valorBruto = partes[2]!.trim()
+
+  if (!CHARS[charId]) {
+    return `personagem desconhecido '${charId}'. Roster: ${ROSTER.map((c) => c.id).join(', ')}.`
+  }
+  if (!(STAT_KEYS as readonly string[]).includes(campo)) {
+    return `campo desconhecido '${campo}'. Campos de stats.ts: ${STAT_KEYS.join(', ')}.`
+  }
+  if (valorBruto.length === 0 || !FORMATO_VALOR.test(valorBruto)) {
+    return (
+      `valor '${partes[2]}' não é um número decimal (ex.: +0.30, -0.2, 0.5). ` +
+      'Um valor não numérico viraria NaN dentro de itemBonus e o bot pararia de castar em silêncio ' +
+      '(BOT-006): a rodada continua rodando e a tabela sai plausível e errada.'
+    )
+  }
+  const valor = Number(valorBruto)
+  if (!Number.isFinite(valor)) {
+    return (
+      `valor '${partes[2]}' não é finito (Number → ${valor}). ` +
+      'Bônus não finito em itemBonus propaga para stat e contamina a partida inteira sem erro.'
+    )
+  }
+  return { charId, key: campo as StatKey, valor }
 }
 
 function inteiroPositivo(nome: string, valor: string): number {
@@ -666,6 +808,33 @@ function autotesteTrocaDeLado(): string[] {
   conferir('(3) n_seeds com empate', t3.res.nSeeds === 15, `n_seeds ${t3.res.nSeeds} != 15`)
   conferir('(3) seeds', contiguas(t3.seeds, 1), `seeds não contíguas: ${t3.seeds.join(',')}`)
 
+  /*
+   * (3b) QA-E25-001 (gate de `e2.5`, entrada obrigatória desta story). O IC que vai para a tabela
+   * tem de ser calculado sobre as DECIDIDAS, nunca sobre as seeds. O gate perturbou `icPp(nDec)`
+   * para `icPp(nSeeds)` em `rodarConfronto` e as 14 asserções de então passaram — porque o
+   * autoteste de veredito chama `vereditoDe(w, n)` direto e nunca através de `rodarConfronto`, de
+   * forma que o par (winrate, n) que de fato é impresso nunca era conferido.
+   *
+   * O erro subestima o IC, que é a direção que transforma `? inconclusivo` em `✓ dentro`: a
+   * aprovação falsa que o 3º estado existe para impedir. E §8.7 diz que a força da mutação muda a
+   * taxa de empate — que é exatamente a variável que separa `n_dec` de `n_seeds`. Esta story
+   * introduz a mutação, então a fiação passa a ser exercitada de verdade.
+   *
+   * O ensaio (3) já produz o estado discriminante (n_dec 10, n_seeds 15): a segunda metade da
+   * asserção é o que impede a guarda de passar por coincidência quando não houver empate nenhum.
+   */
+  conferir(
+    '(3b) IC sobre decididas',
+    t3.res.icPp === icPp(t3.res.nDec) && icPp(t3.res.nDec) !== icPp(t3.res.nSeeds),
+    `icPp ${t3.res.icPp} · icPp(n_dec ${t3.res.nDec}) ${icPp(t3.res.nDec)} · icPp(n_seeds ${t3.res.nSeeds}) ${icPp(t3.res.nSeeds)} — ` +
+      'RF-48 e §4.3 são sobre decididas; o IC calculado sobre seeds é otimista e aprova o que não deveria',
+  )
+  conferir(
+    '(3b) veredito sobre decididas',
+    t3.res.veredito === vereditoDe(t3.res.winrate, t3.res.nDec),
+    `veredito '${t3.res.veredito}' != vereditoDe(${t3.res.winrate}, ${t3.res.nDec})`,
+  )
+
   // (4) espelho é imune à troca — reporta o viés bruto
   const t4 = ensaio(espelho, 7, 40, () => 0)
   conferir('(4) espelho', t4.res.winrate === 1, `winrate ${t4.res.winrate} != 1 — o espelho passou pela troca de lado e cancelou o viés`)
@@ -676,6 +845,26 @@ function autotesteTrocaDeLado(): string[] {
   const t5 = ensaio(duelo, 7, 1, () => 0)
   conferir('(5) n ímpar', t5.res.nDec === 8, `n_dec ${t5.res.nDec} != 8 — metades desiguais quebram o cancelamento`)
   conferir('(5) n ímpar winrate', t5.res.winrate === 0.5, `winrate ${t5.res.winrate} != 0.5`)
+
+  /*
+   * (6) QA-E25-002 (gate de `e2.5`, entrada obrigatória desta story): o TETO de seeds. O gate
+   * removeu `gastas < teto` da condição de `rodarFase` e tudo passou, porque com o roster e o bot
+   * de hoje o teto nunca é alcançado. Esta story é a que muda isso: §8.7 registra que a força da
+   * mutação interage com a taxa de empate, e uma mutação que empurre a rodada para o empate é
+   * exatamente o cenário em que o teto começa a valer. Um CLI que gira para sempre sem diagnóstico
+   * é o mesmo modo de falha que o gate de `e2.0` registrou para `runRound` sem `!world.over`.
+   */
+  const t6 = ensaio(duelo, 10, 1, () => -1)
+  const seedsEsperadas = 2 * Math.ceil(10 / 2) * TETO_SEEDS_POR_DECIDIDA
+  conferir('(6) teto: truncado', t6.res.truncado, 'todas as rodadas empataram e o CLI não marcou truncado')
+  conferir('(6) teto: n_dec', t6.res.nDec === 0, `n_dec ${t6.res.nDec} != 0`)
+  conferir(
+    '(6) teto: n_seeds',
+    t6.res.nSeeds === seedsEsperadas,
+    `n_seeds ${t6.res.nSeeds} != ${seedsEsperadas} (2 metades × ceil(n/2) × ${TETO_SEEDS_POR_DECIDIDA}) — ` +
+      'sem o teto, este ensaio não terminaria',
+  )
+  conferir('(6) teto: veredito', t6.res.veredito === 'inconclusivo', `veredito '${t6.res.veredito}' com n_dec 0`)
 
   return problemas
 }
@@ -828,6 +1017,305 @@ function autotesteVeredito(): string[] {
   return problemas
 }
 
+// ---------------------------------------------------------------- protocolo A/B (§5.1, §5.2, §5.3)
+
+/**
+ * A composição do LADO MODIFICADO: a mesma composição do outro lado, com o bônus de item aplicado
+ * a **um** personagem — o primeiro que casar com o alvo.
+ *
+ * "O primeiro" e não "todos" é a diferença entre medir o efeito de um item e medir o efeito de
+ * dois: com `--comp=golem,golem --alvo=golem`, aplicar aos dois duplicaria a mutação e o delta
+ * deixaria de ser o delta de um pacote. §5.3 é literal — "pacote P aplicado a UM personagem de UM
+ * lado".
+ *
+ * `itemBonus` é sempre ATRIBUÍDO, inclusive quando o pacote é vazio (`nenhum`). É o que faz P2.3
+ * ser um controle negativo de verdade: o lado "modificado" percorre exatamente o mesmo caminho de
+ * código — `addPartialBonus` + `recomputeStats` no `makeBall` — com um pacote de zero campos. Se
+ * o caminho injetasse assimetria por conta própria, o controle acusaria.
+ */
+function composicaoModificada(
+  ids: readonly string[],
+  alvo: string,
+  bonus: Pacote,
+  rotuloBonus: string,
+): Composicao {
+  let aplicado = false
+  const picks: PickSetup[] = ids.map((charId) => {
+    if (!aplicado && charId === alvo) {
+      aplicado = true
+      return { charId, abilityIndex: ABILITY_INDEX, passiveIndex: PASSIVE_INDEX, itemBonus: { ...bonus } }
+    }
+    return { charId, abilityIndex: ABILITY_INDEX, passiveIndex: PASSIVE_INDEX }
+  })
+  if (!aplicado) falhar(`alvo '${alvo}' não está na composição [${ids.join(',')}]`)
+  return { rotulo: `[${ids.join(',')}]{${rotuloBonus}→${alvo}}`, picks }
+}
+
+interface AvisoClamp {
+  charId: string
+  key: StatKey
+  pedido: number
+  passiva: number
+  efetivo: number
+}
+
+/**
+ * AVISO DE CLAMP — AC 7, §5.1 ("corolário", e é uma falha silenciosa que vale prevenir).
+ *
+ * `+30%` de `dmg` está confortável dentro de `ΣMAX.dmg = +1.00`; um `+150%` seria silenciosamente
+ * reduzido a `+100%` e o teste de mutante que voltasse negativo seria lido como falha do arnês,
+ * quando foi o clamp funcionando. O aviso existe para que essa leitura errada não seja possível.
+ *
+ * O que é conferido, exatamente: a soma `bonusItem + bonusPassive` contra `SIGMA_MIN/SIGMA_MAX` —
+ * que é a mesma expressão de `recomputeStats` (`stats.ts`, `clamp(b.bonusPassive[k] +
+ * b.bonusItem[k], …)`). A parcela da passiva entra porque o teto é sobre a SOMA, não sobre o item:
+ * um item de `−0.20` em `knockbackTaken` no Golem (passiva Âncora, `−0.60`) soma `−0.80` e é
+ * cortado em `−0.75`, mesmo sendo o item, sozinho, folgado.
+ *
+ * Dois limites conhecidos, escritos porque o silêncio sobre eles seria o mesmo defeito que este
+ * aviso combate:
+ *   (a) os clamps ABSOLUTOS de `recomputeStats` (`ABS_MIN`/`ABS_MAX`, sobre o stat DERIVADO) não
+ *       são visíveis daqui — as tabelas são privadas em `stats.ts` e esta story não altera `sim/`.
+ *       Conferido à mão para os pacotes de §5.2 e o roster de hoje: `drag` 0.30→0.36 (golem) e
+ *       0.22→0.264 (vex) contra `ABS_MAX.drag = 0.6`; `mass` 3.2→3.84 e 0.9→1.08 sem teto
+ *       absoluto; `dmg` não tem clamp absoluto. Nenhum pacote de §5.2 encosta neles.
+ *   (b) bônus de passiva somados em `onTick` (`ctx.addBonus`) são condicionais em runtime e não
+ *       declarativos — o único do roster é `fantasma` (Vex, `maxSpeed +0.25` abaixo de 40% de HP)
+ *       e ele é `passiveIndex 1`, enquanto o CLI fixa `passiveIndex 0`. Fora do alcance hoje.
+ */
+function conferirClamp(charId: string, bonus: Pacote): AvisoClamp[] {
+  const passiva = CHARS[charId]?.passives[PASSIVE_INDEX]?.bonus ?? {}
+  const avisos: AvisoClamp[] = []
+  for (const k of STAT_KEYS) {
+    const item = bonus[k]
+    if (item === undefined) continue
+    const p = passiva[k] ?? 0
+    const soma = item + p
+    const cortado = soma < SIGMA_MIN[k] ? SIGMA_MIN[k] : soma > SIGMA_MAX[k] ? SIGMA_MAX[k] : soma
+    if (cortado !== soma) avisos.push({ charId, key: k, pedido: soma, passiva: p, efetivo: cortado })
+  }
+  return avisos
+}
+
+interface LinhaAb {
+  /** o que foi aplicado, como aparece na coluna `pacote` */
+  rotulo: string
+  alvo: string
+  /** true na linha da linha-base (pacote vazio) — a referência do delta */
+  controle: boolean
+  res: ResultadoConfronto
+  /** em pontos percentuais, contra o controle; `null` na própria linha de controle */
+  deltaPp: number | null
+  avisos: readonly AvisoClamp[]
+  nota: string
+}
+
+/**
+ * Uma linha do protocolo A/B: composição `C` dos dois lados, pacote em um personagem de um lado,
+ * troca de lado obrigatória. É `rodarConfronto` de `e2.5` sem uma linha nova de contabilidade —
+ * de propósito. A troca de metades, o denominador de decididas, o teto de seeds e o IC já estão
+ * lá, verificados por cinco ensaios roteirizados; duplicá-los aqui criaria a segunda contabilidade
+ * que §6.1 existe para impedir.
+ */
+function rodarAb(
+  comp: readonly string[],
+  alvo: string,
+  bonus: Pacote,
+  rotuloBonus: string,
+  n: number,
+  seedBase: number,
+  inst: Instrumentacao,
+): { res: ResultadoConfronto; avisos: AvisoClamp[] } {
+  const modificada = composicaoModificada(comp, alvo, bonus, rotuloBonus)
+  const base = composicao(comp)
+  const conf = confronto(modificada, base)
+  if (conf.espelho) {
+    falhar(
+      'protocolo A/B: o lado modificado ficou indistinguível da linha-base, então a troca de lado ' +
+        'não rodaria e o winrate reportado seria o viés de lado bruto disfarçado de efeito do pacote.',
+    )
+  }
+  return { res: rodarConfronto(conf, n, seedBase, inst), avisos: conferirClamp(alvo, bonus) }
+}
+
+/** `dmg +0.30 · mass -0.20` — a forma curta que vai para a coluna `pacote` e para o rótulo. */
+function descreverBonus(bonus: Pacote): string {
+  const partes: string[] = []
+  for (const k of STAT_KEYS) {
+    const v = bonus[k]
+    if (v === undefined) continue
+    partes.push(`${k} ${v >= 0 ? '+' : ''}${v.toFixed(2)}`)
+  }
+  return partes.length > 0 ? partes.join(' · ') : 'vazio'
+}
+
+/**
+ * AUTOTESTE dos pacotes de §5.2. Roda em toda execução, e a asserção que importa é a do SINAL do
+ * `drag`: `fisico.drag` tem de ser POSITIVO. `drag` é a fração de velocidade RETIDA por segundo,
+ * então "Lixa = menos atrito" é `drag` maior, e a leitura literal do PRD (`−0.20`) mediria o
+ * oposto — §5.2 mediu a diferença: +4,32pp contra −5,90pp, dez pontos e troca de sinal, o
+ * suficiente para disparar o gatilho do Risco #1b que a leitura correta não dispara.
+ *
+ * Um comentário sozinho não segura isso: quem "corrigir" o arquivo pelo texto do PRD apaga o
+ * comentário junto. O autoteste não some com a edição.
+ */
+function autotestePacotes(): string[] {
+  const problemas: string[] = []
+  const chaves = Object.keys(PACOTES).sort()
+  const nomes = [...NOMES_PACOTE].sort()
+  if (chaves.join(',') !== nomes.join(',')) {
+    problemas.push(`  ✗ pacotes: NOMES_PACOTE [${nomes.join(',')}] != chaves de PACOTES [${chaves.join(',')}]`)
+  }
+
+  if (!(PACOTES.fisico.drag > 0)) {
+    problemas.push(
+      `  ✗ pacotes: fisico.drag = ${PACOTES.fisico.drag} — drag é a fração RETIDA (Lixa = −atrito = ` +
+        '+drag). Sinal negativo mede o oposto do Risco #1b (§5.2: +4,32pp vira −5,90pp).',
+    )
+  }
+  if (PACOTES.fisico.mass !== 0.2 || PACOTES.fisico.drag !== 0.2) {
+    problemas.push(`  ✗ pacotes: fisico != { mass: +0.20, drag: +0.20 } (§5.2, literal)`)
+  }
+  if (PACOTES.dano.dmg !== 0.2) problemas.push(`  ✗ pacotes: dano != { dmg: +0.20 } (§5.2, literal)`)
+  if (Object.keys(PACOTES.nenhum).length !== 0) {
+    problemas.push('  ✗ pacotes: nenhum precisa ser vazio — é o controle negativo de P2.3')
+  }
+
+  // REL-002 na fonte do dado: um pacote com campo inválido ou valor não finito seria uma segunda
+  // porta para o mesmo defeito que `analisarMutacao` fecha na entrada do usuário.
+  for (const nome of NOMES_PACOTE) {
+    for (const [k, v] of Object.entries(PACOTES[nome])) {
+      if (!(STAT_KEYS as readonly string[]).includes(k)) problemas.push(`  ✗ pacotes: ${nome}.${k} não é campo de stats.ts`)
+      if (!Number.isFinite(v)) problemas.push(`  ✗ pacotes: ${nome}.${k} = ${v} não é finito`)
+    }
+  }
+  return problemas
+}
+
+/**
+ * AUTOTESTE do parser de `--mutacao` — a borda de REL-002/BOT-006/BOT-007. Cada caso de recusa
+ * aqui é uma forma de `NaN`/`Infinity`/lixo entrar em `itemBonus` e contaminar a simulação sem
+ * erro: a rodada roda até o fim, a tabela sai plausível, e o número está errado.
+ */
+const CASOS_MUTACAO: { entrada: string; aceita: boolean; porque: string }[] = [
+  { entrada: 'vex:dmg:+0.30', aceita: true, porque: 'a forma de P2.2, literal de §5.2' },
+  { entrada: 'vex:dmg:-0.25', aceita: true, porque: 'sinal negativo é legítimo (mutante para baixo)' },
+  { entrada: 'golem:mass:0.2', aceita: true, porque: 'sinal explícito é opcional' },
+  { entrada: 'vex:dmg:abc', aceita: false, porque: 'Number("abc") = NaN — o caso que a missão nomeia' },
+  { entrada: 'vex:dmg:', aceita: false, porque: 'Number("") = 0: aceitaria em silêncio uma mutação nula' },
+  { entrada: 'vex:dmg:NaN', aceita: false, porque: 'NaN escrito por extenso' },
+  { entrada: 'vex:dmg:Infinity', aceita: false, porque: 'Infinity escrito por extenso' },
+  { entrada: 'vex:dmg:1e400', aceita: false, porque: 'passa no formato decimal e vale Infinity — só isFinite pega' },
+  { entrada: 'vex:dmg:0x10', aceita: false, porque: 'Number("0x10") = 16, finito e nada a ver com o pedido' },
+  { entrada: 'vex:zzz:+0.3', aceita: false, porque: 'campo fora de STAT_KEYS' },
+  { entrada: 'zzz:dmg:+0.3', aceita: false, porque: 'personagem fora do roster' },
+  { entrada: 'vex:dmg', aceita: false, porque: 'forma incompleta' },
+  { entrada: 'vex:dmg:0.1:0.2', aceita: false, porque: 'campos demais' },
+]
+
+function autotesteMutacao(): string[] {
+  const problemas: string[] = []
+  for (const c of CASOS_MUTACAO) {
+    const r = analisarMutacao(c.entrada)
+    const aceitou = typeof r !== 'string'
+    if (aceitou !== c.aceita) {
+      problemas.push(
+        `  ✗ --mutacao '${c.entrada}': esperado ${c.aceita ? 'ACEITAR' : 'RECUSAR'}, ` +
+          `obtido ${aceitou ? 'ACEITOU' : `RECUSOU (${r as string})`} — ${c.porque}`,
+      )
+    }
+    if (aceitou && !Number.isFinite((r as Mutacao).valor)) {
+      problemas.push(`  ✗ --mutacao '${c.entrada}': aceitou com valor não finito`)
+    }
+  }
+  const ok = analisarMutacao('vex:dmg:+0.30')
+  if (typeof ok === 'string' || ok.charId !== 'vex' || ok.key !== 'dmg' || ok.valor !== 0.3) {
+    problemas.push(`  ✗ --mutacao: 'vex:dmg:+0.30' não foi lido como { vex, dmg, 0.3 }`)
+  }
+  return problemas
+}
+
+/**
+ * AUTOTESTE da montagem do protocolo A/B — "pacote P aplicado a UM personagem de UM lado" (§5.3).
+ *
+ * As três formas de errar isto produzem uma tabela de aparência normal e um número errado:
+ * aplicar aos dois personagens do lado modificado (mede o dobro da mutação), aplicar aos dois
+ * lados (mede zero e "confirma" qualquer controle negativo), e deixar os dois rótulos iguais (o
+ * confronto vira espelho, a troca de lado não roda e o viés de lado bruto sai disfarçado de efeito
+ * do pacote). Nenhuma das três é visível na saída.
+ */
+function autotesteAb(): string[] {
+  const problemas: string[] = []
+  const conferir = (rotulo: string, ok: boolean, detalhe: string): void => {
+    if (!ok) problemas.push(`  ✗ protocolo A/B — ${rotulo}: ${detalhe}`)
+  }
+  const comBonus = (c: Composicao): number => c.picks.filter((p) => p.itemBonus !== undefined).length
+
+  // composição homogênea: é o caso em que "o primeiro que casar" e "todos que casarem" divergem
+  const dupla = composicaoModificada(['golem', 'golem'], 'golem', { dmg: 0.2 }, 'dano')
+  conferir('(1) um personagem só', comBonus(dupla) === 1, `${comBonus(dupla)} de ${dupla.picks.length} picks receberam itemBonus`)
+  conferir('(1) o primeiro', dupla.picks[0]?.itemBonus?.dmg === 0.2, JSON.stringify(dupla.picks[0]))
+
+  const base = composicao(['golem', 'golem'])
+  conferir('(2) o outro lado é intocado', comBonus(base) === 0, `${comBonus(base)} picks da linha-base receberam itemBonus`)
+
+  const conf = confronto(dupla, base)
+  conferir('(3) não é espelho', !conf.espelho, 'os rótulos coincidiram e a troca de lado (§4.2) não rodaria')
+
+  // o controle negativo percorre o MESMO caminho de código, com pacote vazio (P2.3)
+  const vazio = composicaoModificada(['golem', 'vex'], 'vex', PACOTES.nenhum, 'nenhum')
+  conferir('(4) controle atribui itemBonus vazio', comBonus(vazio) === 1, `${comBonus(vazio)} picks com itemBonus`)
+  conferir(
+    '(4) controle no alvo certo',
+    vazio.picks[1]?.charId === 'vex' && vazio.picks[1]?.itemBonus !== undefined && vazio.picks[0]?.itemBonus === undefined,
+    JSON.stringify(vazio.picks),
+  )
+  conferir('(4) controle é vazio', Object.keys(vazio.picks[1]?.itemBonus ?? { x: 1 }).length === 0, JSON.stringify(vazio.picks[1]?.itemBonus))
+
+  return problemas
+}
+
+/**
+ * AUTOTESTE do aviso de clamp (AC 7). Os dois sentidos, e o caso que só existe porque o teto é
+ * sobre a SOMA com a passiva.
+ */
+function autotesteClamp(): string[] {
+  const problemas: string[] = []
+  const conferir = (rotulo: string, ok: boolean, detalhe: string): void => {
+    if (!ok) problemas.push(`  ✗ clamp — ${rotulo}: ${detalhe}`)
+  }
+
+  const dentro = conferirClamp('vex', { dmg: 0.3 })
+  conferir('(1) +30% dmg não é cortado', dentro.length === 0, `avisou ${dentro.length} vez(es) (ΣMAX.dmg = ${SIGMA_MAX.dmg})`)
+
+  // §5.1, literal: "um +150% seria silenciosamente reduzido para +100%".
+  const acima = conferirClamp('vex', { dmg: 1.5 })
+  conferir('(2) +150% dmg é cortado', acima.length === 1 && acima[0]!.efetivo === SIGMA_MAX.dmg, JSON.stringify(acima))
+
+  const abaixo = conferirClamp('vex', { dmg: -0.9 })
+  conferir('(3) −90% dmg é cortado embaixo', abaixo.length === 1 && abaixo[0]!.efetivo === SIGMA_MIN.dmg, JSON.stringify(abaixo))
+
+  // Golem, passiva Âncora: knockbackTaken −0.60 declarado. Item de −0.20 soma −0.80 < ΣMIN −0.75.
+  const comPassiva = conferirClamp('golem', { knockbackTaken: -0.2 })
+  conferir(
+    '(4) soma com a passiva',
+    comPassiva.length === 1 && comPassiva[0]!.pedido === -0.8 && comPassiva[0]!.efetivo === SIGMA_MIN.knockbackTaken,
+    `${JSON.stringify(comPassiva)} — o teto é sobre bonusItem + bonusPassive, não sobre o item`,
+  )
+  const semPassiva = conferirClamp('vex', { knockbackTaken: -0.2 })
+  conferir('(5) mesmo item sem a passiva não corta', semPassiva.length === 0, JSON.stringify(semPassiva))
+
+  // Os três pacotes de §5.2 aplicados ao roster de hoje: nenhum pode encostar no teto, senão os
+  // números de §5.4 estariam medindo um pacote diferente do que o nome diz.
+  for (const nome of NOMES_PACOTE) {
+    for (const c of ROSTER) {
+      const a = conferirClamp(c.id, PACOTES[nome])
+      conferir(`(6) pacote ${nome} em ${c.id}`, a.length === 0, `cortado: ${JSON.stringify(a)}`)
+    }
+  }
+  return problemas
+}
+
 // ---------------------------------------------------------------- auditoria de roster (§6.3)
 
 interface SlotAuditado {
@@ -945,6 +1433,11 @@ function pct(x: number, casas = 2): string {
   return `${(x * 100).toFixed(casas)}%`
 }
 
+/** `+1.00` / `-0.75` — o sinal explícito importa quando o número é um bônus (§5.2). */
+function sinal(x: number): string {
+  return `${x >= 0 ? '+' : ''}${x.toFixed(2)}`
+}
+
 function seg(ticks: number): string {
   return `${((ticks * TICK_MS) / 1000).toFixed(1)}s`
 }
@@ -977,13 +1470,17 @@ const problemasAutoteste = [
   ...autotestePares(),
   ...autotesteTrocaDeLado(),
   ...autotesteFechar(),
+  ...autotestePacotes(),
+  ...autotesteMutacao(),
+  ...autotesteAb(),
+  ...autotesteClamp(),
 ]
 if (problemasAutoteste.length > 0) {
   for (const p of problemasAutoteste) console.error(p)
   console.error(
-    'erro: os invariantes de §4.1/§4.4/§4.5 não fecham — nenhuma matriz é reportável assim, ' +
-      'porque todos esses erros (veredito, contagem de células, contadores da instrumentação) ' +
-      'são invisíveis na tabela impressa.',
+    'erro: os invariantes de §4.1/§4.4/§4.5/§5.1/§5.2 não fecham — nenhuma matriz é reportável ' +
+      'assim, porque todos esses erros (veredito, contagem de células, sinal do pacote, ' +
+      'entrada não finita) são invisíveis na tabela impressa.',
   )
   sair(1)
   throw new Error('autotestes reprovaram')
@@ -1052,6 +1549,132 @@ if (espelhos.length === 0) {
 }
 console.log('')
 
+// --------------------------------------------------- protocolo A/B (§5.3) — P2.2 e P2.3
+
+/**
+ * O protocolo só roda quando alguém o pede (`--pacote` ou `--mutacao`). Duas linhas no máximo:
+ *
+ *   1. LINHA-BASE — a mesma composição dos dois lados, `itemBonus: {}` no lado "modificado". É o
+ *      controle negativo de P2.3 e é a referência do delta. §5.4 mede 49,23% com `dummy`, e o que
+ *      ela prova é que o pipeline não injeta assimetria por conta própria.
+ *   2. TRATAMENTO — o pacote/mutação pedido. Só existe se o pacote não for vazio; pedir
+ *      `--pacote=nenhum` é pedir a linha 1 e mais nada, e imprimir a mesma medição duas vezes com
+ *      dois rótulos diferentes seria fabricar um delta de ruído puro.
+ *
+ * As duas linhas usam a MESMA seed base, de propósito: o delta é a diferença entre duas medições
+ * sobre a mesma sequência de partidas, o que cancela boa parte da variância comum. (As metades de
+ * cada linha continuam consumindo seeds distintas entre si, como §4.2/§4.3 especificam — o
+ * pareamento é entre LINHAS, não dentro de uma.)
+ */
+const linhasAb: LinhaAb[] = []
+
+if (flags.pacote !== null || flags.mutacoes.length > 0) {
+  const alvo = flags.alvo!
+  const bonusPedido: Partial<Record<StatKey, number>> = {}
+  let rotuloPedido: string
+  let notaTratamento: string
+
+  if (flags.pacote !== null) {
+    Object.assign(bonusPedido, PACOTES[flags.pacote])
+    rotuloPedido = flags.pacote
+    notaTratamento = `#1b — pacote '${flags.pacote}' (§5.2)`
+  } else {
+    for (const m of flags.mutacoes) bonusPedido[m.key] = (bonusPedido[m.key] ?? 0) + m.valor
+    rotuloPedido = descreverBonus(bonusPedido)
+    notaTratamento = 'P2.2 — teste de mutante'
+  }
+
+  const vazio = Object.keys(bonusPedido).length === 0
+  const nControle = flags.n
+
+  console.error(`  … protocolo A/B: linha-base (pacote vazio) — controle negativo P2.3`)
+  const ctrl = rodarAb(flags.comp, alvo, {}, 'nenhum', nControle, flags.seed, inst)
+  linhasAb.push({
+    rotulo: 'nenhum',
+    alvo,
+    controle: true,
+    res: ctrl.res,
+    deltaPp: null,
+    avisos: ctrl.avisos,
+    nota: vazio ? 'P2.3 — controle negativo (pacote vazio)' : 'linha-base (§5.3)',
+  })
+
+  if (!vazio) {
+    console.error(`  … protocolo A/B: ${rotuloPedido} → ${alvo}`)
+    const trat = rodarAb(flags.comp, alvo, bonusPedido, rotuloPedido, flags.n, flags.seed, inst)
+    linhasAb.push({
+      rotulo: rotuloPedido,
+      alvo,
+      controle: false,
+      res: trat.res,
+      deltaPp: (trat.res.winrate - ctrl.res.winrate) * 100,
+      avisos: trat.avisos,
+      nota: notaTratamento,
+    })
+  }
+}
+
+if (linhasAb.length > 0) {
+  const larguraPacote = Math.max(16, ...linhasAb.map((l) => l.rotulo.length))
+  console.log(`protocolo A/B — composição [${flags.comp.join(',')}] · linha-base espelhada (§5.3)`)
+  console.log(
+    `${'pacote'.padEnd(larguraPacote)} ${'alvo'.padEnd(7)} ${'n_dec'.padStart(6)} ${'n_seeds'.padStart(7)}  ` +
+      `${'winrate'.padStart(7)}      IC     delta   veredito`,
+  )
+  for (const l of linhasAb) {
+    const delta = l.deltaPp === null ? '—' : `${l.deltaPp >= 0 ? '+' : ''}${l.deltaPp.toFixed(2)}pp`
+    console.log(
+      `${l.rotulo.padEnd(larguraPacote)} ${l.alvo.padEnd(7)} ${String(l.res.nDec).padStart(6)} ` +
+        `${String(l.res.nSeeds).padStart(7)}  ${pct(l.res.winrate).padStart(7)}  ±${l.res.icPp.toFixed(2).padStart(5)} ` +
+        `${delta.padStart(9)}   ${ROTULO_VEREDITO[l.res.veredito].padEnd(14)} (${l.nota})` +
+        (l.res.truncado ? '  ⚠ teto de seeds atingido' : '') +
+        (l.avisos.length > 0 ? '  ⚠ CORTADO PELO TETO — ver abaixo' : ''),
+    )
+  }
+
+  // AC 7 / §5.1 — o corolário. O aviso é loud e fica GRUDADO na tabela de propósito: um pacote
+  // cortado em silêncio faz um teste de mutante negativo parecer falha do arnês, quando foi o
+  // clamp funcionando. §5.1: "um +150% seria silenciosamente reduzido para +100%".
+  for (const l of linhasAb) {
+    for (const a of l.avisos) {
+      console.log(
+        `  ⚠ CLAMP em '${l.rotulo}': ${a.charId}.${a.key} pedido ${sinal(a.pedido)} (item + passiva) ` +
+          `foi CORTADO para ${sinal(a.efetivo)} por Σ[${sinal(SIGMA_MIN[a.key])}, ${sinal(SIGMA_MAX[a.key])}] ` +
+          'em recomputeStats' +
+          (a.passiva !== 0 ? ` · a passiva ativa do personagem contribui ${sinal(a.passiva)}` : ''),
+      )
+      console.log(
+        '    A linha acima mediu o valor CORTADO, não o pedido. Um veredito negativo aqui é o clamp ' +
+          'funcionando, não falha do arnês (§5.1).',
+      )
+    }
+  }
+
+  console.log(
+    '                 winrate = vitórias do LADO MODIFICADO / decididas · metade das seeds com o ' +
+      'pacote no time 0, metade no time 1 (§5.3)',
+  )
+
+  /*
+   * O 3º estado no CONTROLE merece uma linha própria, e a razão é a mesma de §4.4: "dentro de
+   * 45–55% com IC de ±3,46pp não é aprovação, é falta de n". P2.3 é um portão de fase e alguém
+   * que leia `? inconclusivo` como reprovação estaria lendo errado — o que falta é amostra, e
+   * `--n` é piso por RF-48, não alvo. Medido nesta story: 52,25% ±3,46 a n=800 (inconclusivo),
+   * 51,15% ±2,19 a n=2000 e 49,58% ±1,39 a n=5000 (os dois, dentro).
+   */
+  const controles = linhasAb.filter((l) => l.controle)
+  for (const ctrl of controles) {
+    if (ctrl.res.veredito !== 'inconclusivo') continue
+    const qual = controles.length > 1 ? ` (alvo ${ctrl.alvo})` : ''
+    console.log(
+      `                 ⚠ a LINHA-BASE${qual} saiu '? inconclusivo': o ponto (${pct(ctrl.res.winrate)}) está dentro de ` +
+        `45–55% mas o IC de ±${ctrl.res.icPp.toFixed(2)}pp cruza a borda. Isso é falta de n, não desequilíbrio ` +
+        `(§4.4) — --n é piso (RF-48). Suba --n para fechar o veredito.`,
+    )
+  }
+  console.log('')
+}
+
 // --------------------------------------------------- instrumentação de graça (§4.5)
 
 const ordenados = [...inst.ticks].sort((a, b) => a - b)
@@ -1061,14 +1684,16 @@ console.log(
 console.log(
   `morte súbita     ${pct(inst.rodadas > 0 ? inst.morteSubita / inst.rodadas : 0, 1)} das rodadas atingiram 60s   (risco #6)`,
 )
-// §6.3 imprime a taxa de empate POR CONFRONTO, e não só agregada: a taxa varia de confronto para
-// confronto e o número único esconde a variação que a leitura de §8.7 precisa enxergar.
+// §6.3 imprime a taxa de empate POR CONFRONTO ("11.1% (espelho) · 0.8% (com mutante)") e §8.7
+// explica por quê: a força da mutação interage com a taxa de empate, então o número agregado
+// esconde justamente o efeito que o protocolo A/B está medindo. As linhas A/B entram aqui.
 const contextos: { rotulo: string; nSeeds: number; nDec: number }[] = [
   ...resultados.map((r) => ({
     rotulo: `${r.confronto.rotulo}${r.confronto.espelho ? ' espelho' : ''}`,
     nSeeds: r.nSeeds,
     nDec: r.nDec,
   })),
+  ...linhasAb.map((l) => ({ rotulo: `A/B ${l.rotulo}`, nSeeds: l.res.nSeeds, nDec: l.res.nDec })),
 ]
 const porConfronto = contextos
   .map((c) => `${pct(c.nSeeds > 0 ? (c.nSeeds - c.nDec) / c.nSeeds : 0, 1)} (${c.rotulo})`)
@@ -1094,13 +1719,22 @@ for (const id of chars) {
   )
   primeira = false
 }
+if (linhasAb.length > 0) {
+  console.log(
+    '                 (a utilização agrega as rodadas do plano E do protocolo A/B, inclusive as ' +
+      'mutadas — a taxa de empate por confronto acima separa as duas fontes)',
+  )
+}
 
 console.log(
   `autotestes       veredito de 3 estados ✓ ${CASOS_VEREDITO.length}/${CASOS_VEREDITO.length} casos · ` +
     `IC n=800 ±${icPp(800).toFixed(2)}pp · IC n=10000 ±${icPp(10000).toFixed(2)}pp\n` +
-    '                 pares ✓ 210/378 (roster sintético de 8) · troca de lado ✓ 5 ensaios ' +
-    '(viés puro cancela, composição não, empate é nulo, espelho não cancela, n ímpar)\n' +
-    '                 instrumentação §4.5 ✓ 3 rodadas sintéticas (4 contadores)',
+    '                 pares ✓ 210/378 (roster sintético de 8) · troca de lado ✓ 7 ensaios ' +
+    '(viés puro cancela, composição não, empate é nulo, espelho não cancela, IC sobre decididas, teto de seeds)\n' +
+    `                 instrumentação §4.5 ✓ 3 rodadas sintéticas (4 contadores) · pacotes ✓ sinal de drag + ΣMIN/ΣMAX · ` +
+    `--mutacao ✓ ${CASOS_MUTACAO.length} casos (NaN, Infinity, 1e400, 0x10, vazio)\n` +
+    '                 protocolo A/B ✓ um personagem de um lado, outro lado intocado, não vira espelho · ' +
+    `clamp ✓ 5 ensaios + ${NOMES_PACOTE.length * ROSTER.length} pacotes×roster`,
 )
 console.log('')
 
@@ -1126,6 +1760,33 @@ if (flags.json) {
           ...serializar(r),
           veredito: 'diagnostico-de-lado',
           leitura: 'vies-de-lado-time-0',
+        })),
+        // §5.3 — o protocolo A/B é seção PRÓPRIA aqui também: `winrate` é do lado MODIFICADO, não
+        // de uma composição, e um consumidor que o misturasse com `matriz` leria efeito de item
+        // como célula de balanceamento de roster.
+        protocoloAb: linhasAb.map((l) => ({
+          pacote: l.rotulo,
+          alvo: l.alvo,
+          controle: l.controle,
+          leitura: 'winrate-do-lado-modificado',
+          nDec: l.res.nDec,
+          nSeeds: l.res.nSeeds,
+          vitorias: l.res.vitorias,
+          winrate: l.res.winrate,
+          icPp: l.res.icPp,
+          deltaPp: l.deltaPp,
+          veredito: l.res.veredito,
+          truncado: l.res.truncado,
+          nota: l.nota,
+          clamp: l.avisos.map((a) => ({
+            charId: a.charId,
+            campo: a.key,
+            pedido: a.pedido,
+            passiva: a.passiva,
+            efetivo: a.efetivo,
+            sigmaMin: SIGMA_MIN[a.key],
+            sigmaMax: SIGMA_MAX[a.key],
+          })),
         })),
         instrumentacao: {
           rodadas: inst.rodadas,

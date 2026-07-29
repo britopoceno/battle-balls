@@ -1,0 +1,398 @@
+schema: 1
+story: 'e2.6'
+gate: CONCERNS
+status_reason: >-
+  Os 12 ACs passam sob verificação independente e todos os números do Dev Agent Record foram
+  reproduzidos do zero, dígito a dígito: P2.2 dá 79,63% ±3,46 (+27,38pp, ✗ fora, 7,1 larguras de IC
+  acima da borda) e P2.3 dá 52,25% ±3,46 (? inconclusivo) no n default. O sinal do `drag` está
+  fechado nas DUAS pontas — perturbei `PACOTES.fisico.drag` para `−0.2` (barrado por
+  `autotestePacotes`) e, o que o @dev não testou, inverti o sinal no CONSUMO
+  (`itemBonus` recebendo `-v`, com `packages.ts` intacto): barrado por `autotesteAb`. E
+  `--mutacao=vex:mass:+0.20 --mutacao=vex:drag:+0.20` devolve 60,62% / 829 seeds, número idêntico
+  ao de `--pacote=fisico --alvo=vex`, provando em runtime que o pacote nomeado É o par de sinais
+  corretos e não só na fonte.
+  O que segura o PASS não é defeito de código: é que **o comando literal do portão P2.3 não fecha
+  veredito no n que o próprio portão especifica**. Anexo B manda rodar
+  `npm run balance -- --pacote=nenhum`; com os defaults (n=800, seed=1) o resultado é
+  `? inconclusivo`. Medi por que: a regra de 3 estados de §4.4 exige que o IC INTEIRO caiba em
+  45–55%, o que a n=800 (IC ±3,46pp) deixa uma janela conclusiva de apenas ±1,54pp em torno de 50%
+  — um pipeline PERFEITAMENTE justo tem só **61,5%** de chance de sair conclusivo. Confirmei
+  empiricamente que o pipeline É justo, o que é a afirmação substantiva de P2.3: seis bases de seed
+  independentes a n=800 dão 52,25 · 49,13 · 49,50 · 50,13 · 50,50 · 48,63, **média 50,02%**, e
+  cinco das seis saem `✓ dentro`. A seed base 1 — o default — é a amostra azarada. P2.3 é
+  verdadeiro e está provado; o que falta é o portão registrar um `n` em que ele seja DEMONSTRÁVEL.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  working tree sobre commit:4835863 ·
+  src/tools/packages.ts sha256:6d8edda95907cbf9dd0cba455157b7cd52d6e058b9de81984ffd93599b71b538 (novo) ·
+  src/tools/balance.ts sha256:1f289e86b57383f0d5df5b777a2675c4c2196755d5d4d89dfd07e20ea2fbf95f (modificado; era 609bb64e… no gate de e2.5) ·
+  src/bot/heuristic.ts sha256:f113a8e0f8dda20879109976618c6453293cd86ff224c8eecb2c53a30f924cff (IDÊNTICO a e2.4/e2.5) ·
+  src/tools/harness.ts sha256:2936e1abbaa502918d2831a7ab1aca582d32ef381ce875613e75599333644f11 (IDÊNTICO a e2.5) ·
+  src/tools/determinism.ts sha256:f2953f7695cdf788c568b1d1467df157f387aefa9bead41c87893efef41dd755 (IDÊNTICO a e2.4/e2.5) ·
+  src/sim/world.ts sha256:adf6944253e12aa2f2425ac1a1c9949da6090a8f2f6da5f32ea59f04085a3b99 (IDÊNTICO a e2.5) ·
+  src/sim/types.ts sha256:f0641379f5d17214317bf320a8ec68e1d13bef8c8552dfe17444b6965c5ba2c9 (IDÊNTICO a e2.5) ·
+  src/sim/stats.ts sha256:7493f054ca26b50b0999cde3015c94fa6c3dc23ef20632d33a74efa559e56b90 ·
+  src/sim/physics.ts sha256:32e5832da4be5b5d41fa6b35589e51baead8ec9536ef8e86005f455018cf6ff2 ·
+  src/sim/rng.ts sha256:c6854d2b0dcf4705414a585351d66ac6294cb0e8006dec7f31100bf548127e7c ·
+  src/sim/effects.ts sha256:0e517efb0115111ba4393da26074115e032f2f93522d5a4e1b6e6ae2419780a07 ·
+  src/sim/index.ts sha256:a772d2bdf76f5771e7afe418cd0a9f06ad886edc3ef3f119a0c6bda8240e5b52 ·
+  src/bot/dummy.ts sha256:99ca652cc65c0e85c0ab3c262bbbdedbdb371154cc7d4783dcefc7f750497f71 ·
+  src/chars/golem.ts sha256:1bff89467a4b75aee8b10d9f6b4ed13141849bbfc17716bbfd95d986e289db9b (IDÊNTICO a e2.5) ·
+  src/chars/vex.ts sha256:94ac3e80484e6d21d958a4a298c2b0f3c9fd2810b14adcb41f1fc95c11157648 (IDÊNTICO a e2.5) ·
+  src/chars/index.ts sha256:ac78ea2363a60038b211f22f7f9aa2a59c368e59826e5cbb8ff00bab21fef6e9 ·
+  package.json sha256:0a279866f0cb8ff6491c088c1b70ba40d2392f27d6a2c06825eedd8bac40b89c (IDÊNTICO a e2.5)
+updated: '2026-07-29T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      `src/tools/packages.ts` existe, tem 54 linhas, é dado puro e o único import é
+      `import type { BonusBlock }` — type-only, some no runtime. `PACOTES` é literal de §5.2:
+      `fisico { mass: +0.2, drag: +0.2 }`, `dano { dmg: +0.2 }`, `nenhum {}`. O comentário nomeia o
+      item e o sinal ao lado de cada valor, como §5.2 exige. `as const satisfies Record<string,
+      Pacote>` impede campo fora de `BonusBlock` em tempo de compilação.
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `--pacote=drag:0.2` → EXIT=1 (rodei), com mensagem nomeando a armadilha de §5.2 e apontando
+      `--mutacao` como o caminho legítimo. `--pacote` só aceita as três chaves de `PACOTES`;
+      `--pacote` e `--mutacao` juntos → EXIT=1. `--mutacao=vex:dmg:+0.30` existe separadamente e é
+      a única porta de campo cru, que é exatamente o que §5.2 desenha.
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      `rodarAb` monta `composicaoModificada` × `composicao` e delega a `rodarConfronto` de `e2.5`,
+      que já implementa "seeds 1..n/2 no time 0, n/2+1..n no time 1" com metades iguais em
+      DECIDIDAS (verificado no gate de `e2.5` e repinado aqui pelos ensaios 3b e 6). Nenhuma
+      contabilidade nova foi escrita — o REUSE que §6.1 exige. `winrate = vitórias do lado
+      modificado / decididas`: confirmado pela linha de rodapé impressa e pelo campo
+      `leitura: "winrate-do-lado-modificado"` do `--json`.
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      Medido, não argumentado: seis bases de seed independentes do controle a n=800 dão média
+      **50,02%** enquanto o espelho puro da MESMA composição dá 53,00% (viés de lado de R-01). A
+      troca de lado cancela o viés de fato, e o resultado não depende de `[golem,vex]` estar
+      balanceado — que é a propriedade 3 de §5.3, a que torna P2.3 satisfazível onde a leitura 1
+      não é.
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      `--pacote=nenhum|fisico|dano` e `--alvo=vex` rodados por mim, todos produzindo a seção A/B.
+      `--alvo` sozinho → EXIT=1 ("não mede nada"); `--alvo` fora da composição → EXIT=1;
+      `--alvo` contradizendo o personagem de `--mutacao` → EXIT=1.
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      A mutação entra por `PickSetup.itemBonus` (`composicaoModificada`, linha 1042:
+      `itemBonus: { ...bonus }`, cópia por pick). Zero caminho exclusivo de teste: grep confirma
+      que `balance.ts` não tem laço de partida próprio e toda rodada passa por `harness.runRound`.
+      `autotesteAb` (4) fixa que o CONTROLE percorre o mesmo caminho de código, com `itemBonus: {}`
+      — o detalhe que impede o controle negativo de ser um caminho diferente do tratamento.
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      Rodei `--n=10 --mutacao=vex:dmg:+5.00`: a linha ganha `⚠ CORTADO PELO TETO` e o bloco abaixo
+      diz "vex.dmg pedido +5.00 (item + passiva) foi CORTADO para +1.00 por Σ[-0.75, +1.00] em
+      recomputeStats … um veredito negativo aqui é o clamp funcionando, não falha do arnês (§5.1)".
+      O aviso confere `bonusItem + bonusPassive`, que é a expressão literal de `recomputeStats`:
+      rodei `--mutacao=golem:knockbackTaken:-0.20` e o `--json` traz
+      `{pedido: -0.8, passiva: -0.6, efetivo: -0.75}` — o caso Golem/Âncora que uma checagem só
+      sobre o item erraria. Perturbei `const p = passiva[k] ?? 0` para `const p = 0`: EXIT=1 pelo
+      ensaio (4) de `autotesteClamp`. Os dois pontos cegos (clamps ABSOLUTOS privados em `stats.ts`
+      e bônus condicionais de `onTick`) estão escritos no código, não escondidos.
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      Reproduzido por mim, execução própria: `npm run balance -- --mutacao=vex:dmg:+0.30` →
+      `dmg +0.30  vex  800  802  79.63%  ±3.46  +27.38pp  ✗ fora (P2.2 — teste de mutante)`.
+      Bate dígito a dígito o alegado. 79,63% está 24,63pp acima da borda de 55%, 7,1 larguras de
+      IC — o mutante é detectado com folga que nenhum `n` razoável desfaz. `dummy` deu 90,05% e
+      `heuristic` dá 79,63%: os dois detectam, confirmando §5.4 ("não depende da qualidade do bot").
+  - id: AC9
+    verdict: CONCERNS
+    evidence: >-
+      A afirmação substantiva de P2.3 está PROVADA, por seis medições independentes: n=2000 →
+      51,15% ±2,19 ✓ dentro; n=5000 → 49,58% ±1,39 ✓ dentro; e n=800 nas bases de seed 1001/2001/
+      3001/4001/5001 → 49,13 · 49,50 · 50,13 · 50,50 · 48,63, todas ✓ dentro. Média das seis
+      amostras de n=800: 50,02%. O pipeline não injeta assimetria.
+      O que NÃO passa é o comando literal: `npm run balance -- --pacote=nenhum` com os defaults
+      (n=800, seed=1) dá 52,25% ±3,46 → `? inconclusivo`. Ver QA-E26-001 — é o único motivo do
+      CONCERNS, e é sobre COMO o portão deve ser executado, não sobre o código.
+  - id: AC10
+    verdict: PASS
+    evidence: >-
+      A seção "protocolo A/B — composição [golem,vex] · linha-base espelhada (§5.3)" sai separada
+      da seção de espelhos de `e2.5`, com as seis colunas que AC 10 pede (pacote, alvo, n_dec,
+      winrate, delta, veredito) mais `n_seeds` e `IC` — superset do exemplo de §6.3, e `n_seeds`
+      separado de `n_dec` é literal de §6.3. O `--json` traz o mesmo em `protocoloAb[]`, com
+      `clamp[]` estruturado.
+  - id: AC11
+    verdict: PASS
+    evidence: >-
+      Reexecutados do zero por mim: `npm run check` EXIT=0; `npm run sim:check` EXIT=0 com
+      `golden hash ✓ ok — 5 seeds batem o baseline` e `build coverage ✓ ok — 5 variantes batem`.
+      Todas as demais linhas do `sim:check` (espelho 2v2 19/14/7, mediana 13.8s, replay, dupla
+      execução, guarda BOT-001, pilar 3) idênticas às do gate de `e2.5`.
+  - id: AC12
+    verdict: PASS
+    evidence: >-
+      `sim/` intocado — os sete arquivos de `src/sim/` têm sha256 idêntico ao registrado no gate de
+      `e2.5` (`world.ts` e `types.ts` explicitamente; os outros cinco são clean contra HEAD por
+      `git status`). `packages.ts` importa de `sim/` apenas o TIPO `BonusBlock`; `balance.ts`
+      importa dois valores (`SIGMA_MIN`/`SIGMA_MAX`/`STAT_KEYS`), que são DADO, não motor. O bloco
+      "pilar 3 ✓ ok — camadas 1 e 3 sem violação" do `sim:check` confirma RF-19.
+
+entradas_obrigatorias_dos_gates_anteriores:
+  QA-E25-001:
+    verdict: PASS
+    evidence: >-
+      O @dev está CERTO e confirmei lendo o caminho real: `rodarConfronto` sempre chamou
+      `icPp: icPp(nDec)` (linha 741) e `veredito: vereditoDe(winrate, nDec)` (linha 742). Nunca
+      houve bug de cálculo no CLI — o achado de `e2.5` era de COBERTURA, e assim estava redigido.
+      O ensaio 3b novo é melhor do que eu pedi: além de `t3.res.icPp === icPp(t3.res.nDec)`, ele
+      afirma `icPp(nDec) !== icPp(nSeeds)`, ou seja o próprio autoteste garante que o cenário
+      DISCRIMINA — não pode virar vácuo se alguém mexer no ensaio 3. Reproduzi a perturbação em
+      cópia isolada: `icPp(nDec)` → `icPp(nSeeds)` agora dá EXIT=1 com a mensagem do ensaio 3b.
+  QA-E25-002:
+    verdict: PASS
+    evidence: >-
+      Perturbei `veredito: vereditoDe(winrate, nDec)` → `nSeeds` em `rodarConfronto`: EXIT=1 pelo
+      ensaio (6) ("veredito 'fora' com n_dec 0"). O ensaio de teto usa executor que sempre empata e
+      fixa `nSeeds === 2·ceil(n/2)·TETO_SEEDS_POR_DECIDIDA` e `nDec === 0`.
+  QA-E25-006:
+    verdict: PASS
+    evidence: >-
+      `autotesteFechar` existe com 3 rodadas sintéticas cobrindo os quatro contadores de §4.5. O
+      denominador (rodada × bola) é discriminado de propósito por duas bolas de golem por rodada —
+      é o detalhe que impede a troca por "rodadas" de passar despercebida.
+  REL-002 / BOT-006 / BOT-007:
+    verdict: PASS
+    evidence: >-
+      Rodei as seis recusas da missão, cada uma isolada, e todas dão EXIT=1 ANTES de qualquer
+      partida (retorno em ~1s contra ~16s de execução limpa): `abc`, `NaN`, `Infinity`, `1e400`,
+      vazio, `0x10`. A validação é na RAIZ (`analisarMutacao`, linha 251), não no detector de kit
+      morto — que era a exigência do gate de `e2.5`, porque `{maxHp: NaN}` não aparece naquela
+      tabela. Perturbei `FORMATO_VALOR` para `/^.+$/`: EXIT=1, prova de que a checagem de formato
+      não é redundante com `Number.isFinite`. Um resíduo em QA-E26-002.
+
+issues:
+  - id: QA-E26-001
+    severity: medium
+    category: requirements
+    description: >-
+      **O portão P2.3, como especificado, não é conclusivo no `n` que ele próprio manda usar.**
+      Anexo B registra `npm run balance -- --pacote=nenhum` como a verificação de P2.3; com os
+      defaults (n=800 de §6.2, seed=1) o CLI devolve **52,25% ±3,46 · `? inconclusivo`**.
+      Não é falha do código nem desequilíbrio: é a interação entre a regra de 3 estados de §4.4
+      ("✓ dentro" exige o IC INTEIRO dentro de 45–55%) e o piso de n=800 de RF-48. A n=800 o IC é
+      ±3,46pp, o que deixa uma janela conclusiva de apenas ±1,54pp em torno de 50% — só 30,8% da
+      faixa de 10pp. Um pipeline PERFEITAMENTE justo (p = 0,50, dp = 1,77pp) tem probabilidade
+      **61,5%** de sair conclusivo. Ou seja, o critério oficial reprova por falta de amostra em
+      ~2 de cada 5 execuções mesmo quando tudo está certo.
+      Medi que é isso e não outra coisa: seis bases de seed independentes a n=800 dão
+      52,25 (seed 1) · 49,13 · 49,50 · 50,13 · 50,50 · 48,63 — **média 50,02%**, e CINCO das seis
+      saem `✓ dentro`. A seed base 1, que é o default, é a amostra azarada. E subir o n com a mesma
+      seed resolve: n=2000 → 51,15% ±2,19 ✓ dentro; n=5000 → 49,58% ±1,39 ✓ dentro.
+      Probabilidade de veredito conclusivo por n, para um pipeline justo: n=800 → 61,5%;
+      n=1000 → 77,1%; n=1500 → 94,4%; n=2000 → 98,8%; n=3000 → ~100%; n=10000 → ~100%.
+      Por que isso é MEDIUM e não LOW: o portão da Fase 2 é o entregável desta fase, e um portão
+      cujo comando literal devolve "inconclusivo" ou é lido como reprovação (errado) ou é
+      contornado ad hoc por quem o executa (pior). Por que não é HIGH nem FAIL: a afirmação de
+      P2.3 está PROVADA por seis caminhos, o CLI acerta ao recusar-se a chamar isso de aprovação,
+      ele imprime uma linha própria explicando que é falta de n, e a story registrou a
+      recomendação em vez de esconder o resultado.
+    recommendation: >-
+      **Fixar o `n` do portão P2.3 em `--n=3000` e registrar isso no Anexo B de
+      `docs/architecture-e2.md`** (linha de P2.3, coluna "Como se verifica"), substituindo
+      `npm run balance -- --pacote=nenhum`. n=2000 é o mínimo defensável (98,8%); n=3000 leva a
+      ~100% e custa ~55s. n=800 NÃO é configuração defensável para um portão.
+      Recomendação operacional, medida: **um único comando entrega P2.2, P2.3 e P2.4 juntos** —
+      `npm run balance -- --mutacao=vex:dmg:+0.30 --n=3000` imprime a linha `nenhum` (o controle
+      de P2.3, seeds e números IDÊNTICOS aos de `--pacote=nenhum`; conferi: 800/823/52,25% nos
+      dois) e a linha `dmg +0.30` (o mutante de P2.2) na mesma tabela, ~2,5 min. Ressalva de
+      leitura: nessa invocação o rótulo da primeira linha sai como "linha-base (§5.3)" e não
+      "P2.3 — controle negativo", então quem auditar o portão precisa saber que é a mesma medição.
+      Dono: @pm (é decisão de portão) com @architect (Anexo B é do documento de arquitetura).
+      Não bloqueia `e2.7`.
+  - id: QA-E26-002
+    severity: low
+    category: code
+    description: >-
+      Resíduo da classe que o @dev declara fechada (bug previsto #3, "`Number('')` é 0 e aceitaria
+      uma mutação nula em silêncio"): `FORMATO_VALOR` aceita notação científica
+      (`(?:[eE][+-]?\d+)?`), e `Number('1e-400')` é **0**, finito, portanto aprovado nas duas
+      checagens. Rodei: `npm run balance -- --mutacao=vex:dmg:1e-400 --n=6` → **EXIT=0**, tabela
+      normal, linha de tratamento `dmg +0.00` com `delta +0.00pp`. É a mesma armadilha da string
+      vazia por outra porta — um "mutante" que o operador acredita ter injetado e que não existe,
+      lido como "mutante não detectado". Mitigação parcial já presente e é o que segura em LOW: o
+      rótulo imprime `dmg +0.00`, então não é totalmente silencioso, e a linha de controle pareada
+      torna o delta zerado visível. `1e-400` também não é entrada plausível de digitação humana.
+    recommendation: >-
+      Uma linha em `analisarMutacao`, depois do `Number.isFinite`: recusar `valor === 0` nomeando
+      que `--pacote=nenhum` É o controle negativo e que uma mutação nula disfarçada de mutação é o
+      pior modo de falha do arnês. Acrescentar `{ entrada: 'vex:dmg:1e-400', aceita: false }` e
+      `{ entrada: 'vex:dmg:0', aceita: false }` a `CASOS_MUTACAO`. Alternativa mais conservadora,
+      se zero explícito tiver uso: manter o aceite e imprimir aviso próprio quando o valor efetivo
+      for 0. Cabe em `e2.7` ou `e2.8`.
+  - id: QA-E26-003
+    severity: low
+    category: tests
+    description: >-
+      A ORDEM de `NOMES_PACOTE` é contrato documentado e não fixado. O TSDoc de `packages.ts` diz
+      "Ordem de apresentação: **o controle primeiro**. Não é estética — é a ordem em que a bateria
+      de §5.4 é lida (o delta de todo pacote é medido CONTRA o controle) e a ordem que `e2.7` vai
+      percorrer", e a Completion Note 10 repete a promessa. Mas `autotestePacotes` compara
+      `Object.keys(PACOTES).sort()` contra `[...NOMES_PACOTE].sort()` — conjuntos, não sequências.
+      Perturbei `NOMES_PACOTE` para `['fisico', 'dano', 'nenhum']` em cópia isolada: **EXIT=0**,
+      nenhum autoteste acusa, nenhuma saída muda hoje. Hoje é inofensivo porque nada consome a
+      ordem; passa a importar no instante em que `e2.7` percorrer a lista assumindo que o primeiro
+      elemento é o controle contra o qual todos os deltas são medidos.
+    recommendation: >-
+      Uma linha em `autotestePacotes`: `if (NOMES_PACOTE[0] !== 'nenhum') problemas.push(…)`,
+      citando que o delta de §5.4 é medido contra o controle. Entrada obrigatória de `e2.7` — ou
+      `e2.7` não depende da ordem, e aí o TSDoc é que precisa parar de prometê-la.
+  - id: QA-E26-004
+    severity: low
+    category: requirements
+    description: >-
+      Os números de Risco #1b a n=800 não são conclusivos contra o gatilho de +2pp, e a story os
+      apresenta como se a comparação estivesse decidida. Reproduzi os dois: a INTENÇÃO
+      (`{mass:+0.20, drag:+0.20}`) dá **+8,38pp** e a LETRA do PRD (`{mass:+0.20, drag:−0.20}`) dá
+      **+1,88pp** — exatamente o alegado, e os pontos caem em lados opostos do gatilho "físico <
+      +2pp". Mas o gatilho é um limiar sobre o DELTA, e o IC do delta (diferença de duas
+      proporções, mesmo n) é **±4,90pp a n=800**, não os ±3,46pp da coluna impressa. Com isso
+      +1,88pp tem IC [−3,0 ; +6,8]: atravessa o +2pp dos dois lados, e a distância entre as duas
+      leituras (6,50pp) fica a ~1,9σ. A conclusão de PRODUTO da story continua correta e a decisão
+      de arquitetura de §5.2 (pacotes nomeados) não depende disso — mas "a leitura literal DISPARA
+      o gatilho" é afirmação pontual, não estabelecida. IC do delta por n: 800 → ±4,90pp;
+      2000 → ±3,10pp; 5000 → ±1,96pp; 10000 → ±1,39pp.
+    recommendation: >-
+      Entrada para `e2.7`: dimensionar o `n` da bateria de #1b pelo IC do DELTA, não pelo do
+      winrate, porque o gatilho é um limiar sobre o delta. Para separar +2pp de forma conclusiva é
+      preciso n ≥ ~5000 por célula. E considerar imprimir uma coluna de IC do delta ao lado da
+      coluna `delta` — hoje a única barra de erro na tabela é a do winrate, o que convida
+      exatamente à leitura que este achado corrige.
+
+independent_verification:
+  reexecucao_do_zero:
+    - '`npm run check` → EXIT=0.'
+    - >-
+      `npm run sim:check` → EXIT=0, `golden hash ✓ ok — 5 seeds batem o baseline`,
+      `build coverage ✓ ok — 5 variantes batem`. Todas as linhas idênticas às do gate de `e2.5`.
+    - >-
+      P2.2 rodado por mim: 79,63% ±3,46 · +27,38pp · ✗ fora · n_dec 800 / n_seeds 802. Bate o
+      alegado dígito a dígito.
+    - >-
+      P2.3 rodado por mim: 52,25% ±3,46 · ? inconclusivo · n_dec 800 / n_seeds 823. Bate o alegado
+      dígito a dígito. Também n=2000 (51,15% ±2,19 ✓) e n=5000 (49,58% ±1,39 ✓).
+    - >-
+      Ampliação minha, não pedida pela story: P2.3 a n=800 em CINCO bases de seed adicionais
+      (1001/2001/3001/4001/5001) → 49,13 · 49,50 · 50,13 · 50,50 · 48,63, todas ✓ dentro. Com a
+      seed 1, média das seis = 50,02%. É o que separa "o pipeline é justo" (verdadeiro) de
+      "o comando do portão fecha veredito" (falso a n=800).
+    - >-
+      Armadilha do sinal reproduzida: `--pacote=fisico --alvo=vex` → 60,62% (+8,38pp) e
+      `--mutacao=vex:mass:+0.20 --mutacao=vex:drag:-0.20` → 54,13% (+1,88pp). +1,88 < +2,00
+      dispara o gatilho; +8,38 não. Confirmado.
+    - >-
+      **Prova de equivalência que a story não fez:**
+      `--mutacao=vex:mass:+0.20 --mutacao=vex:drag:+0.20` devolve **60,62%, n_seeds 829** —
+      número e contagem de seeds IDÊNTICOS aos de `--pacote=fisico --alvo=vex`. Isso prova em
+      RUNTIME que o pacote nomeado equivale ao par de sinais corretos e que os dois percorrem o
+      mesmo caminho; o autoteste sozinho só prova o conteúdo da constante.
+    - >-
+      Bordas de entrada, cada uma isolada, todas EXIT=1 e todas em ~1s (contra ~16s de execução
+      limpa, o que prova que a recusa é ANTES de rodar partida): `--mutacao=vex:dmg:abc`,
+      `:NaN`, `:Infinity`, `:1e400`, `:` (vazio), `:0x10`. Mais oito recusas de escopo/coerência:
+      `--risco-1b` (nomeando `e2.7`), `--pacote=drag:0.2`, `--pacote`+`--mutacao` juntos,
+      `--comp=golem,golem --mutacao=vex:…` (alvo fora da comp), `--alvo` sozinho, dois `--mutacao`
+      em personagens diferentes, `--alvo=zzz`, flag inexistente. Controle limpo `--n=2` → EXIT=0.
+  bateria_de_perturbacao_propria:
+    metodo: >-
+      Cópia isolada de `src/` no scratchpad; cada perturbação aplicada, `node src/tools/balance.ts
+      --n=2` executado, arquivo restaurado. Controle limpo antes (EXIT=0) e sha256 do `src/` real
+      conferido depois (`balance.ts` 1f289e86… e `packages.ts` 6d8edda9… inalterados).
+    resultado: '7 de 8 detectadas; a 1 não detectada virou QA-E26-003.'
+    perturbacoes:
+      - 'P1 `PACOTES.fisico.drag` +0.2 → −0.2 → EXIT=1 (`autotestePacotes`, mensagem cita §5.2 e os +4,32/−5,90pp). Reproduz #1 do @dev.'
+      - 'P2 `fisico.drag` +0.2 → +0.0001 (sinal certo, valor errado) → EXIT=1. A metade que o @dev não cobriu: não é só o sinal que está pinado, é o valor literal.'
+      - 'P3 `NOMES_PACOTE` reordenado (controle deixa de ser o primeiro) → **EXIT=0, não detectada** → QA-E26-003.'
+      - 'P4 `icPp(nDec)` → `icPp(nSeeds)` em `rodarConfronto` → EXIT=1 (ensaio 3b). Era QA-E25-001; a guarda de fato acusa.'
+      - 'P5 `vereditoDe(winrate, nDec)` → `nSeeds` → EXIT=1 (ensaio 6).'
+      - >-
+        P6 **a mais valiosa, e o @dev não a fez**: sinal invertido no CONSUMO, não no dado —
+        `itemBonus: {...bonus}` trocado por um map que nega cada valor, com `packages.ts` INTACTO.
+        → EXIT=1 (`autotesteAb` (1), que afirma `picks[0].itemBonus.dmg === 0.2`). O sinal está
+        fechado nas duas pontas: quem "corrigir" o dado é barrado por `autotestePacotes`, quem
+        inverter a fiação é barrado por `autotesteAb`. Era o buraco natural de uma story cujo tema
+        é um sinal.
+      - 'P7 `FORMATO_VALOR` → `/^.+$/` → EXIT=1 (`0x10` passa a ser aceito). As duas checagens não são redundantes, como o TSDoc afirma.'
+      - 'P8 `conferirClamp` ignorando a passiva (`const p = 0`) → EXIT=1 (ensaio (4), Golem/Âncora). O caso que uma checagem só do item erraria está pinado.'
+  aritmetica_conferida_por_fora:
+    - >-
+      Janela conclusiva de §4.4 por n, calculada independentemente com z = 1,959964:
+      IC(800) = 3,46pp, IC(2000) = 2,19pp, IC(5000) = 1,39pp, IC(10000) = 0,98pp — batem os
+      valores que o próprio CLI autotesta (±3.46 / ±0.98).
+    - >-
+      P(veredito conclusivo | pipeline 50/50) = 2Φ((5 − IC)/dp) − 1: 61,5% a n=800, 77,1% a
+      n=1000, 94,4% a n=1500, 98,8% a n=2000, ~100% a partir de n=3000.
+
+escopo_verificado:
+  arquivos_alterados: >-
+    Exatamente os dois da File List. `git status` lista como untracked apenas `heuristic.ts`,
+    `balance.ts`, `harness.ts` (das stories anteriores) e `packages.ts` (novo desta); como
+    modificados apenas `golem.ts`, `vex.ts`, `types.ts`, `world.ts`, `determinism.ts` e
+    `package.json` — todos com sha256 IDÊNTICO ao registrado no gate de `e2.5`, portanto não
+    tocados aqui. `sim/`, `bot/heuristic.ts` e `tools/harness.ts` confirmados byte a byte.
+    `git diff package.json` continua sendo só a linha do script `balance` de `e2.5`.
+  escopo_nao_excedido: >-
+    `--risco-1b` NÃO foi implementado — rodei e recebi EXIT=1 com "a flag --risco-1b não existe
+    nesta versão do CLI: bateria de Risco #1b (§5.4) — story e2.7". `recomputeStats`, `stats.ts` e
+    os tetos de clamp não foram alterados (sha256 de `stats.ts` clean contra HEAD).
+  reusabilidade_para_e2_7: >-
+    `packages.ts` exporta `PACOTES`, `NOMES_PACOTE`, `NomePacote` e `Pacote` — os quatro símbolos
+    que uma bateria por personagem precisa para percorrer sem redefinir nada. `NOMES_PACOTE`
+    tipado como `readonly NomePacote[]` fecha a lista contra nome inventado em tempo de
+    compilação. Ressalva: a ORDEM não é garantida (QA-E26-003).
+
+herdados_ainda_abertos:
+  - 'QA-E25-003 — borda SUPERIOR de 45–55% não pinada. Conferi: `CASOS_VEREDITO` segue com 7 casos e nenhum é `w = 0,55` exato. Declarado fora de escopo pela Completion Note 9; segue aberto.'
+  - 'QA-E25-004 — fail-open da auditoria de roster. Conferi no código: o bloco de autotestes (linha 1481) ganhou `throw` depois de `sair(1)` e agora é fail-closed; o bloco da auditoria de roster (linha 1506) NÃO tem `throw` e segue fail-open. Exatamente como a story declara.'
+  - 'QA-E25-005 — tamanho de `--comp` não validado. Não tratado.'
+  - 'QA-E25-007 / ARCH-002 — alcance efetivo do dash (a tabela imprime `140–280` enquanto a janela de contato acaba por volta de 247px). Não tratado; a justificativa da Completion Note 8 (não reabrir `bot/heuristic.ts`, artefato ancorado por sha256, numa story de CLI) é aceita. Recomendação do @dev de mandar para `e2.8` ou story própria de `bot/`: concordo.'
+  - 'BOT-002 — `PRESET_ARNES` é `Readonly` só de tipo, sem `Object.freeze`. Segue aberto.'
+  - 'LOW de `e2.0` — `src/tools/inspect.ts:18` com a terceira cópia do laço e o literal `60 * 180`, fora do `sim:check`. Segue aberto.'
+
+blocking: false
+blocks_downstream: false
+downstream_note: >-
+  `e2.7` está LIBERADA. `packages.ts` está no formato que ela precisa e o protocolo A/B mede,
+  reprova e recusa entrada inválida antes de simular.
+  Entradas OBRIGATÓRIAS que `e2.7` carrega deste gate:
+  (1) QA-E26-003 — pinar `NOMES_PACOTE[0] === 'nenhum'`, porque é `e2.7` que passa a CONSUMIR a
+  ordem;
+  (2) QA-E26-004 — dimensionar o `n` da bateria de #1b pelo IC do DELTA (±4,90pp a n=800, ±1,96pp
+  a n=5000), não pelo do winrate, porque o gatilho de §5.4 é um limiar sobre o delta; e considerar
+  imprimir a barra de erro do delta ao lado da coluna `delta`.
+  Entrada RECOMENDADA (cabe em `e2.7` ou `e2.8`): QA-E26-002 — recusar mutação de valor efetivo 0
+  (`1e-400`, `0`), o resíduo da armadilha de `Number('')`.
+  **Para quem for executar o portão da Fase 2, e isto é o entregável operacional deste gate:**
+  rodar `npm run balance -- --mutacao=vex:dmg:+0.30 --n=3000` (~2,5 min). Esse único comando
+  entrega P2.2 (linha `dmg +0.30`), P2.3 (linha `nenhum`, a linha-base, numericamente idêntica ao
+  que `--pacote=nenhum` mede) e P2.4 (n_dec ≥ 800 com folga). Não usar o n default para P2.3:
+  a 800 o critério de §4.4 só fecha em 61,5% das amostras mesmo com o pipeline perfeitamente
+  justo, e a seed base 1 é justamente uma das que não fecham. Ver QA-E26-001 — Anexo B de
+  `docs/architecture-e2.md` precisa ser atualizado por @pm/@architect antes da execução formal.
+  Números novos, medidos e confirmados por mim, para o @pm: taxa de empate cai de 2,8% (controle)
+  para 0,2% com o mutante forte na MESMA composição e nas mesmas seeds — §8.7 previsto e agora
+  medido, e é o que faz `n_dec` divergir de `n_seeds` em função da mutação; morte súbita 0,0% em
+  2448 rodadas (máx. 35,1s); custo ~19,5ms/rodada nesta máquina no plano A/B de duas linhas.
+push_recommendation: >-
+  Liberado para o @devops considerar no push. O working tree acumula agora SETE stories Done e não
+  commitadas — e2.0 a e2.6. Sete commits distintos, nessa ordem; não misturar. O de `e2.6` é
+  `src/tools/packages.ts` (novo) + `src/tools/balance.ts` (modificado), e nada mais: `package.json`
+  já carrega o script `balance` desde `e2.5`.
+
+waiver: { active: false }
