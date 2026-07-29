@@ -141,13 +141,14 @@ de combate estão errados por um fator ~4.
 **Escopo.** **RF-01 a RF-07** (draft e builds), **RF-20 a RF-29** (Bo5, economia e loja),
 telemetria local para os Riscos #1, #5 e #6.
 
-> ⛔ **BLOQUEADO.** Esta fase **não pode começar** antes de:
-> - **C2 e C3 resolvidos** pelo @architect (§4). Metade da loja não tem ponto de aplicação no
->   simulador e `mods` não compõe. Escrever a loja antes disso é escrever requisito
->   inimplementável.
-> - **D-02 (regra de empate) fechada.** 17,5% das rodadas medidas caem nela e não há regra.
-> - **D-03 (escopo do +alcance) e D-04 (ordem de aplicação de mods) fechadas.** Sem elas,
->   dois itens de dano são um problema de balanceamento indeterminado.
+> ✅ **DESBLOQUEADA** *(2026-07-28)*. Todos os itens abaixo foram fechados:
+> - **C2 e C3 resolvidos.** Épico de dívida de arquitetura (`debt.0`-`debt.7`, todas `Done`)
+>   implementou o desenho do @architect por completo: `stat.*` como única fonte de verdade,
+>   `restBall`/`restWall`/`cdSpeed` com ponto de aplicação real, `mods` substituído por bônus
+>   aditivo (`bonusPassive`/`bonusItem`) que compõe em vez de sobrescrever. Verificado: golden
+>   hash idêntico ao baseline em todos os 8 passos, apesar de reestruturações profundas.
+> - **D-02, D-03, D-04 fechadas** — decisões de produto aprovadas (§5) e já refletidas na
+>   arquitetura implementada (D-04 é literalmente a fórmula de `recomputeStats`).
 
 **Portão — JULGAMENTO HUMANO:** *dá vontade de jogar outra partida?* Acompanhado de evidência
 instrumentada (todos **aprovado**, §6), que informa o julgamento sem substituí-lo:
@@ -253,10 +254,10 @@ PM — os que dependem de decisão pendente estão marcados com o ID da decisão
 | RF-22 | **Renda igual** para os dois jogadores por rodada (ex.: 4, 5, 6, 7, 8) | decisão #7 |
 | RF-23 | **Juros sobre o ouro guardado**. Vencer a rodada **não** dá ouro — sem snowball: a 1ª vitória não compra a 2ª | decisão #7 |
 | RF-24 | Loja entre rodadas, com **duas trilhas de 4 itens**: física (Chumbo +massa, Turbina +velocidade, Lixa −atrito, Borracha +elasticidade) e combate (Lâmina +dano, Couraça +HP, Luneta +alcance, Relicário −cooldown) | decisão #8 |
-| RF-25 | **Borracha (+elasticidade)** e **Relicário (−cooldown)** precisam de ponto de aplicação no simulador | **BLOQUEADO por C2, ver §4** |
+| RF-25 | **Borracha (+elasticidade)** e **Relicário (−cooldown)** precisam de ponto de aplicação no simulador | ✅ **RESOLVIDO** (`debt.4`, `debt.5`) — ver §4 |
 | RF-26 | **Luneta (+alcance)**: escopo do modificador | **pendente D-03** (hoje só ataque básico) |
 | RF-27 | **Ordem de aplicação de mods de item** (aditivo / multiplicativo / composto) | **pendente D-04 — BLOQUEIA a Fase 3** |
-| RF-28 | Mods de passiva e de item devem **compor**, não se sobrescrever | **BLOQUEADO por C3, ver §4** |
+| RF-28 | Mods de passiva e de item devem **compor**, não se sobrescrever | ✅ **RESOLVIDO** (`debt.1`, `debt.3`) — ver §4 |
 | RF-29 | Quantidade e preço dos itens; renda exata por rodada; taxa de juros | **pendente D-09** (não bloqueia antes da Fase 3) |
 
 ### 3.4 Input
@@ -297,15 +298,21 @@ PM — os que dependem de decisão pendente estão marcados com o ID da decisão
 
 ---
 
-## 4. ⛔ Dívida de arquitetura que BLOQUEIA produto
+## 4. ✅ Dívida de arquitetura — RESOLVIDA (2026-07-28)
 
-**Isto não são requisitos de produto — é pré-requisito de épico.** A solução é do
-**@architect**, não do PM. O que este PRD registra é: **a Fase 3 não pode começar antes.**
+**Não eram requisitos de produto — eram pré-requisito de épico.** A solução era do
+**@architect**, não do PM. Registro original: **a Fase 3 não podia começar antes.**
+
+> **Épico de dívida de arquitetura fechado.** `docs/architecture.md` (desenho do @architect)
+> implementado em 8 stories (`docs/stories/debt.0` a `debt.7`, todas `Done`), migração
+> incremental com golden hash idêntico em cada passo — a simulação nunca mudou de
+> comportamento até o momento certo. C2 e C3 abaixo estão resolvidas; C1 fechada por D-07;
+> C4 segue como nota histórica (não bloqueava).
 
 Origem: brief §5c, quatro contradições **lidas no código, com arquivo e linha** (confiança
-alta). Duas bloqueiam a Fase 3.
+alta). Duas bloqueavam a Fase 3 — texto original preservado abaixo, com a resolução anotada.
 
-### C2 — Metade da loja não tem onde encaixar no simulador *(BLOQUEIA E3)*
+### C2 — Metade da loja não tinha onde encaixar no simulador *(✅ RESOLVIDA — `debt.4`, `debt.5`)*
 
 `Mods` é `{dmg, atkSpeed, range, speed, knockbackResist}` (`src/sim/types.ts:18-25`).
 Cruzando com os 8 itens do `DESIGN.md` §4:
@@ -321,32 +328,47 @@ Cruzando com os 8 itens do `DESIGN.md` §4:
 | Luneta (+alcance) | `mods.range` | ◐ parcial — só ataque básico (`world.ts:344`) |
 | **Relicário (−cooldown)** | — | ✗ **não existe** para habilidades: `self.abilityReadyAt = world.time + ab.cd` (`world.ts:316`), sem multiplicador. `mods.atkSpeed` cobre só o ataque básico (`world.ts:360`) |
 
-**Impacto de produto:** 2 dos 8 itens são inimplementáveis e 1 é parcial. E a assimetria
-importa: **a trilha física é a que perde o item mais distintivo** — elasticidade é a única
-propriedade puramente física da lista. Isso empurra na direção do Risco #1 (a trilha de
-combate matar a trilha física) **antes mesmo de a loja existir**.
+**Impacto de produto (histórico):** 2 dos 8 itens eram inimplementáveis e 1 era parcial. A
+assimetria importava: a trilha física perdia o item mais distintivo (elasticidade), empurrando
+na direção do Risco #1 antes mesmo de a loja existir.
 
-### C3 — `mods` é escrito por atribuição absoluta, não por acumulação *(BLOQUEIA E3)*
+**Resolução:** `restBall`/`restWall` viraram stat por corpo (`debt.5`), combinados por regra
+**máximo** — decisão que preserva a lógica "item não pode depender da build do inimigo" que
+D-04 já aplicava ao combate. `cdSpeed` ganhou ponto de aplicação real em `castCommand`, com
+piso absoluto `MIN_ABILITY_CD_MS` (`debt.4`, corrigido de 400ms para 500ms após o gate achar
+que o valor original não entregava a proteção que alegava). Luneta (+alcance) permanece
+parcial **por decisão** (D-03: só ataque básico na v1), não por limitação técnica.
 
-`vex.ts:97` faz `self.mods.speed = self.hp/self.maxHp < 0.4 ? 1.25 : 1` **a cada tick**;
-`golem.ts:95` faz `self.mods.knockbackResist = 0.6` no `init`. Hoje é inofensivo porque não
-há itens.
+### C3 — `mods` era escrito por atribuição absoluta, não por acumulação *(✅ RESOLVIDA — `debt.1`, `debt.3`)*
 
-**Na Fase 3, uma Turbina (+velocidade) comprada num Vex com a passiva Fantasma será
-sobrescrita 60 vezes por segundo.** O jogador paga ouro por nada. É bloqueio de arquitetura,
-não bug: `mods` precisa virar acumulador (base × passiva × item) **antes de o primeiro item
-existir**. A resolução de C3 e a decisão D-04 (ordem de aplicação) são a mesma conversa.
+**Era:** `vex.ts:97` fazia `self.mods.speed = self.hp/self.maxHp < 0.4 ? 1.25 : 1` a cada tick;
+`golem.ts:95` fazia `self.mods.knockbackResist = 0.6` no `init`. Uma Turbina (+velocidade)
+comprada num Vex com a passiva Fantasma seria sobrescrita 60 vezes por segundo — o jogador
+pagaria ouro por nada.
 
-### C1 — O Pilar 3 não é auditável *(não bloqueia; decisão de produto)*
+**Resolução:** `Ball.mods` removido por completo. `stat.*` (`base × (1 + Σbônus_passiva +
+Σbônus_item)`, a fórmula literal de D-04) é a única fonte de verdade agora. Passivas somam em
+`bonusPassive` via `ctx.addBonus` — nunca sobrescrevem. Verificado com 125.464 amostras
+instrumentadas pelo QA no gate de `debt.3`: `stat.knockbackTaken` do Golem e `stat.maxSpeed`
+do Vex idênticos, bit a bit, ao comportamento antigo, provando que a migração preservou o
+jogo e ao mesmo tempo já corrige o bug de composição para quando o primeiro item existir.
 
-`DESIGN.md` §2 e Pilar 3 afirmam "colisão causa 0 dano" em absoluto. Mas
-`src/chars/golem.ts:134-144` (`on.collide`) causa **14 de dano** e knockback 520 durante a
-janela de 450ms do dash Impacto Sísmico, com trava de 250ms entre acertos. **Já é falso com 2
-personagens de 8.**
+### C1 — O Pilar 3 não era auditável *(✅ RESOLVIDA — `debt.6`, decisão D-07)*
 
-É defensável como exceção mediada por habilidade — mas escrito como está, nada impede que o
-3º, 4º e 5º personagem "excepcionem" também, e o pilar deixa de servir de trava. **Decide-se
-uma das duas, não as duas:** reformular o pilar, ou remover a exceção do Golem. Ver **D-07**.
+**Era:** `DESIGN.md` §2 e Pilar 3 afirmavam "colisão causa 0 dano" em absoluto, mas
+`src/chars/golem.ts:134-144` (`on.collide`) causava 14 de dano direto — já falso com 2
+personagens de 8, e nada impedia que o 3º, 4º e 5º "excepcionassem" também, tirando o pilar
+de servir de trava.
+
+**Resolução (D-07, implementada em `debt.6`):** Pilar 3 reformulado — colisão *passiva* causa
+0 dano; dano por contato só existe dentro de janela declarada. `CharDef.contactWindows` faz a
+janela ser campo tipado, não código solto; `World.phase` + checagem em `dealDamage` recusam
+qualquer dano causado durante `phase === 'collide'`, sempre ativo (inclusive em produção). O
+`on.collide` do Golem foi deletado por completo — o motor resolve genericamente para todo o
+roster. Três camadas de auditoria (estática, dinâmica, de roster) tornam a regra verificável
+para qualquer personagem futuro. Limitação conhecida, registrada e não bloqueante: dano
+aplicado via `Effect` de 1 tick (em vez de `ctx.damage` direto) ainda atravessa a checagem —
+fechar isso é auditoria de roster em escala, Fase 2/6.
 
 ### C4 — `MAX_ROUND_MS = 150_000` não está no `DESIGN.md` *(conflito documental)*
 
@@ -366,8 +388,10 @@ o teto é regra de jogo ou salvaguarda de engenharia.
 ## 5. Decisões de produto — ✅ TODAS APROVADAS (2026-07-28)
 
 > **O usuário aprovou as recomendações do @pm em bloco.** Cada decisão abaixo passa a valer
-> como escrito na respectiva "Recomendação". A Fase 3 deixa de estar bloqueada por decisão
-> de produto — segue bloqueada apenas por **dívida de arquitetura (§4: C2 e C3)**.
+> como escrito na respectiva "Recomendação". Com a dívida de arquitetura também resolvida
+> (§4, 2026-07-28), **a Fase 3 está desbloqueada** — restam só os parâmetros de tuning
+> (D-09) a medir com humano no controle, o que é trabalho da própria Fase 3, não pré-requisito
+> dela.
 
 | # | Decisão aprovada | Observação |
 |---|---|---|
