@@ -1,20 +1,24 @@
-import type { Ball, Command, Team, World } from '../sim/types.ts'
+import type { Ball, Command, Team, WorldView } from '../sim/types.ts'
 
 /**
  * Bot PLACEHOLDER da Fase 0 — existe só para haver alguém do outro lado.
  * Não é o bot de balanceamento da Fase 2: não estima valor esperado, não erra de
  * propósito, não lidera alvo. Regra única: se o alvo está no alcance, solta.
  * Determinístico: não consome RNG e depende só do estado do mundo.
+ *
+ * debt.7 — recebe WorldView, não World: chamar `.rng()` aqui é erro de compilação, não
+ * uma violação descoberta em code review depois. Quando a Fase 2 escrever o bot de
+ * verdade com jitter, ele consome de `deriveSeed(seed, 1|2)` (sim/rng.ts), nunca daqui.
  */
-export function dummyCommands(world: World, team: Team): Command[] {
+export function dummyCommands(view: WorldView, team: Team): Command[] {
   const cmds: Command[] = []
   // reage a cada 10 ticks (~166ms) para não parecer sobre-humano
-  if (world.tick % 10 !== 0) return cmds
+  if (view.tick % 10 !== 0) return cmds
 
-  for (const self of world.balls) {
+  for (const self of view.balls) {
     if (!self.alive || self.team !== team) continue
-    const def = world.chars[self.charId]
-    const alvo = maisProximo(world, self)
+    const def = view.chars[self.charId]
+    const alvo = maisProximo(view, self)
     if (!alvo) continue
 
     const dx = alvo.x - self.x
@@ -23,7 +27,7 @@ export function dummyCommands(world: World, team: Team): Command[] {
 
     if (self.ultCharge >= self.ultThreshold) {
       cmds.push({
-        tick: world.tick,
+        tick: view.tick,
         ballId: self.id,
         slot: 'ult',
         dx: dx / d,
@@ -34,9 +38,9 @@ export function dummyCommands(world: World, team: Team): Command[] {
     }
 
     const ab = def.abilities[self.abilityIndex]
-    if (world.time >= self.abilityReadyAt && d <= ab.maxRange) {
+    if (view.time >= self.abilityReadyAt && d <= ab.maxRange) {
       cmds.push({
-        tick: world.tick,
+        tick: view.tick,
         ballId: self.id,
         slot: 'ability',
         dx: dx / d,
@@ -53,10 +57,10 @@ function faixa(d: number, min: number, max: number): number {
   return Math.max(0, Math.min(1, (d - min) / (max - min)))
 }
 
-function maisProximo(world: World, self: Ball): Ball | null {
+function maisProximo(view: WorldView, self: Ball): Ball | null {
   let melhor: Ball | null = null
   let melhorD = Infinity
-  for (const b of world.balls) {
+  for (const b of view.balls) {
     if (!b.alive || b.team === self.team) continue
     const d = Math.hypot(b.x - self.x, b.y - self.y)
     if (d < melhorD) {

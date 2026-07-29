@@ -12,3 +12,38 @@ export function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }
+
+const SPLITMIX32_WEYL = 0x9e3779b9
+
+/**
+ * Mistura splitmix32 de referência (constantes de Chris Wellons, "lowbias32" —
+ * `0x21f0aaad`/`0x735a2d97`). Não é a simulação: usada só por `deriveSeed` abaixo.
+ */
+function splitmix32Mix(x: number): number {
+  x = Math.imul(x ^ (x >>> 16), 0x21f0aaad)
+  x = Math.imul(x ^ (x >>> 15), 0x735a2d97)
+  return (x ^ (x >>> 15)) >>> 0
+}
+
+/**
+ * debt.7/D-08 — deriva seeds descorrelacionadas de uma seed-mãe, uma por stream.
+ * `sim/` não pode importar de `bot/` (RF-19); a direção permitida é bot → sim, então a
+ * derivação mora aqui e o bot a consome.
+ *
+ * Tabela de streams reservados — escrita, não implícita (architecture.md §5.1):
+ *   0  world.rng — a simulação (createWorld: ruído de largada; ctx.rand dentro de personagens)
+ *   1  bot do time 0 — jitter de mira, limiar de decisão
+ *   2  bot do time 1 — idem
+ *   3  cliente — efeitos visuais. NUNCA pode afetar a simulação
+ *   4+ arnês, telemetria, geração de cenário
+ *
+ * Nada consome um stream != 0 ainda (nenhum personagem chama ctx.rand, o bot placeholder
+ * da Fase 0 não usa RNG) — infraestrutura entrando antes de precisar, mesmo padrão dos
+ * passos 1-7 deste épico. Colisão avançando por Weyl sequence keyed por streamId, depois
+ * mixada: verificado sem colisão para as 5 seeds do baseline × streamId 0-15 (ver
+ * Completion Notes de debt.7).
+ */
+export function deriveSeed(seed: number, streamId: number): number {
+  const state = ((seed >>> 0) + Math.imul(streamId >>> 0, SPLITMIX32_WEYL)) >>> 0
+  return splitmix32Mix(state)
+}

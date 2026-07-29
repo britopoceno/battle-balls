@@ -12,7 +12,7 @@ import {
   type PickSetup,
 } from '../sim/world.ts'
 import { SIGMA_MAX } from '../sim/stats.ts'
-import type { World } from '../sim/types.ts'
+import type { World, Command } from '../sim/types.ts'
 
 const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
 
@@ -178,6 +178,49 @@ for (const esperado of BUILD_BASELINE) {
   }
 }
 
+// ------------------------------------------- Replay (debt.7) — Regra 3, isolamento de RNG
+
+/**
+ * Prova que o bot não consome `world.rng` — critério P4.3 do PRD ("replay reconstrói a
+ * partida a partir de seed + linha do tempo de inputs, com hash idêntico").
+ *   (i)   roda a partida com o bot, gravando Command[] por tick
+ *   (ii)  recria o mundo com a MESMA seed e reproduz só os comandos gravados, sem bot algum
+ *   (iii) hash(i) === hash(ii)
+ * Se o bot sacasse de world.rng, a simulação teria consumido números diferentes no passo
+ * (ii) (nenhum comando novo é gerado ali, mas o desvio apareceria se algo dependesse de
+ * ordem de consumo) e o hash divergiria. `dummyCommands` recebe `WorldView` desde debt.7 —
+ * este teste é a segunda linha de defesa, em runtime, do que o tipo já impede em compilação.
+ */
+function rodarComGravacao(seed: number): { hash: string; gravados: Command[] } {
+  const world = createWorld(CHARS, setup(seed))
+  const gravados: Command[] = []
+  while (!world.over && world.tick < 60 * 180) {
+    const cmds = [...dummyCommands(world, 0), ...dummyCommands(world, 1)]
+    gravados.push(...cmds)
+    step(world, cmds)
+  }
+  return { hash: hash(world), gravados }
+}
+
+function rodarReplay(seed: number, gravados: Command[]): string {
+  const world = createWorld(CHARS, setup(seed))
+  while (!world.over && world.tick < 60 * 180) {
+    step(world, gravados)
+  }
+  return hash(world)
+}
+
+const desviosReplay: string[] = []
+for (const esperado of BASELINE) {
+  const { hash: hashComBot, gravados } = rodarComGravacao(esperado.seed)
+  const hashReplay = rodarReplay(esperado.seed, gravados)
+  if (hashComBot !== hashReplay) {
+    desviosReplay.push(
+      `  ✗ replay seed ${esperado.seed}: hash com bot ${hashComBot} != hash replay ${hashReplay}`,
+    )
+  }
+}
+
 // ---------------------------------------------- Pilar 3 (debt.6) — Camada 1: estática
 
 /**
@@ -318,6 +361,10 @@ console.log(
 )
 console.log(`espelho 2v2    time0 ${v0} · time1 ${v1} · empate ${empates}   (esperado ~50/50)`)
 console.log(`duração        mediana ${mediana.toFixed(1)}s · min ${duracoes[0].toFixed(1)}s · max ${duracoes[duracoes.length - 1].toFixed(1)}s`)
+if (desviosReplay.length) for (const d of desviosReplay) console.log(d)
+console.log(
+  `replay         ${desviosReplay.length === 0 ? `✓ ok — ${BASELINE.length} seeds reproduzidas sem bot` : `✗ ${desviosReplay.length} desvio(s)`}`,
+)
 console.log('')
 for (const linha of tabelaJanelas) console.log(linha)
 console.log('')
@@ -345,5 +392,11 @@ if (desviosBuild.length > 0) {
 if (violacoesPilar3.length > 0) {
   throw new Error(
     `Pilar 3 (D-07) violado em ${violacoesPilar3.length} ponto(s) — ver camadas 1/3 acima.`,
+  )
+}
+if (desviosReplay.length > 0) {
+  throw new Error(
+    `replay divergiu em ${desviosReplay.length} seed(s) — o bot pode estar consumindo ` +
+      'world.rng, quebrando o isolamento de stream (D-08). Ver regra 3 de architecture.md §5.2.',
   )
 }

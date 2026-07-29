@@ -1,6 +1,6 @@
 ---
 name: project-migracao-debt
-description: O golden hash de determinism.ts é o critério de aprovação das stories debt.1 a debt.7 — hash IDÊNTICO é obrigatório nos passos 1 a 7
+description: Épico debt.0-debt.7 FECHADO em 2026-07-28 com golden hash intacto; lições dos 8 gates e o que continua aberto para a Fase 3 (passo 8, itens)
 metadata:
   type: project
 ---
@@ -114,5 +114,42 @@ sem a correção a violação passava despercebida — correção load-bearing, 
 que causa mais dano, e zerar `atk.dmg` do atacante para que a morte venha do mecanismo sob teste (o
 melee mata antes, senão, e o teste passa pelo caminho errado — custou uma rodada). Depois posicionar as
 bolas à mão a cada tick e castar pelo caminho real de produção (`step(world, [cmd])`).
+
+**ÉPICO FECHADO em 2026-07-28 (gate de `debt.7`, PASS).** `debt.0`-`debt.7` todas em Done. Os 5
+hashes do baseline (`96de1201`/`f66a7416`/`a8db9c28`/`cb77dbe0`/`6aede2d9`) atravessaram as sete
+refatorações sem mover um dígito. **O passo 8 (camada de itens, `src/shop/`, Fase 3) é o primeiro
+em que o hash DEVE mudar** — ali, hash alterado vira sinal de progresso e atualizar a tabela do
+`BASELINE` passa a ser legítimo, com justificativa no commit. Até lá, a regra de alarme acima
+continua valendo. Note que o `BASELINE` hoje vive em `determinism.ts` junto de um `BUILD_BASELINE`
+separado (5 variantes de ability/passive index) que fecha o ponto cego de roster descrito acima.
+
+**Técnica decisiva do gate de `debt.7` — matriz 2×2 em vez de dois testes soltos.** Quando o @dev
+alega "com o defeito X o teste dispara, sem X não dispara", ele tipicamente roda 2 células e para.
+Faltam os controles que **isolam a causa**. Em `debt.7` o @dev testou (vazamento só → não diverge)
+e (vazamento + consumidor de `ctx.rand` → diverge), e concluiu que o mecanismo funciona. A célula
+ausente era (consumidor de `ctx.rand` só, sem vazamento): sem ela, a divergência podia ser artefato
+de ter adicionado consumo de RNG, não do vazamento. Rodei as 4 e a conclusão se sustentou — mas a
+conclusão só passou a ser *demonstrada* com o controle. Aplicar sempre que a alegação for causal.
+
+**Quando o AC pede "sem colisão nas seeds testadas", checar se a propriedade é ESTRUTURAL.**
+Amostragem responde "não vi colisão"; álgebra responde "não pode haver". Em `deriveSeed`
+(`sim/rng.ts`), `seed + streamId × 0x9e3779b9 (mod 2³²)` é injetora porque o incremento é ímpar, e
+o finalizador `lowbias32` é composição de bijeções — colisão entre streams é impossível para
+**todo** `streamId`, não só o range amostrado. Upgrade gratuito da garantia; vale registrar no gate
+para que a Fase 2 não reverifique.
+
+**Cuidado: avalanche média NÃO detecta erro de dígito em constante de hash.** Testei — variantes
+com um dígito trocado, e até com shift errado, dão avalanche ~16.000 bits/32 igual à correta.
+Para auditar constantes, reimplemente da literatura e compare bit a bit; e verifique se o AC
+sequer *depende* delas (em `deriveSeed` não dependia: qualquer multiplicador ímpar preserva a
+bijeção, logo o risco era limitado por construção).
+
+**Aberto ao entrar na Fase 3:** (a) o buraco do Pilar 3 descrito acima (dano via `ctx.apply` em
+`on.collide` atravessa as 3 camadas; `openContactWindow` com `source` inexistente é silêncio);
+(b) `WorldView = Omit<World,'rng'>` é raso — `view.balls[0].hp` segue mutável, decisão registrada
+do @architect de endurecer só sob caso real; (c) o teste de replay de `debt.7` tem poder
+discriminante **prospectivo** — verifiquei que um bot vazando `world.rng` passa verde hoje, porque
+nenhum personagem consome `ctx.rand` (`grep -rn "rand" src/chars/` é vazio). Ele passa a carregar
+peso sozinho quando o primeiro personagem consumir. Não superestimar essa proteção antes disso.
 
 Ver também [[feedback-verificacao-independente]].

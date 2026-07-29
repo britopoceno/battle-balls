@@ -138,6 +138,13 @@ export interface World {
   /** segundos por tick */
   dt: number
   arena: Arena
+  /**
+   * debt.7 — INVARIANTE: nunca reordenar por valor (sem `sort` por HP, distância ou
+   * dano). Se alguma lógica precisar de outra ordem, ordena uma CÓPIA, sempre com
+   * desempate por `id`. `Array.prototype.sort` só é estável dentro do mesmo engine, e a
+   * Fase 4 roda Node e Chrome simultaneamente — reordenar o array original faria a ordem
+   * de consumo de `ctx.rand` (quando personagens passarem a usá-lo) divergir entre eles.
+   */
   balls: Ball[]
   projectiles: Projectile[]
   zones: Zone[]
@@ -157,6 +164,18 @@ export interface World {
    */
   phase: 'cast' | 'tick' | 'effect' | 'attack' | 'zone' | 'projectile' | 'contact' | 'collide'
 }
+
+/**
+ * debt.7 — o bot recebe isto, nunca `World`. Oculta `rng` POR TIPO, não por convenção:
+ * tentar chamar `.rng()` a partir de um `WorldView` é erro de compilação. `World` satisfaz
+ * `WorldView` estruturalmente, então nenhum ponto de chamada precisa converter.
+ *
+ * Ressalva registrada, não corrigida aqui: `Omit` é raso — `view.balls[0].hp` continua
+ * mutável. Começa com `Omit` + o teste de replay (que pega a violação em runtime,
+ * indiretamente, via divergência de hash); endurecer para `DeepReadonly` só se aparecer
+ * um caso real de escrita acidental.
+ */
+export type WorldView = Omit<World, 'rng'>
 
 /** Comando de jogador, agendado para um tick específico (input delay). */
 export interface Command {
