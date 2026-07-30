@@ -3,8 +3,11 @@
 > Escrito **a partir** de `DESIGN.md` v1 (decisões travadas) e `docs/brief.md` (medições e
 > contradições verificadas). Não reabre decisão. Onde o brief e o `DESIGN.md` divergem, o
 > conflito está **sinalizado**, não resolvido.
-> Data: 2026-07-28 · Fase corrente: **0 APROVADA pelo usuário — Fase 1 autorizada**.
+> Data: 2026-07-28 · Fase corrente: **2 CONCLUÍDA — Fase 3 autorizada** (2026-07-29).
 > Todas as decisões de §5 e todos os indicadores de §6 foram aprovados em 2026-07-28.
+> Fase 1 (E1 — Sensação): **✅ aprovada pelo usuário** (julgamento humano, portão sem métrica
+> substituta). Fase 2 (E2 — Arnês): **✅ concluída** — portão verificável, P2.1-P2.5 passaram
+> (ver §2, E2).
 
 ---
 
@@ -96,6 +99,10 @@ o cliente. Toda fase com entrega de cliente precisa de verificação visual pró
 **Plano B registrado (se o portão reprovar):** 1 bola pilotada + 1 automática. Isso
 invalidaria a decisão travada #3 (2v2) e exigiria nova sessão de design — não é ajuste.
 
+> **Estado: ✅ APROVADO pelo usuário.** Julgamento humano — os dois polegares funcionam sem
+> atrapalhar um ao outro. Portão sem métrica substituta, como a seção acima declara; a
+> aprovação é do usuário jogando, não deste documento.
+
 ---
 
 ### E2 — Arnês *(estimativa: 1-2 semanas)*
@@ -130,6 +137,36 @@ e a Fase 3 precisa ser reprojetada antes de a loja existir. Indicador **aprovado
 **Também nesta fase:** % de rodadas que atingem 60s (Risco #6). Hoje é 0 de 40, com max de
 19,5s. Se seguir 0% após o ajuste de HP/dano, ou a morte súbita é código morto ou os números
 de combate estão errados por um fator ~4.
+
+> ✅ **CONCLUÍDA (2026-07-29).** 9 stories (`e2.0`-`e2.8`, `docs/architecture-e2.md`), todas
+> `Done`. Portão executado com o comando oficial `npm run balance -- --mutacao=vex:dmg:+0.30
+> --n=3000`:
+> - **P2.1** — `sim:check` verde, golden hash idêntico ao baseline de `debt.0` nas 9 stories.
+> - **P2.2** — mutante Vex +30% dmg: **79,00% ±1,79, fora** de 45–55%. Detectado com folga.
+> - **P2.3** — controle 0% de mutação: **50,10% ±1,79, dentro.** Nota operacional: no piso de
+>   `n=800` (RF-48) o veredito pode sair inconclusivo por amostragem — a execução do portão
+>   usa `n≥2000` (ver Anexo B de `docs/architecture-e2.md`), não o piso.
+> - **P2.4** — n=3000 por confronto (acima do piso de 800).
+> - **P2.5** — determinismo com bot no loop, autoconsistência + replay sem bot, 5 seeds.
+>
+> **Medição adicional de #1b:** deltas por personagem (golem/vex), sem agregação global —
+> R-04 (`architecture-e2.md` §9) devolveu a regra de agregação para a Fase 5, quando o gatilho
+> for cobrado com o roster de 8. Achado a carregar: o veredito do gatilho pode inverter
+> trocando a base de seed a n=800 (registrado no gate de `e2.7`); qualquer leitura de #1b deve
+> usar n bem acima do piso de RF-48.
+>
+> **Re-medição de D-02 (empate, com roster heterogêneo):** **2,8%** com o bot heurístico
+> (`[golem,vex]` espelho), contra 17,5% do `dummy` na Fase 0 e 11,1% medido preliminarmente
+> com `dummy` em `architecture-e2.md` §1.3 — confirma a hipótese do `README.md`: empate é
+> artefato de simetria de time, não regra de peso. D-02 segue como salvaguarda barata.
+>
+> **Risco #6 (morte súbita):** 0,0% em milhares de rodadas com o bot heurístico — segue sem
+> se materializar; decisão sobre "código morto vs números errados" cabe à Fase 3, depois do
+> ajuste de HP/dano de D-05.
+>
+> **Dívida rastreada para fases seguintes** (nenhuma bloqueou o portão de E2): REL-001
+> (**bloqueia** qualquer item de +HP na loja da Fase 3 — `b.hp` nasce de `def.maxHp`, não de
+> `stat.maxHp`; um item de vida faria a bola nascer ferida) e QA-E27-004 (Fase 5, acima).
 
 ---
 
@@ -250,13 +287,13 @@ PM — os que dependem de decisão pendente estão marcados com o ID da decisão
 | ID | Requisito | Origem |
 |---|---|---|
 | RF-20 | Partida em **Bo5**: primeiro a 3 vitórias de rodada | DESIGN §4 |
-| RF-21 | **Regra de empate no Bo5** | **pendente D-02 — BLOQUEIA a Fase 3** |
+| RF-21 | **Regra de empate no Bo5** | ✅ **RESOLVIDO** (D-02: rodada nula, teto de 7) — re-medido na Fase 2 com bot heurístico: 2,8% (ver §2/E2) |
 | RF-22 | **Renda igual** para os dois jogadores por rodada (ex.: 4, 5, 6, 7, 8) | decisão #7 |
 | RF-23 | **Juros sobre o ouro guardado**. Vencer a rodada **não** dá ouro — sem snowball: a 1ª vitória não compra a 2ª | decisão #7 |
 | RF-24 | Loja entre rodadas, com **duas trilhas de 4 itens**: física (Chumbo +massa, Turbina +velocidade, Lixa −atrito, Borracha +elasticidade) e combate (Lâmina +dano, Couraça +HP, Luneta +alcance, Relicário −cooldown) | decisão #8 |
 | RF-25 | **Borracha (+elasticidade)** e **Relicário (−cooldown)** precisam de ponto de aplicação no simulador | ✅ **RESOLVIDO** (`debt.4`, `debt.5`) — ver §4 |
-| RF-26 | **Luneta (+alcance)**: escopo do modificador | **pendente D-03** (hoje só ataque básico) |
-| RF-27 | **Ordem de aplicação de mods de item** (aditivo / multiplicativo / composto) | **pendente D-04 — BLOQUEIA a Fase 3** |
+| RF-26 | **Luneta (+alcance)**: escopo do modificador | ✅ **RESOLVIDO** (D-03: só ataque básico na v1, por decisão — não limitação técnica) |
+| RF-27 | **Ordem de aplicação de mods de item** (aditivo / multiplicativo / composto) | ✅ **RESOLVIDO** (D-04: `base×(1+Σbônus)`, teto por campo — implementado em `debt.1`-`debt.3`) |
 | RF-28 | Mods de passiva e de item devem **compor**, não se sobrescrever | ✅ **RESOLVIDO** (`debt.1`, `debt.3`) — ver §4 |
 | RF-29 | Quantidade e preço dos itens; renda exata por rodada; taxa de juros | **pendente D-09** (não bloqueia antes da Fase 3) |
 
@@ -550,10 +587,12 @@ Os demais vieram do brief §4.
 | 6 | **`[NOVO]`** Morte súbita é código morto | % de rodadas que atingem 60s | Hoje **0 de 40** (max 19,5s). Seguir em 0% após ajuste de HP/dano → ou a mecânica é desnecessária, ou os números de combate estão errados por fator ~4 | 2 e 3 | ✅ **Aprovado** — risco não listado no `DESIGN.md` |
 | 7 | **`[NOVO]`** Fluxo de RNG compartilhado bot↔sim | Bot da Fase 2 consumindo `world.rng` | Se consumir, "replay = seed + inputs" deixa de valer entre versões do bot | 2, no desenho do bot | ✅ **Aprovado** — vira decisão **D-08** |
 
-**O que preciso do usuário nesta seção:** aprovar, ajustar ou recusar cada **aprovado**.
-O item #2 é o mais urgente — ele é o portão da Fase 2 neste PRD. Se o usuário não o aprovar,
-a Fase 2 fica sem critério verificável e volta a depender de julgamento, o que contraria a
-decisão #13 (medição, não raciocínio).
+> ✅ **Todos os indicadores acima foram aprovados em bloco em 2026-07-28** (ver a nota no topo
+> desta seção). O item #2 era o mais urgente — portão da Fase 2 — e passou: `npm run balance
+> -- --mutacao=vex:dmg:+0.30 --n=3000` detecta o mutante fora de 45–55% e o controle fica
+> dentro (ver §2/E2). Indicador #6 (morte súbita) também medido na Fase 2: **0,0% em milhares
+> de rodadas** com o bot heurístico — segue sem se materializar; decisão "código morto vs
+> números errados" cabe à Fase 3 (D-05), após o ajuste de HP/dano com humano no controle.
 
 ---
 
@@ -567,5 +606,8 @@ decisão #13 (medição, não raciocínio).
   único em vez de monorepo (fronteiras de pasta mantidas); mira por arrasto antecipada da
   Fase 1; `INPUT_DELAY_TICKS = 0`; Canvas 2D em vez de Pixi. O `DESIGN.md` §5 descreve
   `packages/` e Pixi — divergência conhecida e aceita, split real na Fase 5.
-- **Este PRD não decide** nada listado em §5, não resolve nada listado em §4, e não autoriza a
-  Fase 1: o portão da Fase 0 é julgamento humano e ainda não foi dado.
+- **Este PRD não decidiu** nada listado em §5, nem resolveu nada listado em §4, **até que o
+  usuário aprovasse** — o que aconteceu em bloco em 2026-07-28 (§5, §6). A partir daí, cada
+  decisão passou a valer como escrita. As Fases 0, 1 e 2 têm portão passado e registrado em
+  §2; a Fase 3 está em andamento. Ver `docs/GDD.md` e `docs/DEVELOPMENT-BIBLE.md` para a
+  leitura consolidada do estado atual do projeto.

@@ -192,9 +192,9 @@ O bot rende três usos: balanceamento, modo treino e oponente solo.
 | # | Risco | Gravidade |
 |---|---|---|
 | 1 | **Trilha de combate mata a trilha física.** Colisão não dá dano e não há ring-out, então massa/atrito/elasticidade só valem *indiretamente* (negar alcance). Em Bo5 curto, dano direto tende a ganhar de controle indireto. Se os itens físicos ficarem com <35% de taxa de compra, a física vira enfeite. | **Alta** |
-| 2 | **Liberdade total sem moeda comum.** Nenhuma fórmula te diz se um personagem está forte — só medição. O arnês de balanceamento precisa existir na Fase 2, não no fim. | Alta |
+| 2 | **Liberdade total sem moeda comum.** Nenhuma fórmula te diz se um personagem está forte — só medição. ✅ **O arnês existe desde a Fase 2** (`npm run balance`, teste de mutante e controle negativo passando — ver `docs/prd.md` §2/E2). Risco fechado para o roster atual; volta a valer em escala na Fase 5. | Alta |
 | 3 | **Escopo somado.** Física + liberdade total + PvP síncrono + economia + mira + 8 personagens ≈ 12 meses de trabalho. Cada escolha isolada é defensável; a soma é um jogo grande. | Alta |
-| 4 | **Mirar 2 personagens ao mesmo tempo, ao vivo.** Nenhum documento resolve isso — só protótipo na mão. É o primeiro teste a fazer. | Média |
+| 4 | **Mirar 2 personagens ao mesmo tempo, ao vivo.** ✅ **Testado e aprovado na Fase 1** (2026-07-29) — julgamento humano, ver `docs/prd.md` §2/E1. | Média |
 | 5 | **Curva econômica curta.** Bo5 dá só 4 compras. Itens precisam ser sentidos de imediato, o que empurra o poder deles para cima e aperta o balanceamento. | Média |
 
 ---
@@ -226,14 +226,15 @@ Cada fase tem um **portão**: não avance sem passar.
 | Fase | Entrega | Portão |
 |---|---|---|
 | **0** — Núcleo ✅ **PASSOU** *(2026-07-28)* | `sim` pura + Golem e Vex + render Canvas + mira por arrasto + arnês de determinismo. Ver `README.md`. | *Mirar habilidades em bolas que andam sozinhas é divertido?* — **SIM.** Veredito do usuário. Fase 1 autorizada |
-| **1** — Sensação *(1 sem)* | Layout mobile paisagem, 4 botões semitransparentes, mira por arrasto. Teste no celular de verdade. | *Os dois polegares funcionam sem atrapalhar um ao outro?* |
-| **2** — Arnês *(1-2 sem)* | Bot heurístico + CLI de 10k lutas + matriz de winrate. | *Consigo detectar um personagem quebrado sem jogar?* |
-| **3** — Loop *(2-3 sem)* | Draft snake + builds cegas + Bo5 + loja + economia. Tudo local, contra o bot. | *Dá vontade de jogar outra partida?* |
+| **1** — Sensação ✅ **PASSOU** *(2026-07-29)* | Layout mobile paisagem, 4 botões semitransparentes, mira por arrasto. Teste no celular de verdade. | *Os dois polegares funcionam sem atrapalhar um ao outro?* — **SIM.** Veredito do usuário. Fase 2 autorizada |
+| **2** — Arnês ✅ **PASSOU** *(2026-07-29)* | Bot heurístico + CLI de balanceamento (`npm run balance`) + matriz de winrate, protocolo A/B. | *Consigo detectar um personagem quebrado sem jogar?* — **SIM**, portão verificável (P2.1-P2.5). Ver `docs/prd.md` §2/E2 para os números medidos |
+| **3** — Loop 🔄 **EM ANDAMENTO** *(iniciada 2026-07-29)* | Draft snake + builds cegas + Bo5 + loja + economia. Tudo local, contra o bot. 8 stories (`e3.0`-`e3.7`) em `docs/stories/`, `Status: Ready`. | *Dá vontade de jogar outra partida?* |
 | **4** — Rede *(2-3 sem)* | Servidor autoritativo + input delay + sala por link. | *1v1 entre dois celulares é fluido?* |
 | **5** — Conteúdo *(6-8 sem)* | 8 personagens, itens, telemetria, ajuste por medição. | *A matriz de winrate fecha em 45-55%?* |
 | **6** — Meta | Ranked, progressão, polimento, som, arte. | — |
 
-**A Fase 0 respondeu sim.** As outras 60 decisões deste documento estão validadas pelo
-único teste que importava. O trabalho agora é a Fase 1 — com uma dívida a pagar antes
-da Fase 3: metade da loja não tem ponto de aplicação no simulador e `mods` não compõe
-(ver `docs/prd.md` §4, contradições C2 e C3).
+**As Fases 0, 1 e 2 responderam sim.** A dívida de arquitetura que bloqueava a Fase 3 (metade
+da loja sem ponto de aplicação no simulador, `mods` não compunha — `docs/prd.md` §4,
+contradições C2 e C3) foi paga por completo (`docs/stories/debt.0`-`debt.7`, todas `Done`). O
+trabalho agora é a Fase 3 — ver `docs/architecture-e3.md` para o desenho e `docs/GDD.md`/
+`docs/DEVELOPMENT-BIBLE.md` para a leitura consolidada do estado atual do projeto.
