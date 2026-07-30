@@ -9,9 +9,14 @@ import {
   makeStatBlock,
   recomputeStats,
   resetClampCounters,
+  type BonusBlock,
   type StatBlock,
   type StatKey,
 } from '../sim/stats.ts'
+// e3.1 — a bola sintética mora em `shop/preview.ts` (uma cópia só, Anexo A passo 1). `tools/`
+// consumindo `shop/` é a mesma direção que já vale para `tools/packages.ts`: nada em `sim/`
+// importa nenhum dos dois.
+import { bolaSintetica } from '../shop/preview.ts'
 import { TUNNELING_COUNTER, integrate, resetTunnelingCounter } from '../sim/physics.ts'
 import type { AimSpec, Ball, CharDef, World, WorldView } from '../sim/types.ts'
 import { runRound, type RoundDriver } from './harness.ts'
@@ -727,17 +732,24 @@ function baseFolgada(): StatBlock {
   return s
 }
 
-/** `recomputeStats` lê `base`/`bonusPassive`/`bonusItem` e escreve `stat`; o resto da `Ball` não. */
-function bolaSintetica(campo: StatKey, base: number, bonusItem: number): Ball {
-  const b = {
-    base: baseFolgada(),
-    bonusPassive: makeStatBlock(0),
-    bonusItem: makeStatBlock(0),
-    stat: makeStatBlock(0),
-  }
-  b.base[campo] = base
-  b.bonusItem[campo] = bonusItem
-  return b as unknown as Ball
+/**
+ * Bola sintética de CAMPO ÚNICO sobre a base folgada — o caso degenerado que este autoteste usa
+ * nas NOVE chamadas abaixo, e só ele (a `e3.1` diz "dez"; são nove — `grep` confere).
+ *
+ * `e3.1` (Anexo A, passo 1) moveu o helper genérico para `src/shop/preview.ts`, exportado e
+ * multi-campo, porque o preview da loja precisa das duas coisas (a Borracha escreve `restBall` e
+ * `restWall`) e porque duas cópias da mesma bola sintética seriam duas fontes de verdade. **Não
+ * existe cópia aqui**: esta função é um adaptador de três linhas em cima da de lá — ela só decide
+ * QUAL base e QUAL campo, que é a parte específica deste autoteste. A base continua sendo
+ * `baseFolgada()` de propósito (nenhum clamp absoluto morde exceto o campo sob teste); um preview
+ * de loja passa a base do personagem real.
+ */
+function bolaFolgada(campo: StatKey, base: number, bonusItem: number): Ball {
+  const b = baseFolgada()
+  b[campo] = base
+  const bonus: Partial<BonusBlock> = {}
+  bonus[campo] = bonusItem
+  return bolaSintetica(b, bonus)
 }
 
 function totalMordidas(): number {
@@ -778,7 +790,7 @@ function autotesteContadores(): string[] {
 
   // (1) desligado não conta — é o que garante que em jogo/`sim:check` o caminho é o de antes
   resetClampCounters(false)
-  recomputeStats(bolaSintetica('dmg', 1, 1.5))
+  recomputeStats(bolaFolgada('dmg', 1, 1.5))
   conferir(
     '(1) desligado não conta',
     CLAMP_COUNTERS.calls === 0 && totalMordidas() === 0,
@@ -787,7 +799,7 @@ function autotesteContadores(): string[] {
 
   // (2) MORDIDA, não CHAMADA: três recálculos com bônus folgado não são três mordidas
   resetClampCounters(true)
-  for (let i = 0; i < 3; i++) recomputeStats(bolaSintetica('dmg', 1, 0.5))
+  for (let i = 0; i < 3; i++) recomputeStats(bolaFolgada('dmg', 1, 0.5))
   conferir(
     '(2) mordida != chamada',
     CLAMP_COUNTERS.calls === 3 && totalMordidas() === 0,
@@ -796,7 +808,7 @@ function autotesteContadores(): string[] {
 
   // (3) ΣMAX morde, e só ele — §5.1: "um +150% seria silenciosamente reduzido para +100%"
   resetClampCounters(true)
-  recomputeStats(bolaSintetica('dmg', 1, 1.5))
+  recomputeStats(bolaFolgada('dmg', 1, 1.5))
   conferir(
     '(3) ΣMAX dmg',
     mordidasDe('ΣMAX', 'dmg') === 1 && totalMordidas() === 1,
@@ -805,7 +817,7 @@ function autotesteContadores(): string[] {
 
   // (4) ΣMIN morde no outro sentido
   resetClampCounters(true)
-  recomputeStats(bolaSintetica('dmg', 1, -0.9))
+  recomputeStats(bolaFolgada('dmg', 1, -0.9))
   conferir(
     '(4) ΣMIN dmg',
     mordidasDe('ΣMIN', 'dmg') === 1 && totalMordidas() === 1,
@@ -815,8 +827,8 @@ function autotesteContadores(): string[] {
   // (5) borda estrita: exatamente NO teto não é corte, e contar ali inflaria todo campo cujo
   // bônus encoste no limite sem ser reduzido
   resetClampCounters(true)
-  recomputeStats(bolaSintetica('dmg', 1, SIGMA_MAX.dmg))
-  recomputeStats(bolaSintetica('dmg', 1, SIGMA_MIN.dmg))
+  recomputeStats(bolaFolgada('dmg', 1, SIGMA_MAX.dmg))
+  recomputeStats(bolaFolgada('dmg', 1, SIGMA_MIN.dmg))
   conferir(
     '(5) borda não morde',
     CLAMP_COUNTERS.calls === 2 && totalMordidas() === 0,
@@ -826,7 +838,7 @@ function autotesteContadores(): string[] {
   // (6) ABS_MAX é outro contador: maxSpeed 400 × (1 + 0.50) = 600 > 420, com o Σ folgado (+0.50
   // cabe em ΣMAX.maxSpeed +0.60). Se os dois compartilhassem contador, o Σ apareceria mordendo.
   resetClampCounters(true)
-  recomputeStats(bolaSintetica('maxSpeed', 400, 0.5))
+  recomputeStats(bolaFolgada('maxSpeed', 400, 0.5))
   conferir(
     '(6) ABS_MAX maxSpeed',
     mordidasDe('ABS_MAX', 'maxSpeed') === 1 && mordidasDe('ΣMAX', 'maxSpeed') === 0 && totalMordidas() === 1,
@@ -835,7 +847,7 @@ function autotesteContadores(): string[] {
 
   // (7) ABS_MIN, com o Σ EXATAMENTE na borda: maxHp 30 × (1 − 0.50) = 15 < ABS_MIN.maxHp 20
   resetClampCounters(true)
-  recomputeStats(bolaSintetica('maxHp', 30, SIGMA_MIN.maxHp))
+  recomputeStats(bolaFolgada('maxHp', 30, SIGMA_MIN.maxHp))
   conferir(
     '(7) ABS_MIN maxHp',
     mordidasDe('ABS_MIN', 'maxHp') === 1 && mordidasDe('ΣMIN', 'maxHp') === 0 && totalMordidas() === 1,
@@ -866,7 +878,7 @@ function autotesteContadores(): string[] {
 
   // (9) reset zera de verdade (AC 6)
   resetClampCounters(true)
-  recomputeStats(bolaSintetica('dmg', 1, 1.5))
+  recomputeStats(bolaFolgada('dmg', 1, 1.5))
   resetClampCounters(true)
   conferir(
     '(9) reset zera',

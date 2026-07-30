@@ -1,0 +1,543 @@
+schema: 1
+story: 'e3.1'
+story_title: '`src/shop/` — catálogo de 8 itens, agregação em ordem canônica, extração do preview de stat'
+gate: CONCERNS
+status_reason: >-
+  Os doze ACs passam e foram verificados por reexecução independente — nada aceito do Dev Agent
+  Record. Escopo provado por sha256: dos 17 arquivos registrados no gate de `e3.0`, exatamente UM
+  difere (`src/tools/balance.ts`); `src/sim/world.ts` bate dígito a dígito com o gate de `e3.0`, o
+  que prova que a correção de REL-001 está intacta e que `e3.1` não a tocou. Teste dirigido reescrito
+  do zero por mim (11 blocos, 64 exigências, 64 passes) com poder discriminante demonstrado: reimplementei
+  a soma NAIVE na ordem de compra como contrafactual no mesmo processo. **Reproduzi a separação
+  que o @dev alegou e ela confere exatamente:** com a magnitude UNIFORME provisória, a implementação
+  errada devolve os MESMOS valores que a canônica em 120 permutações — o teste do enunciado original
+  de §7.3 não prova nada; com as quatro magnitudes de §1.6 no MESMO campo, a naive devolve DUAS saídas
+  em 24 permutações (`0.4799999999999999822` e `0.4800000000000000377`) e `agregarItens` devolve UMA.
+  A-10 está pago, e pago pelo motivo certo. `previewStat` confere com o `stat` da bola que
+  `createWorld` cria nos 14 campos em 7 cenários (incluindo três em que o teto morde) — a loja não é
+  terceira fonte de verdade. Couraça confere em 5 combinações, `hp === stat.maxHp` em todas.
+  **O achado que o @dev devolveu está CERTO e a inversão era minha:** `ΣMAX.maxSpeed = +0,60` satura o
+  Vex em 400 < 420 e `ABS_MAX.maxSpeed` exigiria base > 262,5 (roster: 250 e 105). Corrigi
+  `architecture-e3.md` §7.2 (errata com a tabela de qual teto morde primeiro nos 5 campos afetados),
+  §7.3 (errata do enunciado do teste A-10) e §1.3/§7.4 (censo de 9 leitores, pendência ARCH-E30-001
+  fechada). CONCERNS e não PASS por quatro registros, nenhum bloqueante e nenhum de comportamento:
+  o cabeçalho de `preview.ts` repete a afirmação FALSA que o @dev corrigiu em `catalogo.ts` (contradição
+  interna à própria story, no arquivo que `e3.4` vai ler primeiro); a magnitude do Relicário é literal
+  `0.25` e não constante nomeada, invisível a quem revisar D-09 pelas constantes; `validarCompra`/
+  `validarCatalogo` são escopo ACEITO mas não têm chamador algum, o que os torna segurança que não
+  roda; e `bolaSintetica` passou a ser exportada de diretório de produção com tipo de retorno que
+  mente. `e3.2` está liberada.
+reviewer: 'Aria (@architect) — quality_gate declarado na story'
+reviewed_revision: >-
+  working tree sobre commit:6306cf4 (master) ·
+  NOVOS por esta story: src/shop/catalogo.ts sha256:3c0b9f98… ·
+  src/shop/agregar.ts 41bc5968… · src/shop/preview.ts 27732734… ·
+  MODIFICADO por esta story: src/tools/balance.ts 90b8a899… (era 031f9075… no gate de e3.0) ·
+  IDÊNTICOS ao gate de e3.0, dígito a dígito — 16 arquivos:
+  src/sim/world.ts 6c1ce1f1… (a correção de e3.0 INTACTA, não tocada aqui) ·
+  src/sim/types.ts f0641379… · src/sim/rng.ts c6854d2b… · src/sim/effects.ts e517efb0… ·
+  src/sim/index.ts a772d2bd… · src/sim/stats.ts b69b7a91… · src/sim/physics.ts a9d12e7f… ·
+  src/chars/golem.ts 1bff8946… · src/chars/vex.ts 94ac3e80… · src/chars/index.ts ac78ea23… ·
+  src/bot/heuristic.ts f113a8e0… · src/bot/dummy.ts 99ca652c… ·
+  src/tools/harness.ts 2936e1ab… · src/tools/determinism.ts f2953f76… ·
+  src/tools/packages.ts 6d8edda9… · package.json 0a279866… (nenhum script, nenhuma dependência nova) ·
+  `git status --short -- src/` devolve UMA linha modificada (` M src/tools/balance.ts`, além de
+  ` M src/sim/world.ts` que é e3.0 não commitada) e UM untracked (`src/shop/`) ·
+  `src/client/*.ts` e `src/tools/inspect.ts` não modificados (git status) ·
+  ALTERADO PELO GATE (documento do @architect, não código): docs/architecture-e3.md §1.3, §7.2, §7.3, §7.4
+updated: '2026-07-30T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      `npm run check` (tsc --noEmit) reexecutado do zero: exit 0, saída vazia além do banner do npm.
+      `noUnusedLocals`/`noUnusedParameters` valem, o que prova de carona que a extração não deixou
+      import órfão nem `StatKey` sem uso em `balance.ts`.
+
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` reexecutado do zero: exit 0, VERDE em todas as linhas — determinismo ✓,
+      golden hash ✓ (5 seeds), build coverage ✓ (5 variantes), replay ✓, bot dupla exec ✓, bot replay ✓,
+      guarda BOT-001 ✓, pilar 3 ✓. Reforço independente da neutralidade, por CAUSA e não só por
+      resultado: `src/tools/determinism.ts` está byte-idêntico ao gate de e3.0 (f2953f76…), logo o
+      baseline não foi reescrito; `src/sim/*` inteiro está byte-idêntico (6 arquivos), logo nada no
+      motor mudou; e `src/shop/*` não é importado por `sim/`, `bot/`, `harness.ts` nem
+      `determinism.ts` (a única aresta entrante é `tools/balance.ts:19`, que o `sim:check` não
+      executa). O `sim:check` verde é VACUAMENTE verde para esta story, exatamente como o @dev
+      registrou — nenhuma das 50 seeds usa `itemBonus`. Quem responde por "funciona" são os 11 blocos
+      do meu teste dirigido.
+
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      `catalogo.ts` é dado: zero `function`, zero `let`, zero estado mutável, zero `import` de valor —
+      a única linha de import é `import type { BonusBlock } from '../sim/stats.ts'`, TIPO, verificada
+      no fonte. `Trilha = 'fisica' | 'combate'` e `ItemDef` batem a assinatura literal de §7.1 campo a
+      campo, incluindo `bonus: Readonly<Partial<BonusBlock>>` e o comentário de `desc`.
+      Verificado por medição, não por leitura, que o dado é coerente: todo campo de bônus dos 8 itens é
+      uma `StatKey` real (conferido contra `STAT_KEYS` em runtime), todo `preco` é inteiro >= 0 (§6.1)
+      e todo `id` casa `/^[a-z]+$/` — ASCII minúsculo sem acento, que é a precondição da ordem canônica
+      por unidade de código do AC 6.
+
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      Os 8 itens conferidos um a um em runtime contra a tabela do AC (trilha + conjunto exato de campos
+      de bônus): chumbo/fisica/mass · turbina/fisica/maxSpeed · lixa/fisica/drag ·
+      borracha/fisica/restBall+restWall · lamina/combate/dmg · couraca/combate/maxHp ·
+      luneta/combate/range · relicario/combate/cdSpeed. 8/8.
+      **As duas armadilhas de sinal conferidas no DADO, não no comentário** (é o que o AC pede e é a
+      única coisa que o motor lê): `lixa.bonus.drag === +0.2` (positivo, e nenhum outro campo) e
+      `relicario.bonus.cdSpeed === +0.25` (positivo). O efeito de motor conferido na aritmética:
+      `1/(1+0.25) === 0.8` exatamente (−20%, o `desc`) e `1/(1+0.50)` = 0,6667 (−33% com dois, não os
+      −40% que "20+20" sugere) — os dois pares literais de §7.2. Os comentários de sinal estão na linha
+      do item nos dois casos, com os dois números medidos de `packages.ts` na Lixa (+4,32pp para a
+      intenção contra −5,90pp para a letra do PRD) e a não-linearidade no Relicário.
+      Borracha escreve os DOIS campos (conferido: `restBall` e `restWall` presentes na saída).
+      Couraça com o comentário de desbloqueio por `e3.0` e a proibição explícita de voltar a ler
+      `def.maxHp` — e o grep de revisão que o gate de e3.0 pediu confere: `def.maxHp` sobrevive em UM
+      ponto de `src/` (`world.ts:142`, `base.maxHp`) e `src/shop/` não o lê em nenhum lugar.
+      DESVIO ACEITO na Turbina — ver `decisoes_de_julgamento`.
+
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      `desc` (texto do jogador) e `bonus` (o que o motor executa) coexistem no mesmo arquivo e apenas
+      nele — nenhum outro arquivo de `src/` contém string de UI de item. `MAGNITUDE_PROVISORIA = 0.2` e
+      `PRECO_PROVISORIO = 6` com o aviso `⚠️ PROVISÓRIO — D-09` no topo de cada constante, e o
+      raciocínio de por que UNIFORME (o probe de §1.2 é o único insumo objetivo que existe; §1.2 é
+      literal: "isso é insumo para o preço, não preço") e por que preço ÚNICO (diferenciar seria
+      ordenar valor entre itens sem medição que sustente — Artigo IV). Julgo a recusa de inventar
+      diferenciação CORRETA e melhor do que o alternativo: o mesmo probe medido varia de −2,7pp a
+      +20,6pp por PERSONAGEM, variação maior que qualquer diferenciação por item que o @dev pudesse
+      inventar hoje.
+      Exceção do Relicário justificada e correta no MÉRITO (com 0,20 o `desc` prometeria −20% e o motor
+      entregaria −16,7%), mas com um defeito de FORMA registrado em ARCH-E31-002.
+
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      Assinatura literal: `export function agregarItens(itens: readonly string[]): Partial<BonusBlock>`.
+      O laço externo é `CATALOGO_CANONICO` (`[...CATALOGO].sort(porId)`, resolvido uma vez na carga,
+      sobre CÓPIA), o interno conta cópias na lista de compra — logo a ordem de `itens` é irrelevante
+      por CONSTRUÇÃO, não por defesa. `porId` compara por unidade de código (`<`/`>`) e não
+      `localeCompare`: julgo esta a decisão certa e ela não estava na story — `localeCompare` depende
+      de ICU e a Fase 4 roda Node e Chrome ao mesmo tempo, o que faria a "ordem canônica" divergir
+      entre as duas pontas, isto é, reintroduzir exatamente o vetor que a função existe para fechar.
+      Verificado que a ordem de DECLARAÇÃO do catálogo (chumbo,turbina,lixa,borracha,lamina,couraca,
+      luneta,relicario) é diferente da canônica (borracha,chumbo,couraca,lamina,lixa,luneta,relicario,
+      turbina) — sem isso um bug na ordenação acertaria por coincidência, e o @dev escreveu esse
+      raciocínio no comentário de `CATALOGO`.
+
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      **Reproduzido por mim, com o contrafactual no mesmo processo.** Implementei `agregarNaive`
+      (soma na ordem da lista de compra) para que o teste possa FALHAR:
+      (a) MAGNITUDE UNIFORME, compra real de 5 itens com 2 Lixas, 120 permutações: `agregarItens` dá 1
+      saída; a NAIVE dá os MESMOS VALORES em todas as 120. **Confirmo a autocrítica do @dev: este
+      cenário não distingue as duas implementações e não prova A-10.** (Ele distingue uma coisa menor,
+      que também importa: a naive dá 24 objetos distintos em ORDEM DE CHAVE, e o canônico dá 1 —
+      "byte-idêntico" só vale para `JSON.stringify` porque a saída sai em ordem de `STAT_KEYS`.)
+      (b) MAGNITUDES DIFERENTES NO MESMO CAMPO, perturbando o catálogo EM MEMÓRIA com as quatro de
+      §1.6 (0,07/0,11/0,13/0,17 todas em `mass`, atribuídas a borracha/chumbo/lixa/turbina para que a
+      ordem canônica de `id` seja a crescente), 24 permutações: `agregarItens` dá **1** saída
+      (`{"mass":0.48}`) e a NAIVE dá **2** (`0.47999999999999998224` e `0.48000000000000003775`). A
+      divergência de último bit que A-10 previu está reproduzida no código de produção, e a
+      implementação a mata. Conferido também que a saída canônica é EXATAMENTE `0.07+0.11+0.13+0.17`.
+      Perturbação restaurada e a restauração ASSERIDA antes dos blocos seguintes (o modo de falha que
+      o @dev registrou ter cometido na primeira execução dele).
+
+  - id: AC8
+    verdict: PASS
+    evidence: >-
+      1 Lixa ⇒ `drag 0.2`; 2 ⇒ `0.4`; 3 ⇒ `0.6000000000000001`, e conferido que isso é
+      `0.2+0.2+0.2` e não `0.2*3` — a soma `n` vezes, não a multiplicação. Julgo esta decisão (que a
+      story não pedia) CORRETA e não preciosismo: D-04 define o efeito como ADITIVO, `v+v+v` e `v*3`
+      não são a mesma expressão em float64, e trocar a definição pela aproximação dela é o oposto do
+      que esta story existe para fazer. (Neste caso particular os dois coincidem — conferi: ambos dão
+      `0.6000000000000001` — o que é sorte, não garantia.)
+      Lista é `readonly string[]` e não `Set`: o mesmo `id` repetido soma.
+
+  - id: AC9
+    verdict: PASS
+    evidence: >-
+      Zero `throw` e zero `clamp` em `agregar.ts`, conferido no fonte e por medição: 6 Couraças saem
+      da agregação como `+1.2`, acima de `SIGMA_MAX.maxHp = 1.0`, e sai INTEIRO — é `recomputeStats`
+      que corta para +1,0 (verificado nas duas pontas: agregação 1.2, `stat.maxHp` do Golem 380 = 190×2).
+      Teste adicional de robustez que fiz e a story não pedia: com o catálogo perturbado para
+      `{mass: NaN}`, `{mass: Infinity}` e `{massa: 0.2}` (campo inexistente), `agregarItens` **não
+      lança** em nenhum dos três — o caminho de exceção que o AC 9 proíbe realmente não existe, nem
+      pela borda.
+
+  - id: AC10
+    verdict: PASS
+    evidence: >-
+      Helper extraído para `src/shop/preview.ts`, **exportado**, multi-campo
+      (`(base: Readonly<StatBlock>, bonus: Readonly<Partial<BonusBlock>>)`), com base de personagem
+      real; `balance.ts` importa dali e mantém um adaptador de 5 linhas (`bolaFolgada`) que só decide
+      QUAL base (`baseFolgada()`, que continua sendo dele) e QUAL campo. As três propriedades que o @po
+      cravou no AC estão todas endereçadas.
+      **UMA cópia só, provado por varredura de `src/` inteiro**: a definição em `preview.ts:56`, o
+      import em `balance.ts:19`, a chamada interna em `preview.ts:88` e a do adaptador em
+      `balance.ts:752`. Nenhum corpo duplicado.
+      Equivalência comportamental da extração verificada na ARITMÉTICA, não só pelo teste: o helper
+      antigo fazia `b.bonusItem[campo] = bonusItem` (atribuição) e o novo faz
+      `addPartialBonus(b.bonusItem, bonus)` sobre um `makeStatBlock(0)` — que é `0 + v`, idêntico a `v`
+      em float64 para todo `v` finito. E a base, que antes era o próprio objeto de `baseFolgada()`, é
+      agora COPIADA campo a campo na ordem de `STAT_KEYS` (conferido em teste próprio que
+      `bolaSintetica` não muta a base recebida).
+      Os **10 autotestes permanentes** do arnês passaram: `npm run balance -- --n=2` exit 0 com a
+      matriz impressa, e `problemasAutoteste` (`balance.ts:2234-2255`) agrega os dez
+      (`autotesteVeredito`, `Pares`, `TrocaDeLado`, `Fechar`, `Pacotes`, `Mutacao`, `Ab`, `Clamp`,
+      `Risco1b`, `Contadores`) e aborta com exit 1 ANTES de qualquer confronto na primeira falha — a
+      matriz existir é a prova de que os dez passaram, incluindo `autotesteContadores` com as **nove**
+      chamadas do helper extraído no caso degenerado (a story diz "dez"; são nove — o @dev corrigiu
+      isso no comentário e confirmo por varredura).
+      A auditoria de roster (`MNT-001`, 6 slots) também passou, o que fecha de carona que a extração não
+      tocou o pareamento aim × contactWindows.
+
+  - id: AC11
+    verdict: PASS
+    evidence: >-
+      `stats.ts:183-216` relido e byte-idêntico ao gate de e3.0 (b69b7a91…): `sigma = clamp(raw,
+      SIGMA_MIN[k], SIGMA_MAX[k])` → `base × (1 + sigma)` → `clamp(ABS_MIN, ABS_MAX)`. Nenhuma fórmula
+      nova, nenhum ponto de aplicação novo. `world.ts:166` (`if (pick.itemBonus)
+      addPartialBonus(b.bonusItem, pick.itemBonus)`) é o único ponto de entrada, e `src/shop/` não o
+      chama — quem vai chamar é `e3.2`. D-04 não reabriu.
+      Prova FORTE e não por leitura, que é o AC 6 do meu ponto de vista: `previewStat(ball.base,
+      agregarItens(itens))` comparado campo a campo com o `stat` da bola que `createWorld` REALMENTE
+      cria com o mesmo `itemBonus` — **14/14 campos idênticos em 7 cenários**, incluindo três em que o
+      teto morde (4 Turbinas ⇒ 400 pelo ΣMAX, 2 Borrachas ⇒ restWall 0,92 pelo ABS_MAX, 6 Lixas no
+      Golem ⇒ drag 0,60 pelo ABS_MAX) e um de 6 itens misturados. Se a loja tivesse reimplementado a
+      fórmula, os cenários de teto seriam onde ela divergiria — e é neles que ela bate. A terceira
+      fonte de verdade de §13.3 **não** foi criada.
+
+  - id: AC12
+    verdict: PASS
+    evidence: >-
+      Provado por sha256 contra o gate de e3.0, não por descrição do diff: dos 17 arquivos registrados
+      lá, **exatamente 1 difere** (`src/tools/balance.ts`) e 16 batem dígito a dígito — incluindo os 6
+      de `src/sim/` e `src/sim/world.ts` (6c1ce1f1…), o que prova simultaneamente que `src/sim/` não
+      ganhou linha nesta story e que a correção de `e3.0` está intacta.
+      O diff de `balance.ts` lido linha a linha: +1 import de tipo (`BonusBlock`), +1 import de valor
+      (`shop/preview.ts`), −12 linhas do helper local, +13 do adaptador com comentário, e 9 renomeações
+      de chamada. Nenhuma mudança de comportamento, e `noUnusedLocals` confirma que nada ficou órfão.
+      A direção da dependência é a certa: `tools/ → shop/ → sim/`. Nada em `sim/` importa `shop/`
+      (verificado por varredura), o que é o que faz o golden hash ser prova e não coincidência.
+      Fora de `src/`: `src/sim/world.ts` modificado é `e3.0` não commitada; `DESIGN.md` e `docs/prd.md`
+      modificados são da sessão de PRD da Fase 3 — conferido por varredura dos diffs que **nenhuma
+      linha adicionada ou removida neles menciona** `shop`, `catalogo`, `agregar`, `previewStat` ou
+      `ItemDef`.
+
+escopo_negativo_confirmado:
+  - >-
+    **`src/match/` NÃO foi criado** (é `e3.2`). `src/` contém bot/, chars/, client/, shop/, sim/,
+    tools/ e nada mais. Zero `setupDaRodada`, zero reducer, zero Bo5, zero `ECONOMIA_PROVISORIA`.
+  - >-
+    **O cliente não foi tocado** (é `e3.4`). `src/client/input.ts`, `layout.ts`, `main.ts`,
+    `render.ts` não aparecem em `git status --short`. Nenhuma tela de loja, nenhum preview visual.
+  - >-
+    **`src/bot/` intocado** (é `e3.3`) — `heuristic.ts` f113a8e0… e `dummy.ts` 99ca652c… idênticos
+    ao gate de e3.0. Nenhum `bot/partida.ts`.
+  - >-
+    **`src/tools/harness.ts` e `determinism.ts` intocados** — o instrumento que julga o hash não foi
+    tocado pela story que ele julga.
+  - >-
+    Nenhum número final de D-09 (preços, magnitudes) nem de D-05 foi decidido. Tudo em duas
+    constantes nomeadas com `⚠️ PROVISÓRIO — D-09` no topo, exceto o literal de ARCH-E31-002.
+
+issues:
+  - id: ARCH-E31-001
+    severity: medium
+    category: docs
+    finding: >-
+      **O cabeçalho de `src/shop/preview.ts` (linhas 16-17) repete a afirmação FALSA que o próprio @dev
+      corrigiu em `catalogo.ts`.** Literal: "se o jogador comprar dois itens no mesmo campo e o teto
+      morder, ele paga por um bônus que não recebe (**Turbina no Vex satura em `ABS_MAX.maxSpeed =
+      420`**; a segunda Borracha é cortada em `restWall` mas não em `restBall` — ver os comentários dos
+      itens em `catalogo.ts`)". A Turbina no Vex satura em **400**, pelo `ΣMAX`, e nunca em 420 —
+      medido no motor neste gate e corrigido por 13 linhas de comentário em `catalogo.ts`, no mesmo
+      commit, pelo mesmo autor. O comentário errado inclusive APONTA para o arquivo que carrega a
+      correção, então quem seguir o ponteiro encontra a contradição.
+      A metade da frase sobre a Borracha está correta e é uma boa ilustração; é só a Turbina que está
+      invertida.
+    impacto: >-
+      Zero em comportamento — é comentário, e a implementação de `previewStat` está correta (provada
+      contra o motor em 14/14 campos, 7 cenários). O impacto é o modo de falha que ESTA story existe
+      para impedir, em escala pequena: a afirmação sobre um teto passa a viver em dois lugares e eles
+      já discordam, no mesmo commit. E o lugar errado é o mais visível: `preview.ts` é o arquivo que
+      `e3.4` abre para escrever a UI de "valor efetivo", e a primeira coisa que ele diz é qual teto
+      explicar ao jogador. É exatamente o vetor da armadilha de sinal da Lixa, com teto em vez de sinal.
+    recommendation: >-
+      @dev: trocar `ABS_MAX.maxSpeed = 420` por `ΣMAX.maxSpeed = +0,60 (satura em 400 no Vex)` no
+      cabeçalho de `preview.ts`, ou substituir a parte da Turbina por uma referência ao comentário do
+      item em `catalogo.ts` para que a afirmação viva num lugar só. Uma linha, sem teste novo (nenhum
+      teste toca comentário). Pode ir no mesmo commit desta story ou na primeira mão de `e3.2`.
+      **Não bloqueia `e3.2` e não bloqueia o push.**
+
+  - id: ARCH-E31-002
+    severity: medium
+    category: code
+    finding: >-
+      **A magnitude do Relicário é o literal `+0.25` na linha do item, e não uma constante nomeada.**
+      O mérito da exceção está certo (com 0,20 o `desc` prometeria −20% e o motor entregaria −16,7%;
+      +0,25 é o par literal de §7.2) e está justificado no comentário. O defeito é de FORMA: o AC 5 e o
+      próprio JSDoc de `MAGNITUDE_PROVISORIA` cravam que "os números moram num lugar só, com o aviso em
+      cima, e nada os lê senão através destas constantes" — e este número não mora lá. Uma varredura por
+      `MAGNITUDE_PROVISORIA` (que é o que `e3.7` vai fazer ao revisar D-09) devolve 7 dos 8 itens.
+    impacto: >-
+      Nenhum hoje: o valor está correto e o comentário explica por quê. O impacto é diferido e concreto
+      — `e3.6`/`e3.7` vão mexer nas magnitudes de D-09, e quem trocar `MAGNITUDE_PROVISORIA` de 0,20
+      para o valor medido deixará o Relicário parado em 0,25 **em silêncio**, invertendo a relação que
+      hoje é deliberada (0,25 > 0,20 porque a conversão de recarga não é linear). Se a magnitude nova
+      for maior que 0,25, o Relicário passa a ser o item mais FRACO por acidente de refatoração. É o
+      mesmo padrão que fez `packages.ts` existir, aplicado a magnitude em vez de sinal.
+    recommendation: >-
+      `MAGNITUDE_RELICARIO = 0.25` como constante nomeada ao lado de `MAGNITUDE_PROVISORIA`, com o
+      aviso `⚠️ PROVISÓRIO — D-09` e uma frase dizendo que ela é DERIVADA da meta de `desc` (−20% de
+      recarga ⇒ `1/(1+x) = 0.8` ⇒ `x = 0.25`) e não independente — o que dá a `e3.7` a fórmula em vez
+      do número. ~4 linhas em `catalogo.ts`, sem mudança de valor e sem mudança de comportamento (o
+      `stat` resultante é bit-idêntico). **Não bloqueia.** Entrada obrigatória de `e3.7`.
+
+  - id: ARCH-E31-003
+    severity: medium
+    category: requirements
+    finding: >-
+      **`validarCompra` e `validarCatalogo` não têm chamador nenhum — nem de produção, nem de arnês,
+      nem de carga de módulo.** Julgo o ESCOPO aceitável (ver `decisoes_de_julgamento`), mas o estado
+      em que ficam é o pior possível para uma função de segurança: existe, está correta, está testada
+      pelo teste descartável do autor e do gate, e **não roda**. O próprio @dev registrou isso no
+      carry-forward #2 como risco; este gate o converte de nota de dev em obrigação de `e3.2`, porque
+      nota de dev em story `Done` não é lida por ninguém.
+      Agrava: `agregarItens` **ignora `id` desconhecido em silêncio** por construção (o laço externo é o
+      catálogo, não a lista de compra) — decisão certa, porque é o que torna a invariante 1 estrutural
+      em vez de defensiva, mas ela transfere 100% da detecção de "o jogador pagou por um item que não
+      existe" para `validarCompra`. Sem chamador, esse modo de falha é indetectável.
+    impacto: >-
+      ARCH-E30-002 (entrada do meu gate de `e3.0`) atribuiu a validação de não-finitos em `itemBonus` a
+      "quem popula o campo". A camada certa foi escrita. Se `e3.2` não a chamar, a atribuição continua
+      não cumprida com a aparência de cumprida — que é pior do que continuar aberta, porque o gate de
+      `e3.2` pode marcar ARCH-E30-002 como resolvido olhando o arquivo em vez do call graph.
+    recommendation: >-
+      **Entrada BLOQUEANTE de `e3.2`, não desta story:** `setupDaRodada` deve chamar `validarCompra`
+      ANTES de escrever em `PickSetup.itemBonus`, e o gate de `e3.2` deve exigir a aresta no call graph
+      (varredura por `validarCompra`), não a existência da função. Para `validarCatalogo`, o caminho
+      mais barato é uma linha no bloco `problemasAutoteste` de `balance.ts` (`e3.2` ou `e3.6`), onde ela
+      passa a rodar a cada `npm run balance` de graça — é o lugar onde os outros dez invariantes já
+      moram, e a função foi escrita no padrão de `analisarMutacao` exatamente para caber ali.
+
+  - id: ARCH-E31-004
+    severity: low
+    category: code
+    finding: >-
+      **`bolaSintetica` passou a ser exportada de diretório de produção com tipo de retorno que mente.**
+      `return b as unknown as Ball` sobre um objeto de 4 campos (`base`, `bonusPassive`, `bonusItem`,
+      `stat`) — a `Ball` real tem ~25, e `hp`, `alive`, `x`, `y`, `effects` e `contact` não existem
+      nele. O cast é herdado, deliberado, documentado, e era inofensivo quando a função era privada
+      dentro de `tools/balance.ts`: o único chamador era o autoteste, na mesma tela. Agora ela é
+      `export` em `src/shop/`, e o `tsc` vai aceitar passá-la para qualquer coisa que peça `Ball` —
+      `applyDamage`, `heal`, `weakestEnemy`, um render — todas as quais leriam `undefined` como número.
+      §13.3 já registra este arquivo como o ponto do desenho de que menos gosto; isto é o preço concreto
+      da recusa de `debt.1` a uma forma pura `(base, bonus) → StatBlock`, e a recusa continua certa
+      (alocação em caminho quente).
+    impacto: >-
+      Nenhum hoje: os dois chamadores passam o resultado direto para `recomputeStats`, que lê 3 campos e
+      escreve 1 (conferido no fonte). O risco é de superfície futura — `e3.4` escreve a tela da loja e
+      vai ter uma função exportada que devolve uma `Ball` de mentira à mão.
+    recommendation: >-
+      Duas saídas, sem tocar `sim/`. (a) Reduzir a superfície: manter `bolaSintetica` não exportada e
+      dar a `balance.ts` um `previewStatDeCampoUnico(base, campo, valor)` — mas `balance.ts` precisa da
+      `Ball` para chamar `recomputeStats` ele mesmo e contar clamps, então isto custaria mais que vale.
+      (b) A que eu recomendo: declarar em `preview.ts` um
+      `type PortadorDeStats = Pick<Ball, 'base' | 'bonusPassive' | 'bonusItem' | 'stat'>`, tipar o
+      objeto como ele (o que dá checagem real dos 4 campos, hoje inexistente) e manter o cast APENAS na
+      fronteira da chamada a `recomputeStats`, com a justificativa ali. Torna explícito no TIPO o que
+      hoje é só comentário. **Não bloqueia.** Candidata a `e3.4`, quando houver um segundo consumidor.
+
+  - id: ARCH-E31-005
+    severity: low
+    category: code
+    finding: >-
+      `CATALOGO` é `readonly ItemDef[]` e `bonus` é `Readonly<Partial<BonusBlock>>` — garantias de
+      COMPILAÇÃO apenas. Em runtime nada impede escrita, e eu aproveitei isso de propósito para poder
+      perturbar o catálogo no teste do AC 7 (o que é bom: uma congelação impediria o único teste que
+      prova A-10 hoje). Registro pela assimetria que ela cria: `validarCatalogo` existe para ACUSAR
+      corrupção do catálogo, mas nada a PREVINE, e a corrupção que ela acusa só é alcançável por `as`
+      ou JSON externo — que é precisamente o caminho que `e3.4` (UI) e uma eventual persistência de
+      build abrem.
+    impacto: >-
+      Nenhum hoje. Nenhum consumidor de produção, e o literal é checado por `tsc`.
+    recommendation: >-
+      Não congelar agora — custaria o poder do teste de A-10 enquanto a magnitude for uniforme.
+      Reavaliar em `e3.4`/`e3.5`, quando existir caminho de dado externo: se aparecer, `Object.freeze`
+      profundo na carga do módulo é barato (fora de caminho quente) e transforma ARCH-E31-005 em
+      garantia em vez de checagem. Registrado para não ser reinventado como "descuido".
+
+decisoes_de_julgamento:
+  - questao: >-
+      O @dev alterou o comentário da Turbina para contradizer a armadilha que o AC 4 manda registrar
+      literalmente. Isso é violação de AC?
+    veredito: 'NÃO — foi a decisão certa, e o defeito é do meu documento. Corrigido por mim neste gate.'
+    razao: >-
+      Reconferi a aritmética por medição própria e o @dev está certo em todos os números.
+      `recomputeStats` clampa o SOMATÓRIO antes de multiplicar pela base
+      (`sigma = clamp(raw, SIGMA_MIN, SIGMA_MAX)` → `stat = clamp(base × (1+sigma), ABS_MIN, ABS_MAX)`),
+      logo `ABS_MAX[k]` só é alcançável se `base × (1 + ΣMAX[k])` já o exceder.
+      `ΣMAX.maxSpeed = 0.6` (runtime), Vex base 250 ⇒ satura em **400**; 400 < 420. `ABS_MAX.maxSpeed`
+      exigiria base > `420/1.6 = 262,5`, e o roster tem 250 e 105. Medi de 0 a 8 Turbinas: 250, 300,
+      350, 400, 400, 400, 400, 400, 400 — satura na terceira e a quarta é 100% desperdiçada. O "+68%"
+      de §7.2 era `420/250` lido sem o `ΣMAX` no caminho, e a inversão era minha, não do @dev.
+      Escrever a armadilha falsa no código porque o AC a copia seria violar o Artigo IV (No Invention)
+      para satisfazer a letra de um AC cuja fonte está errada — e num arquivo cuja única razão de
+      existir é ser o lugar auditável onde nome, campo e sinal se encostam. A hierarquia certa é
+      medição > documento > AC, e o @dev acertou nas três decisões que tomou: mediu, corrigiu o
+      comentário, e NÃO tocou o AC nem a arquitetura (que não são dele).
+      **Ação minha, executada:** `architecture-e3.md` §7.2 ganhou a linha da Turbina corrigida e uma
+      seção de errata com a tabela de qual teto morde primeiro nos 5 campos afetados, medida no motor.
+      Descobri no processo um erro OPOSTO no mesmo documento: o `ABS_MAX` **é** alcançável por item,
+      só não em `maxSpeed` — ele morde na 2ª Borracha (`restWall` 0,92 sobre base 0,72) e na 6ª Lixa
+      (`drag` 0,60 sobre a base 0,30 do Golem). Então o achado de `e2.8` ("nenhum clamp morde no roster
+      atual") NÃO se estende à Fase 3, porque foi medido sem itens — e isso é mais importante que a
+      errata original, porque o clamp absoluto passa a ser a primeira coisa que o jogador encontra na
+      trilha física. Está escrito na errata.
+      **Pendência para @po (não bloqueante):** o AC 4 desta story continua com o texto antigo. A story
+      está `Done` e reescrever AC de story fechada é pior do que a divergência; mas se `e3.4` ou `e3.6`
+      citarem "a armadilha da Turbina" pelo AC em vez de pela §7.2, herdam o erro. Recomendo que @po
+      registre a errata na próxima story que tocar itens, apontando para §7.2.
+
+  - questao: >-
+      `validarCompra`/`validarCatalogo` não estão em nenhum AC. O @dev deveria ter esperado uma story
+      própria?
+    veredito: 'NÃO — escopo ACEITO, e a alternativa era pior. Mas com uma obrigação anexada a e3.2.'
+    razao: >-
+      Cinco critérios, e passa nos cinco. (1) **Havia dono declarado, e era esta camada.**
+      ARCH-E30-002, entrada do meu próprio gate de `e3.0`, atribui a validação de não-finitos em
+      `itemBonus` a "quem POPULA o campo", e a razão escrita lá é medida, não hipotética: `{dmg: NaN}`
+      em `itemBonus` faz "% sem ativa" saltar para 50% porque todo cast decidido por valor esperado é
+      suprimido (`NaN >= limiar` é `false`), e `{maxHp: NaN}` não aparece em detector nenhum — a rodada
+      continua rodando e a saída sai plausível e errada. A loja é quem popula. (2) **Não cria caminho
+      de exceção**, que é a linha vermelha do AC 9: devolvem `string[]`, nunca lançam, e conferi por
+      teste que `agregarItens` continua não lançando mesmo com o catálogo corrompido. (3) **Não é
+      invenção de padrão**: é `analisarMutacao` (`balance.ts:296`) reusado, mesma decisão de projeto
+      (devolver mensagem, não abortar) tomada pelo mesmo motivo medido (gate de `e2.5`/BOT-006).
+      (4) **Cabe no envelope de arquivos do AC 12** (`src/shop/`) e não põe uma linha em `sim/`, que é a
+      fronteira que realmente importa — validação dentro de `sim/` seria a terceira fonte de verdade
+      sobre "o que é um bônus legítimo", e é exatamente o que eu recusei em `e3.0`. (5) **É reversível
+      a custo zero**: duas funções exportadas sem dependentes.
+      A alternativa — esperar `e3.2` — deixaria `itemBonus` populável por `NaN` durante uma story
+      inteira, com a camada que deveria barrar já escrita e sem a barra. E a `e3.2` chegaria tendo de
+      escrever validação de um catálogo que não é dela, o que é pior divisão de responsabilidade.
+      Contra-argumento que reconheço e que é a razão de ARCH-E31-003 existir: escrever segurança sem
+      chamador é como escrever teste sem asserção. O que resolve não é remover as funções — é `e3.2`
+      chamá-las, e agora isso é obrigação de gate e não nota de dev.
+
+  - questao: >-
+      A Fase A do teste do @dev (magnitude uniforme, 120 permutações) foi apresentada como evidência de
+      A-10. Isso é evidência fraca reportada como forte?
+    veredito: 'NÃO — o @dev desqualificou a própria evidência antes de mim, e é isso que a torna confiável.'
+    razao: >-
+      Reproduzi os dois cenários com a implementação naive como contrafactual e confirmo os dois lados:
+      com magnitude uniforme a naive devolve os mesmos VALORES em 120 permutações (um `agregarItens`
+      errado passaria), e com as magnitudes de §1.6 no mesmo campo ela devolve duas saídas em 24
+      (`0.47999999999999998224` e `0.48000000000000003775`) enquanto a canônica devolve uma. A Fase B é
+      o que prova, e o @dev escreveu isso no relatório antes de eu perguntar, com a frase "eu quase
+      reportei que sim".
+      Isto é o oposto do modo de falha que este projeto já pagou duas vezes ("golden hash verde =
+      funciona"). Registro como o padrão a repetir: **evidência acompanhada da declaração do que ela
+      NÃO prova.** O buraco real não estava no teste do @dev — estava no enunciado do teste em §7.3, que
+      é meu, e que como escrito é satisfeito por uma implementação errada enquanto a magnitude for
+      uniforme. Corrigido neste gate com o cenário discriminante e os dois corolários (perturbar em
+      memória; ordem de chaves fixa).
+
+  - questao: >-
+      A extração foi para `shop/` e não `sim/`. Está certo?
+    veredito: 'SIM, e por uma razão mais forte do que a que o @dev deu.'
+    razao: >-
+      O @dev alegou AC 12 (proíbe `sim/` ganhar linha) e a direção `shop → sim`. As duas valem, mas a
+      razão decisiva é outra: `bolaSintetica` não é peça de motor — ela é uma **aproximação de `Ball`
+      para fins de UI**, e o cast `as unknown as Ball` é a prova disso. Colocá-la em `sim/` daria a
+      `sim/` uma função que constrói uma `Ball` incompleta de propósito, o que é convite para alguém
+      usá-la como fábrica de bola de teste dentro do motor. Em `shop/` ela é o que é: uma ferramenta de
+      preview de loja, do lado certo da fronteira, e o golden hash intacto é a prova de que a fronteira
+      foi respeitada. O custo é ARCH-E31-004 (superfície exportada com tipo que mente), que é o
+      trade-off certo e está registrado.
+
+recomendacoes_para_e3_2:
+  - >-
+    **BLOQUEANTE:** `setupDaRodada` deve chamar `validarCompra(itens)` ANTES de escrever em
+    `PickSetup.itemBonus`, e o gate de `e3.2` deve exigir a ARESTA no call graph, não a existência da
+    função (ARCH-E31-003). Sem isso, ARCH-E30-002 fica não cumprida com aparência de cumprida.
+  - >-
+    `agregarItens` aloca um `Partial<BonusBlock>` novo por chamada. Correto para loja/UI, **proibido no
+    caminho quente** (`architecture.md` §7.1). `e3.2` deve chamá-la **uma vez por rodada**, no setup, e
+    nunca por tick. Registrado pelo @dev e endossado aqui: hoje não há chamador, então é uma proibição
+    a fazer valer, não um defeito a corrigir.
+  - >-
+    `previewStat` precisa de uma `base` e `baseDeChar(def: CharDef): StatBlock` **não existe** — o único
+    lugar que deriva um `StatBlock` de um `CharDef` é o literal inline de `makeBall` (`world.ts:141-151`).
+    Enquanto não for extraído, o chamador passa `ball.base`. Extraí-lo é mudança em `sim/` e portanto
+    move o golden hash **zero** (é `move`, não fórmula) — mas é `sim/` e precisa de AC próprio.
+    A alternativa (duplicar o literal em `shop/`) é a segunda fonte de verdade que o projeto acabou de
+    pagar para não ter: **recusar**.
+  - >-
+    `ECONOMIA_PROVISORIA` deve seguir o padrão estrutural de `MAGNITUDE_PROVISORIA`/`PRECO_PROVISORIO`
+    (constante nomeada, aviso `⚠️ PROVISÓRIO — D-09` no topo, nada lê o número senão através dela) — e
+    **não** repetir ARCH-E31-002: nenhum literal solto na linha do uso, nem com comentário justificando.
+  - >-
+    A errata de §7.2 é insumo de `e3.4` e de `e3.6`: o teto que a UI precisa explicar é o `ΣMAX` na
+    Turbina e o `ABS_MAX` na Borracha e na Lixa. E o achado de `e2.8` ("nenhum clamp morde") **não**
+    vale com itens.
+
+recomendacoes_para_e3_6:
+  - >-
+    **Reportar mordida de clamp com a MAGNITUDE do corte ao lado, não só a contagem.** Medido neste
+    gate: 3 Turbinas somam `0.6000000000000001`, o que ultrapassa `ΣMAX.maxSpeed = 0.6` por resíduo de
+    float e **conta uma mordida** no contador de `e2.8` — mas o `stat` resultante é `400` dos dois
+    lados. A mordida tem magnitude ZERO no número que o jogador vê. Ler isso pela tricotomia da §7.3
+    ("morde sempre ⇒ virou regra de jogo por acidente") daria conclusão errada. Mesmo caso em
+    `range`/Luneta (`ΣMAX.range` também é 0,60). `drag` (6 Lixas ⇒ `1.2` exato) e `maxHp` (5 Couraças ⇒
+    `1` exato) não têm resíduo. Está escrito em §7.2.
+  - >-
+    Herdar de `e3.0` o censo de **9 leitores** de `hp / stat.maxHp`, com `bot/heuristic.ts:350`
+    (`peso()`) nomeado como o único CONTÍNUO e de maior magnitude fora de `sim/`+`chars/`. Pendência
+    ARCH-E30-001 agora escrita em `architecture-e3.md` §1.3 e §7.4 — não depende mais de gate lido.
+
+alteracoes_no_documento_de_arquitetura:
+  - secao: '§1.3'
+    mudanca: >-
+      Errata do censo de leitores de fração: "cinco" é o censo de `sim/`+`chars/` (o escopo onde o
+      golden hash é juiz), não de `src/` — são **nove**. Nomeados os 4 de fora, com
+      `bot/heuristic.ts:350` marcado como o único sem degrau. Fecha ARCH-E30-001, que estava pendente
+      desde o gate de `e3.0`.
+  - secao: '§7.2 (linha da Turbina)'
+    mudanca: >-
+      `teto ABS_MAX.maxSpeed = 420 morde antes de ΣMAX ... a partir de +68%` **→**
+      `teto ΣMAX.maxSpeed = +0,60 — satura em 400 no Vex (250 × 1,60). ABS_MAX.maxSpeed = 420 é
+      inalcançável por item`.
+  - secao: '§7.2 (linha da Lixa)'
+    mudanca: >-
+      Acrescentado que é AQUI que o clamp absoluto morde antes do Σ: `ABS_MAX.drag = 0,60` sobre a base
+      0,30 do Golem. A propriedade que §7.2 atribuía à Turbina existe — no item errado.
+  - secao: '§7.2 (nova subseção "Errata — qual teto morde primeiro")'
+    mudanca: >-
+      A ordem de aplicação de `recomputeStats` explicitada, tabela medida de qual teto morde primeiro
+      em 5 campos (`maxSpeed`, `drag`, `restWall`, `restBall`, `maxHp`), o registro de que o achado de
+      `e2.8` não se estende à Fase 3 porque foi medido sem itens, e a nota de leitura dos contadores de
+      clamp para `e3.6` (resíduo de float conta mordida de magnitude zero).
+  - secao: '§7.3 (invariante 1)'
+    mudanca: >-
+      Errata do enunciado do teste A-10: "embaralhar e exigir byte-idêntico" é satisfeito por uma
+      implementação ERRADA enquanto a magnitude for uniforme (medido: 120 permutações, mesmos valores).
+      Acrescentado o cenário discriminante (duas magnitudes diferentes no mesmo campo) e os dois
+      corolários (perturbar o catálogo em memória; ordem de chaves fixa em `STAT_KEYS`).
+  - secao: '§7.4'
+    mudanca: >-
+      "Os cinco leitores de fração continuam como estão" reescrito para apontar a errata de §1.3 e para
+      dizer o que o gate de `e3.0` mediu: eles não "continuam sem efeito", eles **voltam a ver a
+      fração 1**.
+
+waiver:
+  active: false
