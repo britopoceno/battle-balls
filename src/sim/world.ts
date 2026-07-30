@@ -113,7 +113,11 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
     vy: 0,
     ax: 0,
     ay: 0,
-    hp: def.maxHp,
+    // e3.0 (REL-001): placeholder deliberado. O `hp` de verdade é atribuído no fim desta
+    // função, DEPOIS de `recomputeStats`, a partir de `stat.maxHp` — não de `def.maxHp`,
+    // que é a base SEM bônus. Mesma convenção de `stat` logo abaixo: populado neste mesmo
+    // escopo, nunca lido antes disso (nada entre aqui e a atribuição lê `b.hp`).
+    hp: 0,
     alive: true,
     facing: team === 0 ? 0 : Math.PI,
     atkReadyAt: 0,
@@ -162,6 +166,30 @@ function makeBall(world: World, pick: PickSetup, team: Team, x: number, y: numbe
   if (pick.itemBonus) addPartialBonus(b.bonusItem, pick.itemBonus)
 
   recomputeStats(b)
+
+  // e3.0 (REL-001) — `hp` nasce CHEIO, do teto que já inclui os bônus: `stat.maxHp`, e não
+  // `def.maxHp`. Até esta story a linha era `hp: def.maxHp` no literal acima, isto é, LIDA
+  // ANTES de `recomputeStats` ter rodado: com um item de `+maxHp` a bola nascia ferida, e a
+  // fração `hp / stat.maxHp` largava abaixo de 1. Essa fração é gatilho de CINCO
+  // comportamentos de combate (`world.ts` weakestEnemy — peso de alvo do bot; `vex.ts`
+  // mergulho e Predador e Fantasma; `golem.ts` Casca), e o efeito medido não era "o item
+  // rende um pouco menos": era o item MUDANDO DE SINAL — Couraça de +50% `maxHp` num Vex
+  // media −18,86pp de winrate com o bug e +31,97pp corrigida (`docs/architecture-e3.md`
+  // §1.3). A ORDEM é o contrato desta correção: atribuir antes de `recomputeStats`
+  // reintroduziria o mesmo bug com outra cara. Nenhum dos cinco leitores é tocado — com `hp`
+  // nascendo cheio eles voltam a ver `hp / stat.maxHp === 1` na largada, que é o que sempre
+  // viram enquanto ninguém tinha item; é por isso que o golden hash não se move (§7.4).
+  //
+  // REGRA DE DELTA PARA `maxHp` ESTRUTURAL (`architecture.md` §1.6, `architecture-e3.md`
+  // §7.4) — escrita aqui, no lugar que a executa, em vez de ficar implícita: `maxHp` é stat
+  // ESTRUTURAL, recomputado só em evento explícito e nunca por tick. Se algum dia
+  // `stat.maxHp` mudar com a bola JÁ VIVA, o `hp` corrente NÃO é recalculado do zero — o
+  // teto que cresce dá ao `hp` o DELTA ABSOLUTO (`hp += tetoNovo - tetoAnterior`) e o teto
+  // que encolhe apenas CLAMPA (`hp = min(hp, tetoNovo)`). Recalcular do zero curaria a bola
+  // de graça a cada mudança de teto. Hoje o único caso vivo é o NASCIMENTO, que é este:
+  // `bonusItem` é congelado na rodada (logo acima) e a bola é recriada a cada rodada, então
+  // ainda não existe consumidor do delta — a regra fica registrada para a story que criar um.
+  b.hp = b.stat.maxHp
   return b
 }
 

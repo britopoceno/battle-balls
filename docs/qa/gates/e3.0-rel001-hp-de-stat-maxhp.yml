@@ -1,0 +1,297 @@
+schema: 1
+story: 'e3.0'
+story_title: '`b.hp` nasce de `stat.maxHp` em `makeBall` — corrige REL-001'
+gate: CONCERNS
+status_reason: >-
+  Os sete ACs passam e foram verificados por reexecução independente, nada aceito do Dev Agent
+  Record. O código entregue está correto e é minimalista: duas linhas de comportamento, escopo
+  provado por sha256 (exatamente 1 arquivo difere do gate de e2.8; os outros 16 batem dígito a
+  dígito). Golden hash idêntico nos 10 pares. Teste dirigido reescrito do zero por mim: 41
+  exigências, 41 passes, com o estado PRÉ-correção reproduzido no mesmo processo para provar poder
+  discriminante. As três alegações mais duras do @dev conferem na aritmética exata: `weakestEnemy`
+  invertia a escolha, o Predador largava com margem ZERO a +100%, e a Casca do Golem batia
+  `frac === 0.5` EXATO contra um limiar `> 0.5` estrito — o item de vida desligava a própria defesa
+  do Golem. Os dois achados são de REGISTRO, não de defeito, e ambos afetam insumos de e3.1/e3.6:
+  o censo extra de leitores de fração está INCOMPLETO (existe um sétimo leitor, `bot/heuristic.ts:350`
+  `peso()`, que é DECISÃO e tem a maior magnitude entre os de fora de `sim/`+`chars/`), e a nota de
+  robustez de NaN cita `balance.ts:287` ao contrário do que a fonte diz. Nenhum bloqueia; nenhum
+  exige mudança de código. e3.1 está liberada.
+reviewer: 'Aria (@architect) — quality_gate declarado na story (infraestrutura pura, sem UI)'
+reviewed_revision: >-
+  working tree sobre commit:6306cf4 (master) ·
+  ALTERADO por esta story (exatamente o único item do File List):
+  src/sim/world.ts sha256:6c1ce1f1a9c43b7a… (era adf69442… no gate de e2.8) ·
+  IDÊNTICOS ao gate de e2.8, dígito a dígito — 16 arquivos:
+  src/sim/types.ts f0641379… · src/sim/rng.ts c6854d2b… · src/sim/effects.ts e517efb0… ·
+  src/sim/index.ts a772d2bd… · src/sim/stats.ts b69b7a91… · src/sim/physics.ts a9d12e7f… ·
+  src/chars/golem.ts 1bff8946… · src/chars/vex.ts 94ac3e80… · src/chars/index.ts ac78ea23… ·
+  src/bot/heuristic.ts f113a8e0… · src/bot/dummy.ts 99ca652c… ·
+  src/tools/harness.ts 2936e1ab… · src/tools/determinism.ts f2953f76… ·
+  src/tools/balance.ts 031f9075… · src/tools/packages.ts 6d8edda9… ·
+  package.json 0a279866… (IDÊNTICO — nenhum script, nenhuma dependência, nenhuma flag nova) ·
+  `git status --short -- src/` devolve UMA linha (` M src/sim/world.ts`) e ZERO untracked em `src/`,
+  o que cobre também `src/client/*.ts`, que o gate de e2.8 não tinha registrado por hash.
+updated: '2026-07-30T00:00:00Z'
+
+acceptance_criteria:
+  - id: AC1
+    verdict: PASS
+    evidence: >-
+      `npm run check` (tsc --noEmit) reexecutado do zero: exit 0, saída vazia além do banner do npm.
+      `noUnusedLocals`/`noUnusedParameters` valem — e nenhum import novo foi adicionado, coerente com
+      uma correção que não importa nada.
+
+  - id: AC2
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` reexecutado do zero: exit 0, verde em TODAS as linhas — determinismo ✓,
+      golden hash ✓ (5 seeds), build coverage ✓ (5 variantes), replay ✓, bot dupla exec ✓, bot replay
+      ✓, guarda BOT-001 ✓, pilar 3 ✓. Como o `sim:check` imprime veredito e não hashes, montei arnês
+      próprio (scratchpad, mesmo `runRound`/`hash` de `tools/harness.ts` e mesmo driver `dummy`) e
+      imprimi os 10 pares esperado/obtido, com as tabelas de baseline TRANSCRITAS DE `architecture.md`
+      §6.0 e não importadas de `determinism.ts` — assim o teste não pode passar por o baseline ter
+      sido reescrito. BASELINE: 1 96de1201@753/w1 · 2 f66a7416@961/w0 · 3 a8db9c28@830/w0 ·
+      7 cb77dbe0@831/w0 · 11 6aede2d9@1168/w-1. BUILD_BASELINE: 101 19d30541@1091/w1 ·
+      102 7e6aa71d@860/w1 · 103 6c14e971@679/w1 · 104 f1e405ff@899/w0 · 105 1c1c71bb@951/w1.
+      **10/10 idênticos**, hash E ticks E vencedor. Reforço independente: `src/tools/determinism.ts`
+      está byte-idêntico ao gate de e2.8 (sha256 f2953f76…), logo o baseline não foi tocado.
+      A neutralidade tem CAUSA verificada, não só resultado: `def.maxHp` sobreviveu em UM único
+      ponto de `src/` (`world.ts:142`, `base.maxHp`), e como nenhum `PickSetup` do `determinism.ts`
+      usa `itemBonus` e nenhuma passiva do roster escreve em `maxHp`, `stat.maxHp === base.maxHp ===
+      def.maxHp` em todo o caminho medido — a correção é a identidade, exatamente como §1.3 previu.
+
+  - id: AC3
+    verdict: PASS
+    evidence: >-
+      Diff real lido linha a linha, não a descrição dele. `hp: def.maxHp` saiu do literal do `Ball`
+      (`world.ts:116`, virou `hp: 0` em :120 com comentário) e `b.hp = b.stat.maxHp` está em
+      `world.ts:192`, DEPOIS da chamada `recomputeStats(b)` de `world.ts:168` — a chamada que já
+      existia desde `debt.1`, sem reordenar o pipeline e sem chamada nova.
+      **Verificado que o placeholder não vaza**, que é o risco real do desenho: o intervalo entre o
+      literal e a atribuição contém exatamente duas operações — `addPartialBonus(b.bonusItem,
+      pick.itemBonus)` (:166, escreve em `bonusItem`) e `recomputeStats(b)` (:168). Li
+      `recomputeStats` inteiro (`stats.ts:183-216`): ele lê `base`/`bonusPassive`/`bonusItem` e
+      escreve em `stat`, e **não referencia `b.hp` em nenhum ponto**. `makeBall` retorna direto
+      depois da atribuição, e o único código do chamador entre o retorno e o `push` em `world.balls`
+      é `b.vx`/`b.vy` (`world.ts:95-97`). Censo independente de TODA escrita/leitura de `.hp` em
+      `src/`: `world.ts:120` (placeholder), `world.ts:192` (nascimento), `world.ts:299` (`heal`, que
+      já clampava em `stat.maxHp`), `world.ts:408` (morte, `= 0`) e `determinism.ts:327` (a guarda
+      BOT-001, que injeta NaN de propósito). Nenhum lê antes de :192.
+
+  - id: AC4
+    verdict: PASS
+    evidence: >-
+      A regra de delta está escrita em `world.ts:183-191`, imediatamente acima da linha que a
+      executa, e é FIEL a §7.4 palavra por palavra: teto que cresce dá `hp += tetoNovo - tetoAnterior`
+      (delta absoluto), teto que encolhe apenas clampa `hp = min(hp, tetoNovo)`, com o registro
+      explícito de que recalcular do zero curaria a bola de graça e de que o único caso vivo hoje é o
+      nascimento, porque `bonusItem` é congelado na rodada e a bola é recriada a cada rodada.
+      Propriedade arquitetural que a story não nomeia e que vale registrar: o nascimento **é** o caso
+      degenerado da regra, não uma segunda regra — `hp = base + (stat.maxHp - base.maxHp) =
+      stat.maxHp` quando o `hp` de partida é o teto sem bônus. AC 3 e AC 4 são a mesma regra aplicada
+      duas vezes, e é por isso que não há divergência possível entre as duas metades.
+      Julgamento sobre a escolha CREATE-como-comentário em vez de helper: correta. Um
+      `aplicarDeltaMaxHp()` sem chamador seria código morto não testado dentro de `sim/`, e a story
+      pede a regra escrita, não executada.
+
+  - id: AC5
+    verdict: PASS
+    evidence: >-
+      Provado por sha256, não por leitura: `src/chars/vex.ts` (94ac3e80…) e `src/chars/golem.ts`
+      (1bff8946…) estão byte-idênticos ao gate de e2.8, o que fecha quatro dos cinco leitores
+      (`vex.ts:41`, `:98`, `:108`, `golem.ts:111`) sem depender de inspeção. O quinto vive em
+      `world.ts`, que mudou — conferido no diff que `weakestEnemy` apenas DESLOCOU de :216 para :244
+      com conteúdo idêntico (`b.hp / b.stat.maxHp < best.hp / best.stat.maxHp`); a aritmética do
+      deslocamento fecha: os dois hunks somam 28 linhas (+4 no literal, +24 antes da atribuição) e
+      216 + 28 = 244.
+      Mas "intocado" não é a parte interessante, e aqui a story fica DEVENDO precisão: os cinco não
+      "continuam sem efeito", eles voltam a ver a fração 1 — e eu remedi o tamanho do que voltou,
+      invocando as passivas de verdade e reproduzindo o estado PRÉ-correção no mesmo processo
+      (`b.hp = CHARS[id].maxHp`, que é literalmente o comportamento antigo):
+      (1) `ctx.weakestEnemy()` REAL, time inimigo `[vex sem item, vex +50%]` — ANTES escolhia
+      **quem comprou vida** (frac 0,6667 contra 1,0000) tendo o MESMO hp absoluto (100 contra 100 de
+      150); DEPOIS escolhe o sem item, empate em 1,0000 resolvido pelo primeiro. Inversão confirmada.
+      (5) `CHARS.golem.passives[1].onDamageTaken()` REAL, `+100%` de `maxHp`: hp 190, teto 380,
+      `frac === 0.5` conferido como igualdade EXATA em ponto flutuante (`fracAntes === 0.5` → true),
+      `frac > 0.5` → **false**, multiplicador **1**. A alegação do @dev confere na aritmética exata:
+      o limiar estrito reprovava a igualdade e **o item de vida desligava a Casca do próprio Golem**.
+      DEPOIS: 0,82. E a fronteira é só no teto — a `+50%` a fração era 0,6667 e a Casca já ligava nos
+      dois mundos, então este é um efeito de DEGRAU no valor máximo do campo, não uma degradação
+      suave.
+      (2/3/4) `CHARS.vex.passives[0].onDamageDealt()` e `[1].onTick()` REAIS: nenhum troca de
+      veredito no tick 0, porque os limiares são `< 0.4`/`< 0.5` estritos e o pior caso alcançável é
+      exatamente 0,5 (`SIGMA_MAX.maxHp = 1.0` conferido em runtime, logo `+100%` é o teto real do
+      campo). O estrago é de MARGEM: vex `+100%`, gatilho do Predador (`< 0.5`) tinha margem de
+      **0,0 HP** — o bônus de 1,28 do inimigo estava armado desde a largada, um ponto de dano o
+      ligava; DEPOIS a margem é 100,0 HP. Gatilho de 0,4 (mergulho e Fantasma): 20,0 → 120,0 HP.
+      A `+50%`: 25,0 → 75,0 HP (Predador) e 40,0 → 90,0 HP (0,4).
+
+  - id: AC6
+    verdict: PASS
+    evidence: >-
+      Teste dirigido REESCRITO por mim do zero (scratchpad, fora do repo), não reaproveitado do @dev:
+      41 exigências, **41 passes**, exit 0. `itemBonus: {maxHp: +0.5}` e `+1.0` em golem e vex, mais
+      o controle sem item. Quatro combinações: golem 190→285 e 190→380, vex 100→150 e 100→200, com
+      `hp === stat.maxHp` e `hp / stat.maxHp === 1` nas quatro, `hp !== def.maxHp` nas quatro (isto
+      é: o teste distingue a correção da situação antiga, não só afirma consistência interna), e
+      `base.maxHp === def.maxHp` nas quatro — a correção move de onde `hp` NASCE, não o que é base.
+      Controle sem item: `hp === def.maxHp` nos dois personagens, que é a identidade que o AC 2 exige.
+      Poder discriminante demonstrado no MESMO processo, não em duas execuções: cada exigência de
+      inversão tem o par ANTES reproduzido por `b.hp = CHARS[id].maxHp` e a exigência sobre o ANTES
+      também é asserida (`ANTES weakestEnemy escolhia quem comprou vida`, `ANTES a fração batia 0.5
+      EXATO`, `ANTES o limiar > 0.5 DESLIGAVA a Casca`, `ANTES a margem do Predador era ZERO`).
+
+  - id: AC7
+    verdict: PASS
+    evidence: >-
+      `git diff --stat -- src/` devolve UMA linha: `src/sim/world.ts | 30 +++-` (29 inserções, 1
+      deleção), das quais 2 são código. `git status --short -- src/` devolve UMA linha e ZERO
+      untracked. Provado por sha256 contra o gate de e2.8: 16 arquivos de código + `package.json`
+      batem dígito a dígito, exatamente 1 difere. `src/shop/`, `src/match/` e `src/bot/partida.ts`
+      NÃO EXISTEM (`ls src/` → bot, chars, client, sim, tools; `ls src/bot/` → dummy.ts,
+      heuristic.ts) — são e3.1–e3.3.
+      RF-19 não é violado: é mudança DENTRO de `sim/`, e o diff não adiciona nenhum import — `sim/`
+      continua sem importar de `chars/`, `bot/`, `client/`, `match/` ou `shop/`.
+      Fora de `src/`, o working tree tem `DESIGN.md`, `docs/prd.md` e memórias de agente modificadas;
+      conferido que esses diffs são da sessão de arquitetura/PRD da Fase 3 (falam de "Fase 3 EM
+      ANDAMENTO" e do registro de REL-001 como dívida rastreada) e **não** de e3.0 — nenhum
+      artefato desta story vive fora de `src/sim/world.ts`, e a story não criou `docs/qa/`, `plan/`
+      nem JSON de checklist.
+
+escopo_negativo_confirmado:
+  - >-
+    A **Couraça não foi implementada** — é e3.1. `grep -rn "couraca|Couraça|CATALOGO|catalogo" src/`
+    devolve UMA ocorrência em todo o `src/`: a palavra "Couraça" dentro do comentário novo de
+    `world.ts:176`, citando o número medido de §1.3. Zero catálogo, zero preço, zero item.
+  - >-
+    Nenhum número de D-05 ou D-09 foi decidido nesta story (é e3.6/e3.7).
+  - >-
+    Nenhum dos cinco leitores de fração foi alterado (provado por sha256 em `chars/` e por diff em
+    `world.ts`).
+
+issues:
+  - id: ARCH-E30-001
+    severity: medium
+    category: docs
+    finding: >-
+      O censo extra de leitores de fração no Dev Agent Record está INCOMPLETO, e o que falta é o
+      leitor de maior magnitude entre os de fora de `sim/`+`chars/`. O @dev declara "varredura de
+      `src/` inteiro devolve 8 sítios" e lista 3 extras (`bot/heuristic.ts:483`,
+      `client/render.ts:195`, `client/render.ts:302`). A varredura correta devolve **9 sítios**: falta
+      `src/bot/heuristic.ts:350`, dentro de `peso()`, que é **decisão de bot** e não cosmético — é o
+      peso de alvo que `valorEsperado()` (`heuristic.ts:337-343`) soma sobre todos os inimigos vivos
+      para escolher QUANDO e ONDE castar. Diferente de todos os outros, este não tem limiar: é
+      CONTÍNUO, `peso = 1 + PESO_FERIDO × (1 − frac)` com `PESO_FERIDO = 1.0` (`PRESET_ARNES`), então
+      não existe "margem segura" onde ele não morda. Medido: vex `+100%` de `maxHp` tinha, com o bug,
+      peso **1,500** contra 1,000 de quem não comprou nada — 50% mais atraente como alvo de
+      habilidade **desde o tick 0**, pelo simples fato de ter comprado vida; a `+50%`, peso 1,333.
+      Este é o irmão de `world.ts:244` (`weakestEnemy`) no lado do bot, e é um mecanismo de primeira
+      ordem da inversão de sinal de §1.3 — provavelmente o maior deles, porque o Vex a `+50%` fica
+      abaixo de todos os limiares de degrau e ainda assim sofre este peso cheio.
+    impacto: >-
+      Zero no código entregue: nada em `heuristic.ts` precisava mudar, e a correção no nascimento
+      conserta este leitor junto com os outros oito. O impacto é de INSUMO: e3.1 e e3.6 vão medir a
+      Couraça usando este registro como lista de mecanismos, e a lista está subdimensionada em
+      exatamente o item que não tem degrau — o que é justamente o que explicaria um resíduo de sinal
+      se ele aparecer na medição.
+    recommendation: >-
+      Registrado neste gate e nas QA Results. Recomendo que e3.1/e3.6 tratem o censo como
+      **9 leitores, 5 em `sim/`+`chars/` (onde o golden hash é juiz) + 2 decisões de bot em
+      `heuristic.ts:350` e `:483` + 2 cosméticos em `render.ts:195/302`**, e que
+      `architecture-e3.md` §1.3 ganhe a nota de que "cinco leitores" é o censo do escopo onde o hash
+      julga, não o censo de `src/`. Sem ação de código.
+
+  - id: ARCH-E30-002
+    severity: low
+    category: docs
+    finding: >-
+      A nota de robustez sobre NaN cita `balance.ts:287` ao contrário do que a fonte diz. O @dev
+      escreve que "`balance.ts:287` registra explicitamente que `{maxHp: NaN}` não é pego pela
+      validação de lá". O comentário real diz o oposto: `{maxHp: NaN}` não é pego pelo **detector de
+      kit morto**, e é EXATAMENTE por isso que "a validação tem de estar na raiz, e a raiz é esta
+      função". E ela está: `analisarMutacao` (`balance.ts:295-325`) rejeita, para TODO `StatKey`
+      incluindo `maxHp`, tanto o que não casa `FORMATO_VALOR` quanto o que não passa
+      `Number.isFinite` — com mensagem nomeando BOT-006. Conferido no fonte.
+    impacto: >-
+      A conclusão do @dev (não corrigir aqui) fica MAIS forte, não mais fraca: hoje não existe
+      caminho de produção não validado para `itemBonus`, porque o único que existe é o CLI de
+      balanceamento e ele valida na raiz. O risco é a citação invertida ser reciclada em e3.1 como
+      "a validação de `balance.ts` não pega maxHp", levando ou a validação redundante no lugar errado
+      (dentro de `sim/`, terceira fonte de verdade) ou à conclusão falsa de que validação não existe
+      em nenhum lugar.
+    recommendation: >-
+      Corrigir a leitura no registro (feito neste gate). Sem ação de código.
+
+  - id: ARCH-E30-003
+    severity: low
+    category: docs
+    finding: >-
+      O comentário novo de `world.ts:170-181` embute números MEDIDOS que e3.6 vai remedir por
+      desenho: "−18,86pp com o bug e +31,97pp corrigida". Medição residente em comentário envelhece
+      sem aviso, e este projeto já paga caro por segundas fontes de verdade (C3, `AimSpec`) — este é
+      o mesmo padrão em escala pequena, sobre número em vez de fórmula. O comentário também escreve
+      "gatilho de CINCO comportamentos de combate" sem o qualificador `sim/`+`chars/` que torna a
+      frase verdadeira (ver ARCH-E30-001) — embora ele nomeie os cinco, o que o salva de ser errado.
+    impacto: >-
+      Nenhum hoje. O comentário está correto na data de entrega e a referência a §1.3 está lá.
+    recommendation: >-
+      Quando e3.6 remedir o efeito da Couraça, ou atualizar os dois números ou trocá-los pela
+      referência pura a §1.3. Não vale reabrir a story por isso.
+
+decisoes_de_julgamento:
+  - questao: >-
+      O sexto leitor (`bot/heuristic.ts:483`, política de fuga) deveria ter sido corrigido nesta
+      story?
+    veredito: 'NÃO — e a decisão do @dev de só registrar é a arquiteturalmente correta'
+    razao: >-
+      Duas razões, e a segunda é mais importante que a primeira. (1) AC 7 é explícito: nenhuma linha
+      fora de `src/sim/world.ts`. (2) **Não havia nada para corrigir em `:483`.** O reader está
+      certo; o que estava errado era o INSUMO dele. `fracHp < cfg.FUGA` é a expressão correta da
+      política de fuga — ela só produzia decisão ruim porque `hp` nascia mentindo. Corrigir no
+      nascimento conserta os nove leitores de uma vez, na única fonte; mexer em leitor seria tratar
+      sintoma e criar nove lugares onde a mesma regra vive. Este é o mesmo argumento que a dívida C3
+      deste projeto já cobrou uma vez. Confirmei os números do @dev por medição própria e batem
+      exatamente: golem `+100%` largava com 57,0 HP de margem até fugir e agora larga com 247,0;
+      `+50%`, 90,3 → 185,3; vex `+100%`, 30,0 → 130,0; `+50%`, 47,5 → 97,5.
+      Registrar como nota para quem medir a Couraça em e3.1/e3.6 é o destino certo — com a ressalva
+      de que a nota precisa incluir o sétimo leitor (ARCH-E30-001).
+
+  - questao: >-
+      A decisão de NÃO corrigir a nota de robustez de NaN (`itemBonus: {maxHp: NaN}` ⇒ `hp = NaN`)
+      nesta story é sólida?
+    veredito: 'SIM — sólida, e por razões mais fortes do que as que o @dev deu'
+    razao: >-
+      Três. (1) **O placeholder não criou buraco; ele tornou um buraco existente audível.** Medido:
+      com `{maxHp: NaN}` o `stat.maxHp` JÁ era NaN antes desta story, então `hp / stat.maxHp` já era
+      NaN e todo leitor de degrau já caía no ramo "false" em silêncio. O antigo `hp = def.maxHp = 100`
+      contra um teto NaN não era mais seguro — era mais DISFARÇADO: produzia um `hp` de aparência
+      plausível sobre um estado já corrompido. `hp = NaN` é a versão barulhenta do mesmo defeito, e
+      o projeto já tem guarda dessa classe no `sim:check` (BOT-001, `determinism.ts:327`). Trocar
+      silêncio por barulho é a direção certa.
+      (2) **Validar em `makeBall` colocaria validação dentro de `sim/`**, que neste projeto computa e
+      não valida — seria a terceira fonte de verdade sobre "o que é um bônus legítimo", depois de
+      `analisarMutacao` e da loja que ainda não existe. E a validação na raiz JÁ EXISTE para o único
+      caminho vivo (ver ARCH-E30-002): o CLI de balanceamento rejeita não finito para todo `StatKey`.
+      (3) O único caminho não validado que resta é PROGRAMÁTICO, e e3.1 é a story que cria o
+      programa que o usa. O invariante "valores de `itemBonus` são finitos" ganha dono lá, onde o
+      dado nasce, não onde ele é consumido.
+      Ressalva registrada: a justificativa do @dev cita a fonte errada (ARCH-E30-002). O veredito não
+      muda; o registro precisa.
+
+recomendacoes_para_e3_1:
+  - >-
+    Herdar o censo de **9 leitores** de `hp / stat.maxHp` (ARCH-E30-001), com `heuristic.ts:350`
+    `peso()` nomeado como o de maior magnitude e o único sem degrau. Se a medição da Couraça em e3.6
+    mostrar resíduo de sinal, é o primeiro suspeito.
+  - >-
+    A loja é a dona da validação de `itemBonus`: valores finitos, dentro de `STAT_KEYS`, e o valor
+    EFETIVO mostrado ao jogador calculado por `recomputeStats` sobre bola sintética — nunca por
+    fórmula reimplementada no cliente (§7.3). O helper `bolaSintetica` já existe em
+    `balance.ts:730` e não lê `hp`, portanto é imune a esta correção e pode ser extraído como está.
+  - >-
+    `def.maxHp` sobrevive em UM ponto de `src/` (`world.ts:142`, `base.maxHp`). Qualquer novo
+    consumidor de `def.maxHp` que apareça em e3.1 é candidato a reintroduzir REL-001 com outra cara —
+    vale como grep de revisão no gate de e3.1.
+
+waiver:
+  active: false
