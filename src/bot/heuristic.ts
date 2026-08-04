@@ -75,6 +75,44 @@ export const PRESET_ARNES: Readonly<BotConfig> = {
 }
 
 /**
+ * §8.1 de `docs/architecture-e3.md` — o preset do OPONENTE SOLO, e a razão de ele existir separado
+ * é a única coisa que importa nesta constante:
+ *
+ * > `PRESET_ARNES` é congelado por `BOT_VERSION` e não pode ser ajustado para o oponente ficar mais
+ * > divertido (`architecture-e2.md` §8.4, "deriva de preset"). O modo solo usa `PRESET_SOLO`,
+ * > nomeado, no mesmo arquivo, e a telemetria registra qual preset jogou a partida.
+ *
+ * **Os números são placeholders e são hoje os mesmos de `PRESET_ARNES`** — deliberadamente, e não
+ * por preguiça: nenhuma medição deste projeto diz que outro valor torna o oponente mais divertido, e
+ * a diversão é justamente o que o portão da Fase 3 vai medir com humano no controle (§13.2). Chutar
+ * um número aqui hoje é decidir por antecipação o que a telemetria de `e3.5` existe para descobrir.
+ * O que a story exige — e o que esta constante entrega — é a COSTURA: um segundo preset, nomeado,
+ * que possa mover sem que `BOT_VERSION` mude e sem que nenhuma matriz de winrate já reportada deixe
+ * de ser reproduzível.
+ *
+ * **Os valores estão escritos por extenso, e não `{ ...PRESET_ARNES }`.** O espalhamento faria os
+ * dois presets deixarem de ser dados independentes: o dia em que `PRESET_ARNES` mudasse (com
+ * `BOT_VERSION` novo), `PRESET_SOLO` o seguiria em silêncio — exatamente a dependência que a
+ * separação existe para cortar. A duplicação de dez números é o preço, e é o preço certo.
+ *
+ * `PRESET_ARNES`, `BOT_VERSION` e toda a lógica de combate deste arquivo continuam intocados: esta
+ * é uma adição aditiva, e é nesses termos que o Anexo A de `architecture-e3.md` já dizia que
+ * `heuristic.ts` "serve à partida sem modificação".
+ */
+export const PRESET_SOLO: Readonly<BotConfig> = {
+  LIMIAR: { ability: 0.55, ult: 0.8 },
+  PISO_LIMIAR: 0.35,
+  DECAIMENTO_MS: 8000,
+  PESO_FERIDO: 1.0,
+  FUGA: 0.35,
+  LAG_S: 0.08,
+  JITTER_RAD: 0.12,
+  JITTER_MAG: 0.1,
+  REACAO_TICKS: 9,
+  REACAO_JITTER_TICKS: 7,
+}
+
+/**
  * Estado por bola. SÓ CONSULTA por id (N-2) — este objeto nunca é iterado.
  *
  * Decisão registrada (Should-Fix do @po no gate de e2.1): §2.7 desenha um único `prontoDesde`,

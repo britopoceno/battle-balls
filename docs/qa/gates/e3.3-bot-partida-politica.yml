@@ -1,0 +1,552 @@
+schema: 1
+story: 'e3.3'
+story_title: '`src/bot/partida.ts` — política de draft/build/compra do bot, streams 5/6, `PRESET_SOLO`'
+gate: CONCERNS
+status_reason: >-
+  Os 16 ACs passam e foram verificados por **reexecução independente** — nada aceito do Dev Agent
+  Record, e a bateria dirigida foi escrita por mim do zero (o script T1..T6 do @dev não foi lido nem
+  reusado). `npm run check` 0 erros; `npm run sim:check` verde com **golden hash idêntico** nas 5
+  seeds e nas 5 variantes de build.
+  **Escopo provado por sha256 contra o estado exato registrado no gate de `e3.2`:** os 7 arquivos de
+  `src/match/` batem os 7 hashes daquele gate dígito a dígito; `src/shop/`, `src/chars/`,
+  `src/client/` e `src/sim/` não aparecem em `git status`; `src/tools/partida.ts` continua com 805
+  linhas e `medirM1` devolve os MESMOS ticks do gate anterior (1059/963, 948/980, 829/1006), o que
+  prova o arquivo intocado. Mudaram **exatamente dois** arquivos: `src/bot/partida.ts` (novo) e
+  `src/bot/heuristic.ts`. Este último é **inserção pura, provado por sha256 e não por leitura**:
+  apagar as linhas 77-114 do arquivo atual reproduz o `heuristic.ts` do commit `7ae95ee`
+  **byte a byte** (`f113a8e0…`), logo `BOT_VERSION`, `BotConfig`, `PRESET_ARNES`, `createBot` e
+  `botCommands` são literalmente os mesmos bytes.
+  **Streams 5/6 reproduzidos por mim:** 8 seeds × 2 jogadores × 64 saques, `criarPolitica(s,j).rand()`
+  idêntico a `mulberry32(deriveSeed(s, 5+j))`, e **disjunto** dos streams 0-4, 7, 8+i e do `world.rng`
+  de cada uma das 7 rodadas possíveis.
+  **A fronteira do AC 5 é do COMPILADOR, não de disciplina:** quatro sondas de tipo escritas por mim
+  falham em `tsc` — ler `oponente.personagens[n].abilityIndex`/`passiveIndex` não compila
+  (a chave não existe no ramo `revelado:false`), passar `EstadoPartida` onde se espera `VisaoPartida`
+  não compila, e `criarPolitica(1, 2)` não compila.
+  **Bateria negativa do gate: 7 perturbações aplicadas na árvore real, 7 detectadas**, arquivo
+  restaurado com sha256 conferido (`b99dd9db…`). Inclui a que o meu próprio primeiro desenho de teste
+  deixaria passar (violar o contrato de saque) — G9 foi escrita depois de a mutação passar verde.
+  CONCERNS e não PASS por cinco registros, **nenhum de comportamento em jogo legítimo e nenhum
+  bloqueante do push**. O central é de processo e é meu: **ARCH-E32-001, que o gate de `e3.2`
+  declarou "entrada bloqueante do gate de `e3.3`", não foi pago e não podia ter sido** — a story fixou
+  os arquivos em dois e a correção mora num terceiro. O @dev cumpriu a story corretamente; a corrente
+  quebrou entre o meu YAML e a story. Re-alojado em `architecture-e3.md` §12.1, que é onde o @sm lê.
+reviewer: 'Aria (@architect) — quality_gate declarado na story'
+reviewed_revision: >-
+  working tree sobre commit:7ae95ee (HEAD, `e3.1`), com `e3.0`-`e3.2` ainda não commitados ·
+  ARQUIVOS DESTA STORY (2):
+  src/bot/partida.ts (NOVO, 397 linhas) sha256:b99dd9db9bea52b937ddfacd257f6bf6b53c7aee6386c6098dba4106de7ccd5c ·
+  src/bot/heuristic.ts (MODIFICADO, +38/−0) sha256:11c91f67a5cabf790dbd9c23949e0cdd8192ed2ccc33c5fcd9566e85f43b9bf5 —
+  inserção pura: `sed '77,114d'` do atual dá f113a8e0f8dda20879109976618c6453293cd86ff224c8eecb2c53a30f924cff,
+  que é o sha256 de `git show 7ae95ee:src/bot/heuristic.ts` ·
+  INALTERADOS desde o gate de `e3.2`, conferidos por sha256 contra os hashes registrados lá:
+  match/types.ts e8c0b86b… ✓ · match/redutor.ts 43a31b19… ✓ · match/setup.ts f348188c… ✓ ·
+  match/economia.ts 6669a363… ✓ · match/regras.ts 0ccebeb7… ✓ · match/visao.ts 333bf03c… ✓ ·
+  match/index.ts bc8f0237… ✓ (7/7) ·
+  src/tools/partida.ts 805 linhas (igual ao gate de `e3.2`) e `medirM1` devolvendo os mesmos ticks ·
+  `git status --short src/` devolve exatamente 6 linhas, as mesmas do gate de `e3.2` mais
+  `?? src/bot/partida.ts` e ` M src/bot/heuristic.ts` ·
+  src/client/ NÃO aparece em git status (é `e3.4`) · src/shop/, src/chars/, src/sim/ idem ·
+  ALTERADO PELO GATE (documento, não código): docs/architecture-e3.md — Anexo A (errata que o AC 11
+  me atribuiu) e §12.1 (nova, dívidas herdadas pelo passo 4)
+
+acceptance_criteria:
+  - id: 'AC1 (npm run check verde)'
+    verdict: PASS
+    evidence: >-
+      Reexecutado duas vezes (antes e depois da bateria de mutação): exit 0, saída vazia além do
+      banner. `noUnusedLocals` vale, o que prova de carona que `partida.ts` não deixou import órfão —
+      relevante porque o arquivo importa quatro módulos.
+
+  - id: 'AC2 (sim:check verde, golden hash idêntico, determinismo de partida)'
+    verdict: PASS
+    evidence: >-
+      `npm run sim:check` reexecutado do zero, duas vezes: `golden hash ✓ ok — 5 seeds batem o
+      baseline` e `build coverage ✓ ok — 5 variantes batem`. Todos os blocos herdados verdes, com
+      saída idêntica à do gate de `e3.2` linha por linha (os 3 placares, os 16/16/20 decisões, os
+      ticks de M-1).
+      **Registro de honestidade, herdado do gate de `e3.2` e ainda mais forte aqui: o golden hash
+      verde é VACUAMENTE verde para esta story.** Ninguém em `src/` importa `bot/partida.ts` — três
+      menções em comentário e zero em código (varredura). O arquivo inteiro poderia ser apagado hoje
+      e o `sim:check` continuaria verde. Quem responde por "funciona" é a bateria G1..G9 abaixo, e é
+      por isso que o poder discriminante dela foi o foco deste gate (e é a razão de ARCH-E33-001).
+      **Determinismo de partida (verificação própria do AC), reexecutado com driver escrito por mim:**
+      8 matchSeeds, política decidindo draft/build/compra dos DOIS lados, duas execuções cada.
+      Assinatura (placar + vencedor + lista inteira de decisões + hash e ticks de todas as rodadas)
+      **idêntica em 8/8**, e as 8 assinaturas são **distintas entre si** — seeds diferentes dão
+      partidas diferentes, que é a metade que impede o teste de passar por degeneração.
+      **Zero decisões rejeitadas em 8/8 partidas** (40 compras): a simulação de saldo que `comprar`
+      faz por dentro bate a do redutor.
+
+  - id: 'AC3 (superfície exportada exata)'
+    verdict: PASS
+    evidence: >-
+      `grep '^export'` devolve exatamente três linhas: `POLITICA_VERSION` (67), `PoliticaPartida`
+      (78), `criarPolitica` (201). Assinatura conferida caractere a caractere contra o bloco literal
+      de §8.2 — os três métodos, os tipos dos parâmetros e o tipo de retorno de `criarPolitica`.
+      `STREAM_DA_POLITICA` ficou privado, coerente com "exatamente".
+
+  - id: 'AC4, AC6 (streams 5/6, D-08)'
+    verdict: PASS
+    evidence: >-
+      **Reproduzido por mim, não conferido por leitura.** Para 8 seeds (1, 2, 12345, 7, 99, 123, 555,
+      31337) e os dois jogadores, 64 saques de `criarPolitica(s, j).rand()` comparados contra 64 de
+      `mulberry32(deriveSeed(s, 5 + j))`: **idênticos em 16/16 casos**.
+      Disjunção medida em positivo, não assumida: a mesma sequência foi comparada contra os streams
+      0, 1, 2, 3, 4, 7 e 8..14 (**nenhuma colisão**) e contra o `mulberry32(seedDaRodada(s, i))` de
+      cada uma das 7 rodadas possíveis (**nenhuma colisão**) — 8 seeds × 2 jogadores × 20 streams.
+      Jogador 0 e jogador 1 nunca sacam o mesmo primeiro número.
+      Perturbação M-A (`STREAM_DA_POLITICA = 1`, colidindo com o bot de combate do time 0): a bateria
+      **PEGOU com 32 queixas**, incluindo a colisão explícita com o stream 1.
+      D-08 medido no efeito, não na causa: ver AC 2/replay abaixo e a perturbação da política v2.
+
+  - id: 'AC5, AC14 (VisaoPartida-only, fronteiras herdadas)'
+    verdict: PASS
+    evidence: >-
+      **A fronteira é do compilador.** Escrevi quatro sondas de tipo num arquivo temporário dentro da
+      árvore e rodei `tsc --noEmit`; as quatro falham, com as mensagens que a fronteira exige:
+      `Property 'abilityIndex' does not exist on type 'PersonagemVisivel'` (ramo `revelado:false`),
+      idem `passiveIndex` para o slot 1, `Argument of type 'EstadoPartida' is not assignable to
+      parameter of type 'VisaoPartida'` e `Argument of type '2' is not assignable to parameter of
+      type 'Jogador'`. Arquivo removido; `git status --short src/` voltou às mesmas 6 linhas.
+      `EstadoPartida` não é importado em `src/bot/` nem como tipo — a única ocorrência da string é
+      prosa de comentário (`partida.ts:18`).
+      **Somente-leitura medido, não assumido** (era a recomendação nº 3 que eu deixei em `e3.2`:
+      `visaoPara` devolve `eu`/`draft`/`historico` **por referência**, e escrever neles corromperia a
+      partida sem o compilador acusar). Com ouro forçado a 60 para que o caminho de escrita
+      efetivamente rode — **8 compras emitidas**, não zero —, `JSON.stringify(EstadoPartida)` é
+      byte-idêntico antes e depois de `comprar`; e com a `VisaoPartida` **congelada em profundidade**
+      as três funções rodam sem lançar (8 compras). O teste tem dentes: a perturbação M-C (empurrar o
+      item direto em `v.eu.personagens[slot].itens`) faz o estado mudar e a visão congelada lançar
+      `TypeError: Cannot add property 4, object is not extensible`.
+      `world.rng`/`Math.random`: zero ocorrências em código em todo `src/bot/`.
+
+  - id: 'AC7 (a política mora em bot/, não em match/)'
+    verdict: PASS
+    evidence: >-
+      `src/match/` está byte-idêntico ao gate de `e3.2` nos 7 arquivos (sha256), logo nenhuma linha
+      de política entrou lá. E a capacidade que a fronteira existe para preservar foi **exercitada**:
+      escrevi uma política v2 completa (critério de compra invertido, build 1/1, ordem de draft
+      invertida) e rodei as mesmas 8 partidas com ela sem tocar uma linha de `match/`. O arnês roda
+      políticas diferentes sobre as mesmas regras — que é exatamente o que §8.2 ponto 3 promete.
+
+  - id: 'AC8, AC9 (simplicidade declarada, draft mecânico, tabelas em bot/)'
+    verdict: PASS
+    evidence: >-
+      Composição `[golem, vex]` para os DOIS jogadores em 8/8 partidas, 4 escolhas de draft por
+      partida.
+      **Poder discriminante das três tabelas medido, porque sem isso uma política que as ignorasse
+      passaria verde** (foi a lição de `e3.2`): (a) draft sobre um pool `['ana','golem','vex','zed']`
+      — com `'ana'` deliberadamente na frente — devolve `'golem'`, logo a tabela de `bot/` ganha da
+      ordem do pool; (b) `escolherBuild` para `'golem'` (na tabela) devolve **1 valor estável** em 200
+      chamadas, e para um `charId` fora da tabela devolve **as 4 builds** em 400 chamadas — o ramo do
+      sorteio existe e é uniforme; (c) **10 de 10** personagens que compraram 2+ itens têm itens de
+      trilhas DIFERENTES, isto é, a alternância acontece de fato.
+      As três perturbações correspondentes foram detectadas: M-D (ignorar `BUILD_PREFERIDA`) →
+      "devolveu 4 valores distintos"; M-E (ignorar a ordem de preferência) → "escolheu 'ana'";
+      M-G (alternância desligada) → "12 personagens com 2+ itens e NENHUM com trilhas diferentes".
+      `comprar` conferida como terminante e conservadora: para ouro 0,1,5,6,11,12,17,24,48,96,1000 o
+      custo total nunca excede o saldo, o teto de 8 segura, e **cada decisão emitida é aceita pelo
+      redutor uma a uma**. M-B (não debitar o ouro local) → **46 queixas**, com o redutor recusando
+      42 compras numa única seed.
+
+  - id: 'AC10 (heuristic.ts roda sem modificação de combate)'
+    verdict: PASS
+    evidence: >-
+      Provado por sha256 e não por leitura de diff: `sed '77,114d' src/bot/heuristic.ts` tem sha256
+      `f113a8e0f8dda20879109976618c6453293cd86ff224c8eecb2c53a30f924cff`, **idêntico** ao de
+      `git show 7ae95ee:src/bot/heuristic.ts`. A mudança é inserção pura de 38 linhas depois do
+      fechamento de `PRESET_ARNES`; `BOT_VERSION`, `BotConfig`, `PRESET_ARNES`, `BotState`,
+      `createBot` e `botCommands` são os mesmos bytes.
+      M-1 respeitada no meu driver pelo mesmo mecanismo do caminho de produção: `createBot` nasce
+      dentro da fábrica `RoundDriver`, um par por rodada. Ver a seção `arch_e32_001` abaixo.
+
+  - id: 'AC11, AC12, AC15 (PRESET_SOLO em heuristic.ts, separado, escopo de 2 arquivos)'
+    verdict: PASS
+    evidence: >-
+      **A resolução do @po está certa e eu a endosso** — e não por deferência: a razão que ela dá é
+      verificável e eu a verifiquei. `PRESET_SOLO` é um `BotConfig`, o terceiro parâmetro de
+      `createBot` é `cfg: Readonly<BotConfig> = PRESET_ARNES`, e a primeira linha de `partida.ts`
+      declara que aquele arquivo não decide combate. Pôr o preset lá seria a única linha do arquivo a
+      contrariar o cabeçalho dele.
+      **`PRESET_SOLO` é dado independente, medido em runtime e não só lido:** é outro objeto
+      (`A !== S`), literal simples, mesmas 10 chaves, e — o ponto que importa — `S.LIMIAR !== A.LIMIAR`,
+      isto é, o objeto aninhado tem **referência própria**. Um `{ ...PRESET_ARNES }` deixaria
+      `LIMIAR` compartilhado, que é precisamente o acoplamento que o AC 12 manda cortar. Não há
+      nenhum `...PRESET_ARNES` no arquivo.
+      Os valores serem hoje iguais aos de `PRESET_ARNES` é o comportamento certo e está declarado no
+      código: nenhuma medição deste projeto diz que outro número torna o oponente mais divertido, e
+      é isso que o portão da Fase 3 vai medir com humano no controle. O que a story pede é a
+      **costura**, e a costura existe.
+      AC 15 conferido por sha256 contra o gate de `e3.2` — exatamente dois arquivos.
+
+  - id: 'AC13 (telemetria consegue registrar quem jogou)'
+    verdict: PASS
+    evidence: >-
+      `POLITICA_VERSION` (`'partida-1'`), `BOT_VERSION` (`'heuristic-1'`), `PRESET_ARNES` e
+      `PRESET_SOLO` lidos por mim sem instanciar nada, na bateria. É tudo de que `e3.5` precisa.
+      Nenhum coletor foi escrito, corretamente.
+
+  - id: 'AC16 (sem Date.now / performance.now / DOM em bot/)'
+    verdict: PASS
+    evidence: >-
+      Varredura de `src/bot/` por `Date.now|performance.now|Math.random|document.|window.|
+      localStorage|requestAnimationFrame`: **2 ocorrências, ambas prosa de comentário**
+      (`heuristic.ts:19` declarando a invariante N-1; `partida.ts:38` declarando a mesma). Zero em
+      código. Imports de `partida.ts` enumerados: `../match/types.ts` (**`import type`**),
+      `../sim/rng.ts`, `../shop/agregar.ts`, `../shop/catalogo.ts`.
+
+bateria_do_gate:
+  metodo: >-
+    Bateria escrita por mim do zero (driver de partida próprio, comparador próprio, política v2
+    própria), sem ler nem importar o script T1..T6 do @dev. Perturbações aplicadas na árvore REAL com
+    backup, presença do patch confirmada no disco antes de cada medição, restauração conferida por
+    sha256 depois de cada uma.
+  blocos:
+    - 'G1 — streams 5/6 contra `mulberry32(deriveSeed(s,5+j))` e disjunção de 0-4, 7, 8+i e do world.rng de cada rodada'
+    - 'G2 — determinismo (8 seeds × 2 execuções) e discriminação (8 assinaturas distintas), 0 rejeições'
+    - 'G3 — Regra 3 com a política dos DOIS lados: replay sem política nenhuma bate placar, vencedor, hash/ticks/seed/lado de todas as rodadas'
+    - 'G4 — política v2: joga diferente em 8/8 e não move nenhum hash gravado, inclusive com duas políticas v2 sacando 500 vezes ao lado do replay'
+    - 'G5 — poder discriminante das três tabelas de `bot/`'
+    - 'G6 — somente-leitura: EstadoPartida byte-idêntico e visão congelada em profundidade não lança, com 8 compras efetivamente emitidas'
+    - 'G7 — PRESET_SOLO como dado independente, inclusive a referência do objeto aninhado LIMIAR'
+    - 'G8 — `comprar` termina, respeita o ouro e só emite decisão que o redutor aceita'
+    - 'G9 — contrato de saque declarado no arquivo (1 por iteração, inclusive a que não compra; zero fora da loja)'
+  perturbacoes:
+    total: 7
+    detectadas: 7
+  detalhe:
+    - '**M-A** `STREAM_DA_POLITICA = 1` (colide com o bot de combate) — PEGOU, 32 queixas'
+    - '**M-B** `comprar` não debita o ouro local — PEGOU, 46 queixas; o redutor recusa 42 compras numa seed'
+    - '**M-C** `comprar` escreve na VISÃO em vez da cópia local — PEGOU; medido isoladamente, G6 acusa por dois caminhos (estado mudou; visão congelada lança `TypeError`)'
+    - '**M-D** `escolherBuild` ignora `BUILD_PREFERIDA` — PEGOU, G5'
+    - '**M-E** `escolherDraft` ignora a ordem de preferência — PEGOU, G5 (escolheu `ana`)'
+    - '**M-F** `comprar` não saca quando não compra (viola o contrato de saque declarado) — **passou VERDE na primeira rodada da bateria.** G9 foi escrita por causa disto e agora PEGA com 10 queixas. Registrado porque é o achado mais útil da bateria: a propriedade estava escrita no arquivo, nenhuma outra rede a cobria, e reprodutibilidade é cega a ela (as duas execuções degradariam igual)'
+    - '**M-G** alternância de trilha desligada — PEGOU, G5'
+
+arch_e32_001:
+  pergunta: 'Esta story recriou/reusou `BotState` de forma que reabriria ARCH-E32-001?'
+  veredito: 'NÃO reabre. E também NÃO foi paga — nem podia ter sido. A distinção importa e as duas metades estão abaixo.'
+  nao_reabre: >-
+    Confirmado, e a alegação do @dev está exata. `src/bot/partida.ts` não menciona `BotState`,
+    `createBot` nem `botCommands` em código — as três aparições são prosa. No meu driver (escrito por
+    mim) `createBot` nasce **dentro** da fábrica `RoundDriver`, invocada uma vez por rodada por
+    `runRound`, que é o mesmo mecanismo do caminho de produção de `e3.2`. Nenhuma variável de
+    `BotState` existe fora do escopo de uma rodada.
+    **O ponto vizinho que o @dev levantou está certo e é mais interessante do que parece:** o gerador
+    da política atravessa a partida inteira DE PROPÓSITO, e isso não contradiz M-1 — M-1 é sobre
+    relógios ABSOLUTOS em `BotState.porBola`, não sobre streams. A política não tem relógio; o único
+    estado dela é o gerador.
+  nao_foi_paga: >-
+    `medirM1` está **byte-inalterado**: `src/tools/partida.ts` continua com 805 linhas, não aparece
+    modificado em `git status`, e o `sim:check` imprime exatamente os mesmos ticks do gate de `e3.2`
+    (1059/963, 948/980, 829/1006) — a mesma medição confundida, ainda afirmando "reusar BotState
+    contamina em 3/3 seed(s)".
+    **A culpa não é do @dev e não é da story.** O gate de `e3.2` registrou ARCH-E32-001 como "entrada
+    bloqueante do gate de `e3.3`", mas a story `e3.3` foi redigida a partir de §8 do documento de
+    arquitetura, não do gate anterior, e o AC 15 dela fixou os arquivos tocados em dois — nenhum
+    deles é `src/tools/partida.ts`. O @dev cumpriu a story corretamente; cobrar dele o oposto do que
+    o AC 15 manda seria cobrar por um erro que ele não cometeu. **A corrente quebrou entre o meu YAML
+    de gate e a story**, num ponto que eu não tinha visto: o padrão que funcionou em ARCH-E31-003
+    (`e3.1` → `e3.2`) funcionou porque aquela dívida caía num arquivo que a story seguinte ia abrir
+    de qualquer jeito. Quando não cai, a recomendação de gate é invisível para quem escreve a story.
+  correcao_formal: >-
+    SIM, precisa, e eu a fiz nesta sessão: ARCH-E32-001 foi re-alojada em **`docs/architecture-e3.md`
+    §12.1** (seção nova), junto das outras três dívidas que o passo 4 herda, com o conserto medido
+    descrito (dois pares de bots com a MESMA seed, sujar só um — diverge em 8/8) e a razão de a
+    seção existir escrita por extenso. É de lá que o @sm redige, e é por isso que a dívida vai virar
+    AC em vez de continuar num YAML que ninguém abre.
+    **Regra que fica para os próximos gates meus:** uma dívida que o gate declara "bloqueante da
+    story seguinte" só é de fato bloqueante se cair num arquivo que a story seguinte já vai abrir.
+    Quando não cair, ela tem de ir para o documento de arquitetura no mesmo gate que a descobre —
+    não no gate seguinte.
+
+issues:
+  - id: ARCH-E33-001
+    severity: medium
+    category: tests
+    finding: >-
+      **A política não tem um único consumidor em `src/` e nenhuma cobertura permanente — o arquivo
+      inteiro pode ser apagado hoje sem uma linha vermelha.** Medido por varredura: `bot/partida` só
+      aparece em três comentários (`match/index.ts:2`, `sim/rng.ts:41`, `tools/partida.ts:47`) e em
+      zero linhas de código. O `sim:check` continua rodando com o `ROTEIRO_*` fixo de `e3.2`, que não
+      lê ouro nem avalia estado.
+      Toda a evidência que sustenta este gate — a minha G1..G9 e a T1..T6 do @dev — vive em script de
+      scratchpad, fora da árvore, e não roda no CI. A story está certa em ter feito assim (AC 15 fixa
+      os arquivos em dois), mas o resultado é que 397 linhas de código de produção entram no
+      repositório com rede zero.
+    impacto: >-
+      Nenhum hoje, exatamente porque ninguém a consome. Datado: **`e3.4` é quem passa a consumi-la**,
+      e é a story que também vai mexer no cliente inteiro — o pior momento possível para descobrir
+      que a política regrediu. As nove propriedades medidas aqui (streams, disjunção, somente-leitura,
+      contrato de saque, poder discriminante das três tabelas, 0 rejeições, terminação) não têm
+      nenhuma outra rede no projeto, e sete delas não são detectáveis por reprodutibilidade — foi o
+      que as perturbações M-B, M-C e M-F mostraram.
+    recommendation: >-
+      **Entrada obrigatória do gate de `e3.4`, registrada em `architecture-e3.md` §12.1 (D-c) para
+      que vire AC e não recomendação solta.** A forma que o @dev propôs é a certa e eu a endosso:
+      **somar** um bloco de política ao lado do `ROTEIRO_*` fixo, **sem substituí-lo** — o roteiro
+      exercita `buildPadrao`, `trocaDeBuild` e o caminho de rejeição por saldo, que a política v1
+      nunca produz, e perder isso seria trocar uma cobertura por outra.
+      O bloco tem de incluir, no mínimo, as três que nenhuma outra rede cobre e que a bateria negativa
+      provou serem necessárias: **contrato de saque** (M-F passou verde sem ela), **somente-leitura da
+      visão** (M-C) e **zero decisões rejeitadas** (M-B). Poder discriminante das tabelas (M-D, M-E,
+      M-G) é barato e vem junto.
+
+  - id: ARCH-E33-002
+    severity: medium
+    category: requirements
+    finding: >-
+      **ARCH-E32-001 foi declarada "entrada bloqueante do gate de `e3.3`" e atravessou a story inteira
+      sem ser vista.** Verificado: `medirM1` está byte-inalterada e o `sim:check` imprime os mesmos
+      ticks do gate anterior. O defeito é de processo e é meu: a obrigação vivia num YAML de gate, e o
+      @sm redige a story a partir do documento de arquitetura. Como a correção cai em
+      `src/tools/partida.ts` — arquivo que esta story não tinha razão nenhuma de abrir — o AC 15
+      tornou o pagamento estruturalmente impossível, e ninguém no caminho @sm → @po → @dev tinha por
+      que notar.
+    impacto: >-
+      Zero em comportamento (o caminho de produção cria `BotState` novo por rodada por construção, e
+      isso eu reverifiquei). O impacto é o mesmo de sempre: uma guarda cujo ramo de falha é
+      inalcançável imprime verde por construção, e no dia em que alguém zerar `porBola` entre rodadas
+      — tornando o reuso inofensivo e M-1 dispensável — ela continuará imprimindo "contamina em 3/3"
+      e ninguém saberá que a invariante mudou de natureza.
+      O impacto de PROCESSO é maior que o técnico e é o que registro: o padrão de corrente
+      (`e3.1` → `e3.2` funcionou) só funciona quando a dívida cai num arquivo que a story seguinte já
+      abriria.
+    recommendation: >-
+      Feito neste gate: re-alojada em `architecture-e3.md` §12.1 (D-a), com o conserto medido e o
+      motivo da seção existir. **Regra nova para os meus gates:** dívida declarada bloqueante da story
+      seguinte vai para o documento de arquitetura **no mesmo gate que a descobre**, não só para o
+      YAML — a menos que caia num arquivo que a story seguinte abriria de qualquer forma.
+      ARCH-E32-004 (literais `3`/`7`) segue aberta pelo mesmo motivo e foi para §12.1 (D-b).
+
+  - id: ARCH-E33-003
+    severity: low
+    category: code
+    finding: >-
+      **`CATALOGO_CANONICO` existe agora com o mesmo nome em dois arquivos** — privado em
+      `shop/agregar.ts:52` e recriado em 3 linhas em `bot/partida.ts:172`. O @dev registrou a
+      duplicação e a justificou pelo AC 15 (exportar tocaria um terceiro arquivo).
+      Julgado, e **a duplicação é aceitável nesta story** — por uma razão diferente da que ele deu,
+      e que vale escrever. O comparador é o mesmo (`a.id < b.id ? -1 : …`, idêntico ao `porId` de
+      `agregar.ts:38`), mas o ponto é que **as duas exigências não são a mesma**: `agregar.ts` precisa
+      da ordem canônica porque a ORDEM MUDA O RESULTADO (§1.6, §7.3 — a soma em float64 não é
+      comutativa no último bit); `bot/partida.ts` precisa apenas de *alguma* ordem total determinística
+      para varrer candidatos. A exigência do bot é estritamente mais fraca e é satisfeita localmente.
+      Se `agregar.ts` mudasse a ordem canônica amanhã, o bot continuaria correto.
+      O que sobra é o NOME: dois `CATALOGO_CANONICO` que hoje coincidem e que não são obrigados a
+      coincidir. É problema de leitura, não de comportamento.
+      **A alternativa que o @dev descartou está corretamente descartada:** percorrer a ordem de
+      APRESENTAÇÃO de `catalogo.ts` acoplaria a compra do bot à ordem de exibição da loja, e
+      `catalogo.ts` declara a própria ordem como "deliberadamente diferente da canônica" — reordenar
+      a UI de `e3.4` mudaria em silêncio o que o bot compra. Ele evitou o acoplamento real.
+    impacto: >-
+      Nenhum hoje, medido. Datado: `e3.4` já vai abrir `src/shop/` (o gate de `e3.2` registrou o
+      candidato de exportar o índice `id → ItemDef` de `redutor.ts`), então a limpeza sai de carona.
+    recommendation: >-
+      Em `e3.4`, exportar `CATALOGO_CANONICO` de `shop/agregar.ts` e apagar a cópia de
+      `bot/partida.ts`, **ou** — igualmente aceitável e talvez melhor — renomear a cópia local para
+      algo que diga a exigência mais fraca (`CATALOGO_EM_ORDEM_ESTAVEL`) e deixar as duas separadas,
+      já que o bot não depende da canonicidade. Não bloqueia.
+
+  - id: ARCH-E33-004
+    severity: low
+    category: tests
+    finding: >-
+      **Duas invariantes de CHAMADOR declaradas em comentário e sem guarda, e a segunda é nova desta
+      story.** (1) M-1: um `BotState` por rodada. (2) **Uma política por PARTIDA, não por rodada** —
+      declarada em letras maiúsculas no cabeçalho de `criarPolitica`.
+      Medi a segunda em 8 seeds, jogando a mesma partida com a política recriada a cada visita à loja:
+      **as compras mudam em 8/8**. A invariante é real e o desenho está certo.
+      **Mas a razão escrita no código é mais forte do que a medição sustenta.** O comentário diz que
+      recriar faria "o bot comprar sempre o mesmo item". Medido: os itens distintos por partida caem
+      de 3,75 para 3,5 em média nas 8 seeds — mudança, não degeneração. O motivo de a previsão falhar
+      é bom e vale registrar: o sorteio reiniciado incide sobre um ESTADO que varia entre visitas
+      (slot com menos itens, trilha da vez, itens já comprados), então o mesmo saque mapeia para
+      candidatos diferentes. É a mesma classe de coisa que eu venho cobrando dos outros — uma
+      afirmação com cara de medida que não foi medida.
+    impacto: >-
+      Nenhum hoje. Datado e concreto: **`e3.4` é o primeiro chamador de produção das duas
+      invariantes**, e o cliente é justamente onde é natural instanciar coisas por tela. Quebrar
+      qualquer uma delas produz degradação que passa verde em teste de reprodutibilidade — as duas
+      execuções degradam igual. É o modo de falha do §7.5 da Bíblia, e a razão de este registro não
+      ser LOW por gentileza.
+    recommendation: >-
+      (a) `e3.4`: o bloco de cobertura de ARCH-E33-001 deve incluir uma guarda de "uma política por
+      partida" no mesmo formato de `medirM1` — jogar a partida com a política recriada por rodada e
+      exigir que as compras DIVIRJAM (medido: 8/8). Registrado em §12.1 (D-d).
+      (b) @dev, 1 linha de comentário: trocar "compraria sempre o mesmo item" por o que a medição
+      sustenta — "reiniciaria o desempate, e a sequência de compras muda (medido: 8/8 seeds)". Sem
+      mudança de comportamento.
+
+  - id: ARCH-E33-005
+    severity: low
+    category: requirements
+    finding: >-
+      **`BUILD_PREFERIDA` é `0/0` para os dois personagens, e isso significa que as duas builds da
+      partida inteira são sempre idênticas para os dois jogadores.** Julgado: **aceitável para a v1,
+      e a alternativa seria pior.** Escolher `1` hoje seria decidir balanceamento por palpite — nenhuma
+      medição do projeto ordena as quatro builds de um personagem entre si (a matriz de `e2.5` rodou
+      com `0/0` fixo dos dois lados; o `BUILD_BASELINE` cobre variantes para REGRESSÃO, não para
+      comparação). É Artigo IV aplicado corretamente, e a tabela está marcada ⚠️ PROVISÓRIO com o que
+      afirma e o que não afirma.
+      **A alegação do @dev de que a tabela muda o REGISTRO e não o VALOR foi conferida na fonte e é
+      exata:** `aplicarBuildPadrao` (`redutor.ts:292-304`) escreve `abilityIndex = 0`,
+      `passiveIndex = 0`. A tabela produz o mesmo estado de jogo que deixar o timer estourar; o que
+      muda é o log dizer "escolheu" em vez de "a default entrou", que é o sinal que D-06 usa.
+    impacto: >-
+      Nenhum hoje. O que registro é o ponto cego que isto cria para quem vem depois: **nenhuma
+      partida jogada pela política v1 vai gerar dado sobre as builds 0/1, 1/0 ou 1/1**, em nenhuma
+      seed, nunca. Quando `e3.6` for ler a telemetria de §10 para ajustar D-05, e quando `e3.7` for
+      avaliar se "a default de D-06 virou meta", a amostra terá esse buraco **por construção da
+      política**, não por acaso amostral — e é fácil confundir os dois ao ler o relatório.
+    recommendation: >-
+      Nada nesta story. Para `e3.5`/`e3.6`, uma linha no relatório de telemetria dizendo que a
+      distribuição de builds do adversário é constante `0/0` por política, para que ninguém leia
+      "100% das partidas usaram 0/0" como preferência revelada. Se `e3.7` quiser dado sobre as outras
+      três builds, a mudança é uma linha em `BUILD_PREFERIDA` (ou remover a entrada, que já cai no
+      ramo de sorteio uniforme — conferido: 4 builds em 400 chamadas).
+
+decisoes_de_julgamento:
+  - questao: >-
+      `bot/partida.ts` conhece `shop/` e `match/`, o que contradiz "não conhece item, preço nem loja"
+      de `architecture-e2.md` §2.8. É violação de fronteira?
+    veredito: 'NÃO. A exceção está concedida explicitamente, e conferi a concessão na fonte.'
+    razao: >-
+      `architecture-e3.md` §2.2, tabela de setas, linha `bot/`, literal: **"comandos de combate (e2),
+      política de partida (§8) → sim/, shop/, match/ (só tipos)"**. A frase de §2.8 de `e2` é sobre o
+      bot de COMBATE, que de fato não pode conhecer item nem preço — o item vira `PickSetup.itemBonus`
+      antes da rodada e some. A política de PARTIDA é a camada nova que §2.2 previu ao escrever a
+      seta, e comprar sem ver o catálogo é impossível. A alegação do @dev confere palavra por palavra.
+      O que eu conferi além da concessão, porque a concessão sozinha não basta: o import de `match/`
+      é **`import type`**, e com `verbatimModuleSyntax` nenhum valor de `match/` é executado por
+      `bot/` — a seta "só tipos" está respeitada na letra, não só na intenção. E a seta INVERSA
+      continua limpa: `src/match/` está byte-idêntico ao gate de `e3.2` nos 7 arquivos, logo nada de
+      `bot/` vazou para lá.
+
+  - questao: >-
+      `comprar` devolve a visita inteira à loja numa chamada (`Decisao[]`, plural), simulando saldo e
+      itens por dentro. Isso é o redutor reimplementado dentro de `bot/`?
+    veredito: 'NÃO, e o desenho é o certo. O tipo de §8.2 já pedia o plural.'
+    razao: >-
+      O risco real de "simular o redutor por dentro" é as duas simulações divergirem, e ele é
+      MEDÍVEL: se divergissem, o redutor recusaria compras que a política emitiu. **Zero decisões
+      rejeitadas em 8 partidas / 40 compras**, e a perturbação M-B (não debitar o ouro local) produz
+      42 rejeições numa única seed — o teste que cobre essa divergência existe e tem dentes.
+      O desenho alternativo ("uma compra por chamada") empurraria o laço, e com ele a possibilidade
+      de laço infinito por decisão rejeitada, para TODO chamador — inclusive o cliente de `e3.4`. A
+      função como está é terminante por construção (teto de 8, conferido em ouro 1000).
+      A cópia local também não é preciosismo, e isso eu medi: `visaoPara` devolve `eu` por
+      REFERÊNCIA, e a mutação M-C (empurrar direto na visão) corrompe o estado real de um jeito que
+      **o replay não pegaria sozinho** — ele quebra por falta de decisões, não por hash. É o modo de
+      falha exato que `invarianteCompra` de `e3.2` foi escrita para pegar.
+
+  - questao: >-
+      "O item mais caro que couber" é hoje degenerado (os 8 itens custam 6). O critério é código
+      morto?
+    veredito: 'NÃO é morto, e a nota do @dev sobre isso é o tipo de registro que eu quero ver repetido.'
+    razao: >-
+      Com preço único o critério (1) não discrimina e quem decide de fato é a trilha da vez e o
+      sorteio entre os empatados — e isso está escrito NO CÓDIGO, não só na story. Sem essa nota,
+      alguém leria a saída da bateria e concluiria que o critério de preço está funcionando; com ela,
+      `e3.7` sabe que diferenciar preços faz o critério morder sozinho, sem uma linha de mudança.
+      O sorteio entre empatados também tem razão declarada e conferida: com preço único e trilha
+      empatando sempre em 4 itens, sem ele o bot compraria previsivelmente. §13.2 registra "o bot que
+      compra mal deixa a partida fácil" como o risco desta camada, e ser trivialmente previsível é a
+      forma mais barata de comprar mal. Variedade sorteada não é jogar bem — é não ser previsível de
+      graça, e o @dev escreveu exatamente isso.
+
+  - questao: >-
+      A bateria do @dev (T1..T6) e a minha (G1..G9) chegam ao mesmo veredito. Isso é confirmação ou
+      é a mesma cegueira duas vezes?
+    veredito: >-
+      É confirmação nas partes que eu reproduzi com instrumento próprio, e a minha bateria achou UM
+      buraco que a dele não cobria — que é a resposta honesta.
+    razao: >-
+      Reproduzi com driver, comparador e política v2 escritos por mim: streams (16/16), replay
+      (8 seeds contra as 3 dele), determinismo, poder discriminante das três tabelas. Os números dele
+      conferem onde se sobrepõem.
+      **O buraco:** o contrato de saque declarado no cabeçalho do arquivo ("1 saque por iteração,
+      inclusive a que não compra; zero fora da loja") não era coberto por nenhuma das duas baterias.
+      Descobri porque apliquei a perturbação M-F e ela **passou verde** — foi a única das sete a
+      passar na primeira rodada. Escrevi G9 por causa disso e agora ela pega com 10 queixas.
+      Vale registrar o método, porque é o que me fez achar: a perturbação veio antes do teste. Se eu
+      tivesse escrito só os testes que as propriedades declaradas sugerem, teria escrito as mesmas
+      nove que o @dev escreveu e concluído a mesma coisa.
+
+escopo_negativo_confirmado:
+  - >-
+    **`src/client/*` intocado** (é `e3.4`). Não aparece em `git status --short src/`. Nenhuma tela,
+    nenhum timer de 30s, nenhum DOM. `main.ts` continua usando `dummyCommands` — a troca por
+    `heuristic` é do passo 4.
+  - >-
+    **`src/match/` byte-idêntico ao gate de `e3.2`** — os 7 sha256 conferidos um a um. Nenhuma linha
+    de política vazou para as regras.
+  - >-
+    **`src/shop/`, `src/chars/`, `src/sim/` intocados** — nenhum aparece em `git status`. `e3.0` e
+    `e3.1` continuam `Done` e fechadas.
+  - >-
+    **`src/tools/partida.ts` e `src/tools/determinism.ts` intocados** desde `e3.2` — 805 linhas,
+    `+28/0`, e o `sim:check` imprimindo os mesmos ticks de M-1. **Consequência registrada:**
+    ARCH-E32-001 e ARCH-E32-004 seguem abertas (ver ARCH-E33-002).
+  - >-
+    **Nenhum número de D-05 nem de D-09 tocado.** Golden hash idêntico nas 5 seeds e nas 5 variantes
+    de build; `PRECO_PROVISORIO`, `ECONOMIA_PROVISORIA` e `ESCALA_*` intocados. A story que move o
+    hash continua sendo `e3.6` e só ela.
+  - >-
+    **`client/telemetria.ts` não existe** (é `e3.5`). Esta story só exporta as constantes.
+  - >-
+    **`PRESET_ARNES` e `BOT_VERSION` byte-idênticos** ao commit `7ae95ee`, provado por sha256 da
+    remoção das 38 linhas inseridas. Nenhuma matriz de winrate já reportada deixa de ser reproduzível.
+
+recomendacoes_para_e3_4:
+  - >-
+    **OBRIGATÓRIA (ARCH-E33-001, §12.1/D-c):** bloco de cobertura permanente da política no
+    `sim:check`, **somado** ao `ROTEIRO_*` fixo e não no lugar dele. Mínimo: contrato de saque,
+    somente-leitura da visão e zero decisões rejeitadas — as três que a bateria negativa provou não
+    serem detectáveis por nenhuma outra rede do projeto.
+  - >-
+    **OBRIGATÓRIA (ARCH-E32-001, §12.1/D-a):** corrigir o cenário de `medirM1` para isolar a sujeira
+    da troca de seed. `createBot(s0)` limpo × `createBot(s0)` sujo, ambos rodando `setup1`. Medido no
+    gate de `e3.2`: diverge em 8/8, então a guarda ganha poder. **Esta é a segunda story em que a
+    dívida entra; se `e3.4` fechar sem ela, o gate de `e3.4` é FAIL, não CONCERNS.**
+  - >-
+    ARCH-E32-004 (§12.1/D-b): literais `3`/`7` na guarda de D-02 → `REGRAS_PADRAO` ou `e.regras`.
+    Duas linhas, no arquivo que `e3.4` já vai abrir.
+  - >-
+    ARCH-E33-004 (§12.1/D-d): guarda de "uma política por PARTIDA", no formato de `medirM1`. O
+    cliente é o primeiro chamador de produção da invariante e é onde é natural instanciar por tela.
+    Medido: recriar por rodada muda as compras em 8/8 seeds.
+  - >-
+    ARCH-E32-002 (do gate de `e3.2`, segue de pé): `setupDaRodada` deve recusar
+    `abilityIndex`/`passiveIndex` fora do intervalo, e `aplicar` precisa de `default` no `switch`.
+    Esta story **não abriu superfície nova** — a política produz `Decisao` bem tipada como o roteiro,
+    e `criarPolitica(1, 2)` nem compila —, mas o cliente de `e3.4` é entrada humana.
+  - >-
+    ARCH-E33-003: exportar `CATALOGO_CANONICO` de `shop/agregar.ts` e apagar a cópia, **ou** renomear
+    a cópia local para dizer a exigência mais fraca. Não bloqueia.
+
+alteracoes_no_documento_de_arquitetura:
+  - secao: 'docs/architecture-e3.md — Anexo A (errata que o AC 11 me atribuiu)'
+    mudanca: >-
+      A menção a `PRESET_SOLO` saiu da linha de `src/bot/partida.ts` e foi para a de
+      `src/bot/heuristic.ts`, que passou de "**inalterado**" para "**adição aditiva**", com a
+      qualificação nos termos em que ela é verdadeira e agora provada por sha256: lógica de combate,
+      `PRESET_ARNES` e `BOT_VERSION` inalterados. A linha ganhou o passo `3`, que ela não tinha.
+      O @sm identificou a divergência corretamente e não a resolveu sozinho; o @po a resolveu com
+      leitura de código e acertou. A errata era minha e está paga.
+  - secao: 'docs/architecture-e3.md §12.1 — NOVA'
+    mudanca: >-
+      Seção nova: as quatro dívidas que o passo 4 herda dos gates de `e3.2` e `e3.3` (ARCH-E32-001,
+      ARCH-E32-004, ARCH-E33-001, ARCH-E33-004), em tabela, com conserto e custo. O parágrafo de
+      abertura registra POR QUE a seção existe: uma obrigação que só vive num YAML de gate é
+      invisível para quem escreve a story seguinte, e ARCH-E32-001 atravessou `e3.3` inteira
+      exatamente assim. É de §12 que o @sm redige as stories do plano de construção.
+  - secao: 'docs/architecture-e3.md §2.2, §8.1, §8.2'
+    mudanca: >-
+      Nenhuma. Reli as três nesta sessão contra a implementação e não achei erro meu: a seta
+      `bot/ → sim/, shop/, match/ (só tipos)` está correta e concede a exceção que esta camada
+      precisava, e o bloco de assinatura de §8.2 foi implementado palavra por palavra.
+
+waiver:
+  active: false
