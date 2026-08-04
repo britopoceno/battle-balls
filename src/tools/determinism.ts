@@ -17,6 +17,10 @@ import type { Command } from '../sim/types.ts'
 // `RoundResult.hash` — importá-lo aqui só para "cumprir a lista" seria import não usado, e
 // `noUnusedLocals` reprova o `npm run check`. Ver Dev Agent Record da story e2.0.
 import { runRound, type RoundDriver, type RoundResult } from './harness.ts'
+// Regra 3 de `architecture-e3.md` §2.5 (story `e3.2`): partida Bo5 inteira, invariante M-1 e
+// invariante de economia RF-23. Mora em arquivo próprio porque é uma bateria sobre `match/`, não
+// sobre `sim/` — e porque este arquivo já é o mais longo de `tools/`.
+import { verificarPartida } from './partida.ts'
 
 const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
 
@@ -469,6 +473,17 @@ function auditarCamada3(): { violacoes: string[]; tabela: string[] } {
   return { violacoes, tabela }
 }
 
+// -------------------------------------------- Camada de PARTIDA (e3.2) — Regra 3, M-1, RF-23
+
+/**
+ * O bloco de `match/`. Ele NÃO tem valores de referência congelados, e isso é decisão: o golden
+ * hash acima trava o comportamento de `sim/`, e a Regra 3 mede REPRODUTIBILIDADE — placar,
+ * sequência de vencedores e hashes de rodada iguais entre a partida gravada e o replay sem bot.
+ * Um número absoluto aqui reprovaria toda mudança legítima de economia ou de roteiro, que é churn
+ * de baseline sem informação (mesmo raciocínio do bloco P2.5 acima, `architecture-e2.md` §3.3).
+ */
+const { linhas: linhasPartida, problemas: problemasPartida } = verificarPartida()
+
 const violacoesCamada1 = auditarCamada1()
 const { violacoes: violacoesCamada3, tabela: tabelaJanelas } = auditarCamada3()
 const violacoesPilar3 = [...violacoesCamada1, ...violacoesCamada3]
@@ -504,6 +519,8 @@ if (problemasBot001.length) for (const p of problemasBot001) console.log(p)
 console.log(
   `guarda BOT-001 ${problemasBot001.length === 0 ? '✓ ok — VE = NaN não casta (limiar no sentido positivo)' : `✗ ${problemasBot001.length} problema(s)`}`,
 )
+console.log('')
+for (const linha of linhasPartida) console.log(linha)
 console.log('')
 for (const linha of tabelaJanelas) console.log(linha)
 console.log('')
@@ -552,6 +569,17 @@ if (desviosBotReplay.length > 0) {
     `P2.5 (replay) falhou em ${desviosBotReplay.length} seed(s) — a partida do heuristic não se ` +
       'reproduz a partir de (seed, comandos). Suspeitos: o bot escreveu em view (N-3) ou sacou de ' +
       'world.rng, quebrando o isolamento de stream de D-08. Ver architecture-e2.md §3.3.',
+  )
+}
+if (problemasPartida.length > 0) {
+  for (const p of problemasPartida) console.log(p)
+  throw new Error(
+    `a camada de partida falhou em ${problemasPartida.length} ponto(s) — ver acima. A Regra 3 ` +
+      '(`architecture-e3.md` §2.5) exige que matchSeed + Decisao[] + Command[] reproduzam placar, ' +
+      'sequência de vencedores e os hashes de TODAS as rodadas. Suspeitos, nesta ordem: `aplicar` ' +
+      'aplicando decisão pela metade em vez de rejeitar com `erro`; `setupDaRodada` lendo algo que ' +
+      'não veio do estado; BotState reusado entre rodadas (M-1); ou crédito de ouro por vitória ' +
+      '(RF-23).',
   )
 }
 if (problemasBot001.length > 0) {

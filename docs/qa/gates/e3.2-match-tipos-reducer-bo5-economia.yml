@@ -1,0 +1,597 @@
+schema: 1
+story: 'e3.2'
+story_title: '`src/match/` — tipos, redutor `aplicar`, `setupDaRodada`, Bo5 + D-02, economia provisória, `visaoPara`'
+gate: CONCERNS
+status_reason: >-
+  Os 29 ACs passam e foram verificados por reexecução independente — nada aceito do Dev Agent Record.
+  `npm run check` 0 erros; `npm run sim:check` verde com **golden hash idêntico** nas 5 seeds e nas 5
+  variantes de build. Escopo provado por sha256 contra o commit de `e3.1` (7ae95ee): dos 7 arquivos de
+  `src/sim/`, **seis batem dígito a dígito** e o sétimo (`rng.ts`) difere **só em comentário** —
+  provado por diff das linhas não-comentário, que é vazio. `src/bot/partida.ts` não existe e
+  `src/client/*` não aparece em `git status`: `e3.3` e `e3.4` não vazaram.
+  **Os dois achados centrais do @dev foram reproduzidos por mim e conferem exatamente.** (1) A mutação
+  "aceita compra SEM debitar" passa **verde** pelo teste de replay — e mais forte do que ele reportou:
+  os hashes das 3 partidas saem **byte-idênticos** aos da implementação correta (`d4c28105 e1dde398
+  15c4854d` etc.), porque o erro é consistente entre gravação e replay. Com `invarianteCompra` ativa a
+  mesma mutação produz 4 problemas e o `sim:check` lança. (2) Zerando `itemBonus` em `setupDaRodada`,
+  o golden hash continua ✓, o replay de partida continua ✓, e **só** a guarda `ponte itemBonus`
+  acusa — a guarda extra-AC do @dev é genuinamente portante, não decoração.
+  `validarCompra` tem os dois chamadores de produção alegados, conferidos no fonte
+  (`redutor.ts:340`, lista FUTURA `[...itens, itemId]`; `setup.ts:80`, antes de `agregarItens`):
+  **ARCH-E31-003 fechado dos dois lados**, com `validarCatalogo` ligada na bateria.
+  CONCERNS e não PASS por quatro registros, nenhum de comportamento em jogo legítimo e nenhum
+  bloqueante do push: a medição de M-1 embarcada no `sim:check` está **confundida** e não mede o que
+  a linha que ela imprime afirma (ARCH-E32-001, entrada obrigatória de `e3.3`); o redutor **quebra ou
+  aceita em silêncio** `Decisao` malformada, que é a fronteira que a Fase 4 abre (ARCH-E32-002); o
+  `pool` do draft não é consumido e o comentário promete um parâmetro que não existe (ARCH-E32-003);
+  e há literais `3`/`7` soltos na guarda de D-02 onde `REGRAS_PADRAO` já existe (ARCH-E32-004).
+  `e3.3` está liberada, com ARCH-E32-001 como entrada bloqueante do gate dela.
+reviewer: 'Aria (@architect) — quality_gate declarado na story'
+reviewed_revision: >-
+  working tree sobre commit:7ae95ee (HEAD, `e3.1`) ·
+  NOVOS por esta story — src/match/ (7 arquivos):
+  types.ts sha256:e8c0b86b… · redutor.ts 43a31b19… · setup.ts f348188c… · economia.ts 6669a363… ·
+  regras.ts 0ccebeb7… · visao.ts 333bf03c… · index.ts bc8f0237… ·
+  src/tools/partida.ts (novo, 805 linhas) ·
+  MODIFICADOS: src/sim/rng.ts (SÓ comentário — ver abaixo) · src/tools/determinism.ts (+28 linhas:
+  1 import, 1 chamada a `verificarPartida()`, 2 blocos de impressão, 1 `throw`) ·
+  `src/sim/` conferido por sha256 contra 7ae95ee, arquivo a arquivo:
+  effects.ts IDÊNTICO · index.ts IDÊNTICO · physics.ts IDÊNTICO · stats.ts IDÊNTICO ·
+  types.ts IDÊNTICO · world.ts IDÊNTICO · rng.ts DIFERE — e o diff das linhas não-comentário
+  (`grep -v` de `*`, `//`, `/*` nas duas versões) é **vazio**, logo nenhuma linha executável de
+  `src/sim/` mudou. Mesmo conjunto de arquivos (nenhum novo, nenhum removido) ·
+  `git status --short src/` devolve exatamente 4 linhas: ` M src/sim/rng.ts`,
+  ` M src/tools/determinism.ts`, `?? src/match/`, `?? src/tools/partida.ts` ·
+  src/bot/ contém apenas dummy.ts e heuristic.ts (nenhum `partida.ts`) e não aparece em git status ·
+  src/client/ não aparece em git status ·
+  ALTERADO PELO GATE (documento, não código): docs/DEVELOPMENT-BIBLE.md §7.5
+updated: '2026-07-30T00:00:00Z'
+
+acceptance_criteria:
+  - id: 'AC1, AC2 (tipos e Decisao/Transicao)'
+    verdict: PASS
+    evidence: >-
+      `types.ts` conferido campo a campo contra a listagem literal do AC: `Jogador`,
+      `EscolhaPersonagem` (5 campos, `itens` na ordem de compra, `revelado`), `EstadoJogador`,
+      `FaseDaPartida` (5 estados), `EstadoPartida`, `ResultadoRodada` (6 campos), a união `Decisao`
+      de 6 variantes e `Transicao` — todos idênticos. Um único campo a mais em `EstadoPartida`
+      (`prontos: [boolean, boolean]`), declarado pelo @dev e julgado NECESSÁRIO: sem ele
+      `{t:'pronto'}` do AC 2 não teria efeito e a fase `builds` nunca fecharia (§4.1 exige que ela
+      acabe com os dois prontos). A escolha de pô-lo em `EstadoPartida` e não em `EstadoJogador`
+      mantém `EstadoJogador` byte a byte igual ao literal do AC. Aceito.
+      `ResultadoRodada.hash` é `string` e nada mais — nenhum import de `tools/` (AC 28).
+
+  - id: 'AC3 (redutor puro, rejeição sem meia aplicação)'
+    verdict: PASS
+    evidence: >-
+      `rejeitar()` devolve o estado ORIGINAL por referência (`{ estado: e, eventos: [], erro }`),
+      sem clonar. Verificado em runtime, não por leitura: `invarianteCompra` compara por identidade
+      referencial (`semSaldo.estado !== tA.estado`) e exige zero eventos. Reexecutei a mutação
+      "aceita compra sem debitar" e os DOIS ramos derivados dispararam junto (`rejeição devolveu um
+      estado NOVO`, `rejeição emitiu 1 evento`), o que confirma que a checagem por identidade tem
+      poder discriminante real e não é tautologia.
+      Todo caminho ilegal conferido no fonte: fase errada, jogador já pronto, item desconhecido,
+      `validarCompra` reprovando, ouro insuficiente, vez errada no snake, `charId` fora do pool,
+      índice de rodada divergente em `registrarRodada`. Todos passam por `rejeitar`.
+      **Ressalva de fronteira registrada em ARCH-E32-002** — vale para `Decisao` bem tipada.
+
+  - id: 'AC4 (setupDaRodada) + AC6 (Regra 1, streams)'
+    verdict: PASS
+    evidence: >-
+      `seedDaRodada(matchSeed, i) = deriveSeed(matchSeed, 8 + i)` com `STREAM_DA_RODADA = 8`
+      nomeado, não literal. `setupDaRodada` monta `teams` chamando `agregarItens(p.itens)` de
+      `src/shop/agregar.ts` — a ponte de §5.2, literal.
+      **Provado por poder discriminante, não por leitura, e é o ponto que eu mais queria testar.**
+      Substituí `itemBonus: agregarItens(p.itens)` por `itemBonus: {}` na árvore real, com o patch
+      confirmado no disco: `golden hash ✓ ok — 5 seeds batem o baseline` e
+      `replay partida ✓ ok — 3 partidas Bo5 reproduzidas sem bot` continuaram VERDES, e o único
+      bloco a acusar foi `ponte itemBonus ✗ sem poder discriminante`. A alegação do @dev confere
+      exatamente: sem essa guarda, o AC 4 estaria provado só por leitura de código. Restaurado e
+      conferido por sha256 (`f348188c…`).
+      AC 6: `git diff src/sim/rng.ts` é comentário puro — provado pelo diff das linhas
+      não-comentário, que é vazio. A tabela ganhou 5/6 (reservados, sem consumidor) e 8+i.
+
+  - id: 'AC5 (registrarRodada)'
+    verdict: PASS
+    evidence: >-
+      Existe, empurra `clonarResultado(r)` em `historico`, resolve Bo5+D-02+economia. Terceiro
+      parâmetro `controle: [Controle, Controle] = ['bot','bot']` além da assinatura do AC:
+      OPCIONAL, logo compatível, e NECESSÁRIO porque o evento `rodadaFim` do AC 26 exige o campo.
+      O default conservador (`['bot','bot']`) faz esquecer o argumento EXCLUIR a rodada da mediana
+      do humano em vez de contaminá-la — direção de falha certa para P3.1. Aceito.
+
+  - id: 'AC7 (Invariante M-1)'
+    verdict: CONCERNS
+    evidence: >-
+      **A obrigação estrutural do AC está CUMPRIDA e essa parte é PASS:** `driverNovo()` é uma
+      FÁBRICA `RoundDriver`, e `runRound` a invoca uma vez por rodada, então os dois `BotState`
+      nascem dentro dela com a seed daquela rodada. Varri `src/match/` e `src/tools/partida.ts`:
+      não existe variável de `BotState` viva fora do escopo de uma rodada em nenhum caminho de
+      partida — o único `BotState` de vida longa é o de `driverComBots`, que existe só para medir
+      o erro. M-1 é respeitada por construção.
+      **A MEDIÇÃO embarcada, porém, está confundida — ver ARCH-E32-001.** Reproduzi os números do
+      @dev (1059 vs 963 em `matchSeed 1`, 3/3 divergem) e depois desmontei o cenário em 8 seeds:
+      `medirM1` compara `createBot(s1)` NOVO contra `createBot(s0)` SUJO, isto é, muda a seed do
+      bot E a sujeira ao mesmo tempo. Medido: um bot **limpo** criado com `s0` já diverge do
+      criado com `s1` em **8/8 seeds** — a seed sozinha explica a divergência inteira.
+      Refiz a medição com a seed controlada e a invariante **CONFIRMA**: `createBot(s0)` limpo
+      contra `createBot(s0)` sujo diverge em **8/8**; e com o `rand` igualmente avançado nos dois
+      lados, zerar `porBola` ainda muda o resultado em **8/8** — o que sustenta a causa que o @dev
+      alegou (`proximaDecisaoTick`/`prontoDesdeUlt` são relógios ABSOLUTOS). A conclusão dele está
+      certa; a evidência que ele embarcou não a estabelece.
+
+  - id: 'AC8 (Regra 3 — teste de replay de partida)'
+    verdict: PASS
+    evidence: >-
+      Reexecutado do zero, e com comparador **escrito por mim** em vez do `compararPartida` do
+      @dev: 3 partidas (`matchSeed` 1, 2, 12345), placar, vencedor de partida, número de rodadas,
+      e por rodada `hash`, `ticks`, `vencedor`, `seedDaRodada`, `ladoDoJogador` — todos batem.
+      **A alegação de que o replay RECALCULA o `RoundSetup` confere, e é a parte que importa:**
+      `fecharRodada` chama `setupDaRodada(e, CHARS)` incondicionalmente; o `setup` gravado em
+      `RodadaGravada` só é lido por `medirItemBonus`. Se ele fosse copiado da gravação, um
+      `setupDaRodada` divergente passaria verde — o @dev verificou isso especificamente e está certo.
+      **Poder discriminante do replay medido por mim** (perturbar a gravação e exigir que a
+      comparação ACUSE): trocar a build escolhida na fase `builds` → PEGOU (3 hashes); remover UM
+      comando da rodada 0 → PEGOU; trocar o item de CADA compra ACEITA, uma a uma → PEGOU nas 3
+      (r2/r3 hash, e uma delas alonga a partida e estoura a lista de decisões). As duas únicas
+      perturbações que passaram foram as duas compras da rodada 1, que são **rejeitadas por saldo**
+      na gravação — mutar decisão rejeitada é no-op por definição, não furo do teste. Confirmado
+      contra as `rejeicoes` impressas (`ouro insuficiente: jogador 0 tem 4, 'chumbo' custa 6`).
+      A saída também exige que a partida termine por uma das duas portas de D-02 e que o lado
+      alterne entre as rodadas 0 e 1 — duas guardas que impedem o replay de provar reprodutibilidade
+      de um mecanismo desligado.
+
+  - id: 'AC9, AC10 (visaoPara / segredo por projeção)'
+    verdict: PASS
+    evidence: >-
+      `PersonagemVisivel` é união discriminada: `abilityIndex`/`passiveIndex` só existem no ramo
+      `revelado: true`, e `visivel()` constrói dois OBJETOS diferentes em vez de filtrar valores —
+      logo nem `JSON.stringify` vaza. Verificado nas três camadas: por tipo (o compilador), por
+      chaves em runtime (`Object.keys` do personagem fechado = `charId,revelado,itens`) e sobre o
+      TEXTO serializado do ramo do oponente, que é literalmente o que a Fase 4 enviaria.
+      A bateria negativa do @dev pegou a mutação "vaza `abilityIndex` com `revelado:false`".
+      AC 10 conferido em positivo: `itens` está presente nas DUAS variantes — compras não são
+      secretas, e o teste falha se `itens` sumir. Revelação na largada (`talvezAbrirARodada`)
+      conferida com build 1/1 não default.
+
+  - id: 'AC11, AC27, AC28 (pureza e fronteiras)'
+    verdict: PASS
+    evidence: >-
+      Varredura de `src/match/` por `Date.now|Math.random|performance.now|document.|window.|
+      localStorage|requestAnimationFrame|require(|process.`: **2 ocorrências, ambas prosa de
+      comentário** (`types.ts:159` cita `localStorage` para dizer que é `e3.5`; `redutor.ts:31`
+      cita as proibições para declará-las). Zero em código.
+      Imports de `src/match/` enumerados exaustivamente: `../shop/agregar.ts`,
+      `../shop/catalogo.ts`, `../sim/rng.ts`, `../sim/types.ts`, `../sim/world.ts` e os internos.
+      **Nada de `tools/`, `client/`, `chars/` ou `bot/`** — a única string `'../tools/...'` é o
+      comentário de `types.ts:19` que explica a proibição.
+      Direção inversa conferida: `src/sim/*` importa exclusivamente `./`. Nenhum import de `match/`
+      nem de `shop/` em `sim/`. A seta de §2.2 está intacta nos dois sentidos.
+      Sem timer: o estouro de 30s entra como `{t:'buildPadrao'}` e o roteiro do `sim:check` exercita
+      esse caminho de propósito (jogador 1 nunca escolhe).
+
+  - id: 'AC12, AC13 (draft)'
+    verdict: CONCERNS
+    evidence: >-
+      `EstadoDraft` tem os 4 campos exatos e **não tem campo de bans** — a ausência de RF-02 está
+      correta. `ORDEM_SNAKE_2x2 = [0,1,1,0]` é dado exportado. `criarPartida` valida que a `ordem`
+      dá exatamente 2 escolhas a cada jogador (coerência com a tupla de `personagens`), o que é
+      defesa que a story não pedia e é boa. Composição fixa `[golem, vex]` para os dois jogadores,
+      conforme R-01(B).
+      **Ressalva:** a Task 2 marca "consumir `pool`" como feita e o `pool` NÃO é consumido — ver
+      ARCH-E32-003. A decisão de não consumir está CERTA (4 escolhas de um pool de 2 é a aritmética
+      de §3.2 que motivou R-01), mas a marcação e o comentário que a acompanha estão errados.
+
+  - id: 'AC14, AC15, AC16, AC17, AC18 (Bo5, lado, D-02, empate)'
+    verdict: PASS
+    evidence: >-
+      `REGRAS_PADRAO = { vitoriasParaVencer: 3, tetoDeRodadas: 7, alternarLadoPorRodada: true }`
+      — R-06(b) aplicada. `partidaAcabou` é literal de D-02
+      (`alguemVenceu || indiceDaRodada + 1 === tetoDeRodadas`) e `vencedorDaPartida` devolve `-1`
+      em igualdade de vitórias: empate de partida é desfecho legítimo, não erro.
+      Jogador ≠ lado: `ladosDaRodada` devolve `[1,0]` em rodada ímpar, `jogadorDoLado` é a inversa,
+      `vencedorDaRodada` traduz `Team` → `Jogador` num lugar só. Ouro, itens e placar são indexados
+      por JOGADOR em todos os caminhos (conferido em `setupDaRodada`, `registrarRodada`,
+      `aplicarCompra`, `visaoPara`).
+      Observado nas 3 partidas do `sim:check`: lados `[01 10 01]` e `[01 10 01 10]` — a alternância
+      acontece de fato, e há guarda que reprova se as rodadas 0 e 1 tiverem o mesmo lado.
+      A bateria negativa do @dev pegou a mutação "`ladosDaRodada` nunca alterna".
+      AC 17 (empate nulo + economia avança) provado por `invarianteRF23`: registrar a MESMA rodada
+      com vencedor 0, 1 e `-1` dá os MESMOS saldos (`4/4` nos três casos) — ninguém pontua no
+      empate e a renda entra igual. O bloco de crédito em `registrarRodada` não lê `r.vencedor`.
+
+  - id: 'AC19 (loja não abre antes da rodada 1)'
+    verdict: PASS
+    evidence: >-
+      **Desvio da LETRA do AC, e o desvio está certo.** O AC diz "a `fase` inicial é `'builds'`" e a
+      implementação nasce em `'draft'`. Conferi a fonte: §11.1 desenha
+      `draft ──▶ builds ──▶ rodada ──▶ [placar] ──▶ loja`, e R-03 (§14) fala de "`fase` inicial é
+      `loja` ou `builds`" no contexto de **quando a loja abre**, não de suprimir o draft — que os
+      ACs 12/13 exigem exercitado. A intenção de R-03 é honrada ESTRUTURALMENTE e isso é mais forte
+      que a letra: o único caminho que produz `fase: 'loja'` é `registrarRodada`, isto é, uma rodada
+      já jogada. Não existe construtor nem decisão que abra a loja antes. Curva econômica em 3,31.
+      Verificado em runtime: `{t:'compra'}` numa partida recém-criada é REJEITADA.
+
+  - id: 'AC20, AC21 (item por personagem, troca de build)'
+    verdict: PASS
+    evidence: >-
+      R-02 "por personagem": `aplicarCompra` escreve em `personagens[d.slot].itens` e
+      `invarianteCompra` exige que o outro slot fique VAZIO — a regressão "vazou para o time" é
+      detectável. `trocaDeBuild` é legal só na fase `loja`, debita `economia.precoTrocaDeBuild`
+      (5, lido do parâmetro e não literal) e refecha `revelado: false`; o teste exige as três
+      coisas e a linha impressa confirma (`troca de build custa 5 e refecha o segredo`).
+
+  - id: 'AC22, AC23, AC24, AC25 (economia)'
+    verdict: PASS
+    evidence: >-
+      `ECONOMIA_PROVISORIA` conferida campo a campo contra §6.2: os 6 valores são idênticos, o
+      aviso `⚠️ PROVISÓRIO — D-09` está no topo, e **ARCH-E31-002 não se repetiu** — não há literal
+      solto na linha do uso em `src/match/` (preços vêm de `CATALOGO`, regras de `RegrasPartida`,
+      economia de `ParametrosEconomia`).
+      Ouro inteiro: `creditar = ouro + rendaDaRodada + jurosDe`, e `jurosDe` faz o `Math.floor`
+      ANTES da multiplicação e do teto, o que torna o resultado inteiro por construção.
+      **Desvio de fórmula, verificado e aceito:** §6.2 escreve `floor(min(teto, ouro/10))` e a
+      implementação faz `min(teto, floor(ouro/10) × jurosPorDezOuro)`. O @dev justificou que a
+      fórmula do documento deixa `jurosPorDezOuro` como parâmetro MORTO, contradizendo o
+      `ParametrosEconomia` que a própria §6.2 declara. Conferi a equivalência: para todo `ouro`
+      inteiro ≥ 0 com os parâmetros provisórios (`jurosPorDezOuro=1`, `teto=3`), as duas expressões
+      coincidem em todo o domínio — abaixo de 30 as duas dão `floor(ouro/10)`, de 30 em diante as
+      duas dão 3. A diferença só apareceria com `jurosPorDezOuro ≠ 1`, que é exatamente o caso em
+      que a fórmula do documento perde sentido. A leitura do @dev é a certa.
+      RF-22/RF-23 provados em runtime (ver AC 17). `rendaDaRodada(i) = rendaPorRodada[i] ??
+      rendaAposATabela` cobre a 6ª e a 7ª rodada sem `undefined`.
+      A bateria negativa pegou "`registrarRodada` credita +3 ao vencedor".
+
+  - id: 'AC26 (EventoPartida)'
+    verdict: PASS
+    evidence: >-
+      As 5 variantes conferidas campo a campo contra o AC. `rodadaFim` usa `[Controle, Controle]`
+      onde `Controle = 'humano' | 'bot'` — mesmo tipo, nomeado. `atingiu60s` usa a MESMA conta do
+      arnês (`ticks × TICK_MS >= SUDDEN_DEATH_MS`), não um segundo 60000 literal.
+      Emissão conferida por caminho: `compra` e `trocaDeBuild` em `aplicar`, `buildPadrao` em
+      `aplicar`, `rodadaFim` e `partidaFim` em `registrarRodada`. Decisão REJEITADA emite zero
+      eventos, e isso é testado. `ouroDepois` do evento é comparado contra o estado
+      (`evA.ouroDepois !== depoisA`), o que é o que faz o evento ser telemetria e não narrativa.
+      Nenhum coletor foi escrito — `client/telemetria.ts` não existe (é `e3.5`).
+
+  - id: 'AC29 (check + sim:check verdes, golden hash idêntico)'
+    verdict: PASS
+    evidence: >-
+      `npm run check` reexecutado: exit 0, saída vazia além do banner. `noUnusedLocals` vale, o que
+      prova de carona que `partida.ts` não deixou import órfão.
+      `npm run sim:check` reexecutado do zero: `golden hash ✓ ok — 5 seeds batem o baseline` e
+      `build coverage ✓ ok — 5 variantes batem`. Os 3 blocos herdados (`replay`, `bot dupla exec`,
+      `bot replay`) e o `pilar 3` seguem verdes.
+      Reforço de neutralidade por CAUSA e não só por resultado: `src/sim/` não tem uma linha
+      executável alterada (provado por sha256 + diff sem comentários), e `src/match/`/`src/shop/`
+      não são importados por `sim/`, `harness.ts` nem pelo caminho do `BASELINE` em
+      `determinism.ts`. O golden hash verde é estruturalmente VACUAMENTE verde para esta story —
+      quem responde por "funciona" são os 7 blocos novos, e é por isso que o poder discriminante
+      deles foi o foco deste gate.
+
+bateria_negativa_do_gate:
+  metodo: >-
+    Perturbação aplicada na árvore REAL com backup, presença do patch confirmada no disco por grep
+    antes de cada execução, e restauração conferida por sha256 depois. Comparador de replay escrito
+    por mim, não reusado do @dev.
+  perturbacoes:
+    total: 6
+    detectadas: 5
+    inofensiva_por_design: 1
+  detalhe:
+    - >-
+      **`aplicar` aceita compra SEM debitar** (`redutor.ts`, linha do débito removida) —
+      Regra 3 sozinha: **PASSOU VERDE**, com os hashes das 3 partidas **byte-idênticos** aos da
+      implementação correta. `sim:check` completo: PEGOU, 4 problemas, `throw`. Confirma o achado
+      do @dev e o torna mais forte: não é só "o replay não pega", é "o replay produz o MESMO
+      artefato". `ponte itemBonus` e `economia RF-23` também ficaram verdes — só `invarianteCompra`
+      acusou.
+    - >-
+      **`setupDaRodada` devolve `itemBonus: {}`** (esquece `agregarItens`) — `golden hash` ✓,
+      `replay partida` ✓, `determinismo` ✓; **só** `ponte itemBonus ✗ sem poder discriminante`
+      acusou. Confirma a alegação do @dev letra por letra.
+    - >-
+      **Replay: trocar a build escolhida na fase `builds`** — PEGOU (hash das 3 rodadas).
+    - >-
+      **Replay: remover UM comando gravado da rodada 0** — PEGOU (hash da rodada 0).
+    - >-
+      **Replay: trocar o item de cada compra ACEITA** (3 casos) — PEGOU nos 3.
+    - >-
+      **Replay: trocar o item das compras REJEITADAS da rodada 1** (2 casos) — passou, e é
+      **inofensivo por design**: mutar uma decisão que o redutor recusa por saldo é no-op. Conferido
+      contra as `rejeicoes` impressas. Registrado porque a perturbação foi tentada e a explicação é
+      informação em favor da implementação, não contra.
+
+issues:
+  - id: ARCH-E32-001
+    severity: medium
+    category: tests
+    finding: >-
+      **A medição de M-1 embarcada no `sim:check` está confundida: ela varia DUAS coisas ao mesmo
+      tempo e credita a divergência à errada.** `medirM1` (`partida.ts:382-396`) compara
+      `runRound(setup1, createBot(s1))` — bot NOVO, seed da rodada 1 — contra
+      `runRound(setup1, createBot(s0) já sujo)` — bot com a seed da rodada **0** E com `porBola`
+      contaminado. A linha impressa afirma "reusar BotState contamina em 3/3 seed(s)".
+      Medi o contrafactual que separa as duas causas, em 8 seeds
+      (1, 2, 12345, 7, 11, 99, 123, 555), rodando sempre `setup1`:
+      um bot **LIMPO** criado com `s0` já diverge do criado com `s1` em **8/8** — a seed sozinha,
+      sem sujeira nenhuma, explica a divergência inteira. Portanto o ramo de falha do guarda
+      (`divergiram === 0`) é inalcançável por qualquer mudança realista em `heuristic.ts`: ele
+      reporta verde por construção.
+      **A invariante em si CONFIRMA quando medida com a seed controlada**, e a causa que o @dev
+      alegou está certa: `createBot(s0)` limpo × `createBot(s0)` sujo diverge em **8/8**; e com o
+      `rand` igualmente avançado dos dois lados, zerar `porBola` ainda muda o resultado em **8/8**
+      — os relógios absolutos `proximaDecisaoTick`/`prontoDesdeUlt` são causa real, não só o
+      avanço do gerador. O defeito é da EVIDÊNCIA, não da conclusão.
+    impacto: >-
+      Zero em comportamento: o caminho de produção cria `BotState` novo por rodada por CONSTRUÇÃO
+      (`driverNovo` é fábrica invocada por `runRound`), e isso eu verifiquei por varredura. O
+      impacto é o mesmo modo de falha que eu registrei contra o MEU documento no gate de `e3.1`
+      (errata de §7.3): um teste cujo enunciado é satisfeito sem que a propriedade valha. Concreto e
+      datado: `e3.3` re-executa esta bateria com a política real e vai herdar a guarda; e o dia em
+      que alguém "consertar" `heuristic.ts` para zerar `porBola` entre rodadas — o que tornaria o
+      reuso inofensivo e M-1 dispensável — a guarda continuará imprimindo "contamina em 3/3" e
+      ninguém saberá que a invariante mudou de natureza.
+    recommendation: >-
+      **Entrada BLOQUEANTE do gate de `e3.3`** (mesmo padrão de ARCH-E31-003 nesta story, que
+      funcionou). Trocar o contrafactual de `medirM1` para **isolar a sujeira**: rodar `setup1` com
+      `createBot(s0)` LIMPO contra o MESMO `createBot(s0)` depois de jogar `setup0`. É a comparação
+      que a própria §2.5 fez ("mesma seed de rodada, mesma composição") e é ~4 linhas: criar dois
+      pares de bots com a mesma seed, sujar só um. Medido por mim: diverge em 8/8, então a guarda
+      não perde poder — ganha. O gate de `e3.3` deve exigir a comparação com seed controlada, não a
+      existência do bloco.
+      Opcional e barato: manter a comparação atual como uma SEGUNDA linha rotulada "seed da rodada
+      muda o resultado", que é um fato verdadeiro e útil (prova a Regra 1 de carona), em vez de
+      apresentá-la como prova de M-1.
+
+  - id: ARCH-E32-002
+    severity: medium
+    category: security
+    finding: >-
+      **O redutor quebra ou aceita em silêncio uma `Decisao` malformada — e `match/` é exatamente a
+      camada que a Fase 4 vai expor à rede.** Medido em runtime, seis casos:
+      `{t:'build', slot:5}` → `TypeError: Cannot set properties of undefined`;
+      `{t:'build', jogador:7}` → `TypeError: Cannot read properties of undefined`;
+      `t` desconhecido → o `switch` cai fora e devolve `undefined`, e o chamador estoura ao ler
+      `.erro`; `{t:'pronto', jogador:-1}` → **ACEITO**, e `prontos` ganha uma chave `'-1'`
+      (`Object.keys` → `['0','1','-1']`) que o `JSON.stringify` **descarta em silêncio** — divergência
+      de estado entre as duas pontas de uma rede que ainda nem existe;
+      e o pior: `{t:'build', abilityIndex:99}` → **ACEITO**, gravado no estado, atravessa
+      `setupDaRodada` (que valida `charId` e `itens`, mas **não** os índices), chega a
+      `PickSetup` como `abilityIndex: 99` e a rodada **roda até o fim produzindo saída plausível**
+      (`winner=-1, ticks=1191, hash=743b5e29`) com uma bola sem ativa nenhuma.
+      Esse último é literalmente o modo de falha que ARCH-E30-002 nomeou no gate de `e3.0` — "a
+      rodada continua rodando e a saída sai plausível e errada" — reaparecendo por um campo
+      diferente do mesmo `PickSetup`.
+    impacto: >-
+      **Nenhum hoje, e é por isso que não é FAIL:** em processo único as decisões nascem de
+      `Decisao`, o `tsc` fecha os quatro campos (`slot: 0|1`, `jogador: 0|1`,
+      `abilityIndex: 0|1`, `passiveIndex: 0|1`) e o teste de replay reproduz só decisões que o
+      redutor produziu. O impacto é datado e nomeado pela própria arquitetura: §2.2 justifica a
+      pureza de `match/` com "na Fase 4 este código roda no servidor", e um redutor de servidor que
+      confia nos tipos do cliente é a definição de fronteira de confiança ausente. Registrar agora
+      custa um parágrafo; descobrir na Fase 4 custa uma auditoria de todo o `aplicar`.
+      Agrava que `setupDaRodada` **já é** o ponto de barragem — ele valida 2 dos 4 campos de
+      `PickSetup` (`charId` contra `chars`, `itens` contra `validarCompra`) e deixa passar os
+      outros 2. A metade que falta é a que o motor lê por índice.
+    recommendation: >-
+      Duas ações, nenhuma nesta story. (a) **`e3.4` (fronteira de entrada):** `setupDaRodada` deve
+      recusar `abilityIndex`/`passiveIndex` fora de `[0, def.abilities.length)` com o mesmo `throw`
+      que já usa para `charId` desconhecido — 4 linhas, mesmo lugar, mesma política, e fecha a
+      metade que falta de `PickSetup`. Simultaneamente `aplicarBuild`/`aplicarTrocaDeBuild` devem
+      REJEITAR (com `erro`, não `throw`) `slot`/`jogador`/índices fora do intervalo, porque no
+      caminho de decisão isso é clique ilegal e não corrupção. E o `switch` de `aplicar` precisa de
+      um `default` que rejeite `t` desconhecido em vez de devolver `undefined`.
+      (b) **Fase 4 (fronteira de rede):** um validador de `Decisao` em runtime na borda do servidor,
+      declarado agora em `architecture-e3.md` como pré-requisito da fase, para que a promessa
+      "`match/` roda no servidor sem reescrita" continue verdadeira. **Não bloqueia `e3.3`**, que
+      não abre superfície nova: a política de `e3.3` produz `Decisao` bem tipada como o roteiro.
+
+  - id: ARCH-E32-003
+    severity: low
+    category: requirements
+    finding: >-
+      **O `pool` do draft não é consumido, a Task 2 marca "consumir `pool`" como feita, e o
+      comentário que justifica a ausência promete um parâmetro que não existe.** `aplicarDraft`
+      valida `pool.includes(charId)` e avança `passo`, mas nunca remove o escolhido. O comentário
+      de `redutor.ts:210-219` diz: *"quando o roster tiver 4+ personagens, a remoção é o parâmetro
+      que a story da Fase 5 liga — não uma reescrita desta função"*. Não há tal parâmetro em
+      `EstadoDraft` nem em `OpcoesDePartida`; ligar a remoção é acrescentar um campo e um ramo,
+      isto é, mexer nesta função.
+      Consequência hoje inofensiva mas real: com o pool intacto, o mesmo `charId` é aceito duas
+      vezes pelo mesmo jogador e o jogador 1 pode escolher o que o jogador 0 já escolheu — que é
+      exatamente o que o roteiro do `sim:check` faz (`golem` duas vezes), e que R-01(B) autoriza.
+    impacto: >-
+      Nenhum na Fase 3: R-01(B) resolve explicitamente "não implementar escolha real de personagem
+      com efeito no resultado nesta fase", e com pool de 2 e 4 escolhas consumir tornaria as
+      escolhas 3 e 4 impossíveis (a aritmética de §3.2). A decisão de NÃO consumir está certa.
+      O que registro é a distância entre o checkbox/comentário e o código: quem abrir esta função na
+      Fase 5 lendo o comentário vai procurar um parâmetro e não achar, e quem auditar as Tasks vai
+      contar "consumir pool" como pago.
+    recommendation: >-
+      @dev, ~3 linhas de comentário e um checkbox: reescrever o comentário para "a remoção do pool
+      é uma story da Fase 5 e acrescenta um campo a `EstadoDraft` (ex.: `removerDoPool: boolean`)
+      mais um ramo aqui — o que hoje é DADO são `pool` e `ordem`, não a política de consumo", e
+      desmarcar/anotar a subtask correspondente. Sem mudança de comportamento e sem teste novo.
+      Alternativa igualmente aceitável: deixar como está e registrar a errata na story da Fase 5.
+      **Não bloqueia.**
+
+  - id: ARCH-E32-004
+    severity: low
+    category: code
+    finding: >-
+      **Literais `3` e `7` soltos na guarda de D-02 do `sim:check`, onde `REGRAS_PADRAO` já é
+      importável.** `partida.ts:713-714`: `const porVitorias = v0 >= 3 || v1 >= 3` e
+      `const porTeto = gravada.rodadas.length === 7`. É o mesmo defeito de FORMA que
+      ARCH-E31-002 registrou no Relicário, e a recomendação que eu escrevi para esta story
+      ("nenhum literal solto na linha do uso") vale para o instrumento tanto quanto para o dado.
+    impacto: >-
+      Nenhum hoje (os valores conferem com `REGRAS_PADRAO`). O modo de falha é assimétrico e vale
+      escrever: se `e3.7` revisar D-09 e baixar `vitoriasParaVencer` para 2, a guarda passa a
+      reprovar partidas legítimas (`v0>=3` falso e `porTeto` falso) — **falso FAIL** num bloco que
+      lança e derruba o `sim:check` inteiro. Se subir para 4, ela deixa de acusar. Nos dois casos o
+      instrumento mede uma regra que o jogo não tem mais.
+    recommendation: >-
+      Trocar por `REGRAS_PADRAO.vitoriasParaVencer` e `REGRAS_PADRAO.tetoDeRodadas` (ou pelas
+      `e.regras` da partida gravada, que é ainda mais correto porque a partida carrega as próprias
+      regras). Duas linhas. Candidata a `e3.3`, que já vai abrir este arquivo.
+
+decisoes_de_julgamento:
+  - questao: >-
+      O critério de M-1 é "pelo menos uma seed diverge" e não "todas divergem". Isso é sólido para o
+      que a story pede?
+    veredito: >-
+      SIM, o critério é logicamente correto — e é a escolha certa também como regressão. O problema
+      não é o critério, é o cenário sobre o qual ele opera (ARCH-E32-001).
+    razao: >-
+      Duas leituras, e o critério passa nas duas. **Como refutação:** M-1 é uma afirmação universal
+      ("reusar contamina"); a hipótese nula que ela ataca é "reusar é inofensivo", que é igualmente
+      universal. Um único contraexemplo refuta uma universal — exigir 3/3 seria exigir mais
+      evidência do que a lógica pede para derrubar a nula, e o @dev está certo nisso.
+      **Como trip-wire de regressão, que é o uso real no `sim:check`:** o critério tem de disparar
+      quando a propriedade deixar de valer. "Reuso passou a ser inofensivo" não é um evento
+      probabilístico por seed — é estrutural (alguém zerou `porBola` entre rodadas, ou o bot deixou
+      de ter estado). Se acontecer, TODAS as seeds convergem simultaneamente, e `divergiram === 0`
+      dispara. Já o `E` lógico ("todas divergem") introduziria falso FAIL no dia em que uma seed
+      empatasse os dois caminhos por coincidência de hash — que é ruído, não sinal. O `OU` é o
+      operador certo para uma propriedade all-or-nothing observada com ruído por amostra.
+      Endosso o critério e endosso a justificativa escrita pelo @dev. A ressalva que anexo é
+      independente dele: com o cenário confundido, `divergiram === 0` é inalcançável de qualquer
+      forma, então hoje o critério é correto mas opera sobre uma medição que não pode falhar.
+      Corrigido o cenário (ARCH-E32-001), o critério "pelo menos uma" continua sendo o certo e
+      **passa a ter dentes**. Não trocar por "todas".
+
+  - questao: >-
+      A guarda `ponte itemBonus` e a `invarianteCompra` estão fora da letra dos ACs. Isso é escopo
+      inventado?
+    veredito: 'NÃO — as duas são obrigatórias para que os ACs que elas cercam signifiquem alguma coisa.'
+    razao: >-
+      Reproduzi as duas justificativas e as duas se sustentam por medição. Sem `ponte itemBonus`, o
+      AC 4 ("`setupDaRodada` monta `itemBonus` chamando `agregarItens`") estaria provado só por
+      leitura de código: zerei o campo e golden hash, determinismo e replay de partida ficaram todos
+      verdes. Sem `invarianteCompra`, os ACs 3/20/21/22 estariam cobertos por um teste
+      estruturalmente cego ao erro que eles descrevem: a mutação "não debita" reproduz **hashes
+      byte-idênticos**. Nos dois casos a guarda não acrescenta requisito novo — ela dá poder
+      discriminante a um requisito que já estava escrito.
+      Aplico o mesmo teste dos cinco critérios que usei para aceitar `validarCompra` em `e3.1`, e
+      passa: há dono declarado (§9.3 manda substituir o golden hash por redes que não dependem de
+      número absoluto), não cria caminho de exceção, não inventa padrão (é a forma dos blocos que já
+      existem em `determinism.ts`), cabe no envelope de arquivos da story (`src/tools/`) e é
+      reversível. **Registro o padrão a repetir: guarda nova acompanhada da medição do que ela pega
+      e do que o teste existente NÃO pegava.** É a segunda vez que o @dev entrega evidência com a
+      declaração do que ela não prova, e é a razão de eu ter conseguido reproduzir tudo em uma
+      sessão.
+
+  - questao: >-
+      O @dev pôs `validarCatalogo` no `sim:check` e não em `problemasAutoteste` de `balance.ts`,
+      que foi o que eu recomendei no gate de `e3.1`. Isso é desvio?
+    veredito: 'É desvio, e é MELHOR que a minha recomendação. Aceito e corrijo a orientação.'
+    razao: >-
+      Minha recomendação era "o lugar mais barato é `balance.ts`, onde os outros dez invariantes já
+      moram". O @dev pôs em `partida.ts`/`sim:check`. O raciocínio dele — auditoria de dado estático,
+      logo bateria e não caminho de jogo — é o mesmo meu; a escolha do arquivo é que é melhor:
+      `npm run sim:check` roda em toda story e é o gate de qualidade de fato, enquanto
+      `npm run balance` roda quando alguém está balanceando. Uma checagem de integridade que roda
+      sempre vale mais que uma que roda às vezes. Conferido que ela realmente executa e reporta
+      (`catálogo ✓ ok — 8 itens íntegros`). ARCH-E31-003 fica fechado nos dois lados:
+      `validarCompra` com dois chamadores de produção (conferidos no fonte, não na alegação) e
+      `validarCatalogo` com chamador de bateria.
+
+  - questao: >-
+      `EstadoPartida` ganhou `prontos`, fora da lista literal do AC 1. Violação?
+    veredito: 'NÃO — é o único campo a mais e ele é necessário para que o AC 2 tenha efeito.'
+    razao: >-
+      Sem `prontos`, `{t:'pronto'}` (AC 2, decisão declarada) não teria onde escrever e a fase
+      `builds` nunca fecharia — o AC 2 e o AC 1 se contradiriam. Entre honrar a lista de campos e
+      honrar a união de decisões, a união vence, porque a lista de §2.3 é ilustrativa da forma e a
+      união é contrato de comportamento. A colocação em `EstadoPartida` (e não em `EstadoJogador`)
+      é a escolha certa pelo motivo que o @dev escreveu: prontidão zera a cada mudança de fase,
+      ouro e vitórias atravessam a partida — e mantém `EstadoJogador` idêntico ao literal.
+      Conferido que ele é visível em `VisaoPartida` e que isso NÃO viola RF-04: saber que o oponente
+      clicou "pronto" não revela o que ele escolheu, e é o que a tela de `e3.4` precisa desenhar.
+
+escopo_negativo_confirmado:
+  - >-
+    **`src/bot/partida.ts` NÃO existe** (é `e3.3`). `src/bot/` contém apenas `dummy.ts` e
+    `heuristic.ts`, e nenhum dos dois aparece em `git status`. Nenhuma política de compra, draft ou
+    build foi escrita: as decisões do `sim:check` vêm de três tabelas literais
+    (`ROTEIRO_DRAFT`/`ROTEIRO_BUILDS`/`ROTEIRO_LOJA`) que não leem ouro nem avaliam estado.
+    A fronteira 3 de §8.2 ("ela mora em `bot/`, não em `match/`") está respeitada: varri `src/match/`
+    e não há uma linha que escolha item, personagem ou build.
+  - >-
+    **`src/client/*` não foi tocado** (é `e3.4`). Não aparece em `git status --short src/`. Nenhuma
+    tela, nenhum timer de 30s, nenhum DOM.
+  - >-
+    **`client/telemetria.ts` não existe** (é `e3.5`). `match/` apenas EMITE `EventoPartida[]`;
+    não há coletor, não há `localStorage`, não há persistência.
+  - >-
+    **Nenhum número de D-09 foi decidido nem alterado.** `ECONOMIA_PROVISORIA` é idêntica a §6.2, com
+    o aviso no topo. Nenhum literal econômico solto em `src/match/` (a exceção é de instrumento, em
+    `tools/` — ARCH-E32-004).
+  - >-
+    **Nenhum ajuste de D-05.** O golden hash é idêntico nas 5 seeds e nas 5 variantes de build; a
+    story que move o hash continua sendo `e3.6` e só ela.
+  - >-
+    **`src/shop/` intocado** — `e3.1` está `Done` e nenhum dos 3 arquivos aparece em `git status`.
+    O candidato registrado pelo @dev (exportar o índice `id → ItemDef` de `shop/` em vez do
+    `ITEM_POR_ID` local em `redutor.ts`) foi corretamente adiado para `e3.4`.
+
+recomendacoes_para_e3_3:
+  - >-
+    **BLOQUEANTE:** corrigir o cenário de `medirM1` para isolar a sujeira do `BotState` da troca de
+    seed (ARCH-E32-001). O gate de `e3.3` deve exigir a comparação com a **seed do bot controlada**
+    (`createBot(s0)` limpo × `createBot(s0)` sujo, ambos rodando `setup1`), não a existência do
+    bloco. Medido neste gate: diverge em 8/8 seeds, então a guarda ganha poder em vez de perder.
+  - >-
+    A política real de partida deve sacar dos streams **5 e 6**
+    (`mulberry32(deriveSeed(matchSeed, 5 + jogador))`), que `e3.2` reservou na tabela de `rng.ts` e
+    **ninguém consome ainda** — conferido por varredura. Sacar de `world.rng` ou do stream do bot de
+    combate (1/2) quebraria D-08 e o replay de rodada junto.
+  - >-
+    A política vai ler `VisaoPartida`, e `visaoPara` devolve `eu`, `regras`, `economia`, `draft`,
+    `historico` e `prontos` **por referência** ao estado real (projeção rasa, mesma ressalva
+    declarada de `WorldView`). Uma política que escreva em qualquer um deles corrompe a partida sem
+    o compilador acusar. `e3.3` deve tratar a visão como somente-leitura por disciplina, e o gate
+    deve conferir isso por varredura de atribuição.
+  - >-
+    ARCH-E32-004 (literais `3`/`7` na guarda de D-02) fica em `src/tools/partida.ts`, que é
+    justamente o arquivo que `e3.3` vai abrir para re-executar a bateria com a política real. Duas
+    linhas, de carona.
+  - >-
+    O AC 2 de `e3.3` ("duas partidas com a mesma `matchSeed` dão o mesmo placar") é mais fraco que a
+    Regra 3 já provada aqui e passará trivialmente se a política for determinística. O que `e3.3`
+    precisa acrescentar é o que o roteiro fixo **não** exercita: uma política que LÊ ouro e estado
+    pode divergir entre gravação e replay se ler algo fora de `VisaoPartida`. O gate deve exigir a
+    Regra 3 re-executada **com a política dos dois lados**, não só a igualdade de placar.
+
+recomendacoes_para_e3_4:
+  - >-
+    ARCH-E32-002: `setupDaRodada` deve recusar `abilityIndex`/`passiveIndex` fora do intervalo com o
+    mesmo `throw` que já usa para `charId` desconhecido, e `aplicar` precisa de `default` no
+    `switch`. Medido: hoje `abilityIndex: 99` atravessa a camada inteira e a rodada roda até o fim
+    com saída plausível — o modo de falha que ARCH-E30-002 nomeou, por outro campo do mesmo
+    `PickSetup`.
+  - >-
+    O cliente é dono do relógio (§2.6) e o estouro de 30s deve produzir `{t:'buildPadrao'}`, que já
+    existe, já marca o jogador como pronto e já emite evento. Não inventar fase nova nem timer dentro
+    de `match/` — o roteiro do `sim:check` já exercita esse caminho e é o contrato a manter.
+  - >-
+    Quem calcula `ResultadoRodada.hash` é o cliente, com `hash(view)` de `tools/harness.ts:75`,
+    exatamente como `tools/partida.ts` faz. `match/` continua proibido de importar de `tools/`.
+
+alteracoes_no_documento_de_arquitetura:
+  - secao: 'docs/DEVELOPMENT-BIBLE.md §7.5'
+    mudanca: >-
+      Errata medida. O texto dizia que a mitigação para "o golden hash não protege `match/`" é o
+      **golden hash de partida** (placar + vencedores + hashes de todas as rodadas). Medido neste
+      gate que essa rede **não** cobre a classe de bug que o próprio parágrafo cita como exemplo
+      ("ouro debitado sem item"): a mutação "aceita compra sem debitar" produz hashes de partida
+      byte-idênticos aos da implementação correta, porque reprodutibilidade é cega a erro
+      CONSISTENTE. Acrescentada a distinção entre rede de REPRODUTIBILIDADE e rede de VALOR, as duas
+      guardas que fazem o serviço (`invarianteCompra`, `ponte itemBonus`) e a regra geral para as
+      camadas que o golden hash não cobre.
+  - secao: 'docs/architecture-e3.md'
+    mudanca: 'Nenhuma. Nenhum erro meu encontrado nas §2, §3, §4, §5 e §6 nesta reexecução.'
+
+waiver:
+  active: false
