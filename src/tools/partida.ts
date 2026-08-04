@@ -1,5 +1,6 @@
 import { CHARS } from '../chars/index.ts'
 import { botCommands, createBot, type BotState } from '../bot/heuristic.ts'
+import { criarPolitica, POLITICA_VERSION, type PoliticaPartida } from '../bot/partida.ts'
 import type { Command } from '../sim/types.ts'
 import type { PickSetup, RoundSetup } from '../sim/world.ts'
 import {
@@ -10,6 +11,7 @@ import {
   registrarRodada,
   seedDaRodada,
   setupDaRodada,
+  REGRAS_PADRAO,
   vencedorDaPartida,
   vencedorDaRodada,
   visaoPara,
@@ -352,6 +354,188 @@ function compararPartida(g: PartidaGravada, r: PartidaReproduzida): string[] {
   return p
 }
 
+// --------------------------------------------------------------------------- partida por política
+
+/**
+ * D-c / ARCH-E33-001 (dívida de §12.1, paga em `e3.4`) — **`bot/partida.ts` não tinha um único
+ * consumidor em `src/` nem uma linha de cobertura.** O arquivo inteiro (397 linhas, três políticas,
+ * três tabelas provisórias) podia ser apagado sem que nada ficasse vermelho: `e3.3` entregou a
+ * política e o `sim:check` continuou provando o replay do ROTEIRO FIXO, que não a chama.
+ *
+ * **Este bloco é SOMADO ao `ROTEIRO_*`, e não o substitui** — a instrução de §12.1 é literal, e o
+ * motivo é medido: o roteiro fixo exercita `buildPadrao`, `trocaDeBuild` e o caminho de rejeição por
+ * saldo, e a política v1 **não produz nenhum dos três** (`comprar` não emite `trocaDeBuild`, e ela
+ * valida a lista futura antes de emitir, justamente para não gerar rejeição). Trocar um pelo outro
+ * perderia cobertura em vez de ganhar.
+ *
+ * O condutor é o mesmo `jogarPartida`, com a lista de decisões vindo da política em vez da tabela.
+ * `reproduzirPartida` funciona sobre o resultado sem uma linha de mudança, e isso não é sorte: ela
+ * consome `decisoes` + `comandos` e **nunca consulta o roteiro** (é o ponto registrado na sua
+ * própria doc), então uma partida conduzida por política é replayável pelo mesmo caminho.
+ */
+interface PoliticaDoJogador {
+  politica: PoliticaPartida
+  rand: () => number
+}
+
+function criarPoliticas(matchSeed: number): [PoliticaDoJogador, PoliticaDoJogador] {
+  return [criarPolitica(matchSeed, 0), criarPolitica(matchSeed, 1)]
+}
+
+/**
+ * As decisões que as duas políticas tomam na fase corrente.
+ *
+ * O draft devolve UMA decisão por passo (e não as quatro de uma vez) porque `draft.passo` avança a
+ * cada aplicação e a política precisa ver o estado atualizado para não escolher o mesmo personagem
+ * duas vezes — `escolherDraft` filtra por `v.draft.escolhas`, que só existe depois de aplicada a
+ * anterior. O laço externo de `jogarPartida` reentra na fase, e `MAX_PASSOS` (64) cobre com folga as
+ * 4 escolhas + 7 rodadas.
+ *
+ * `{t:'pronto'}` sai daqui, do CONDUTOR, e não da política: a interface de §8.2 tem três métodos e
+ * fechar a janela de decisão não é um deles (registrado na doc de `comprar`).
+ */
+function decisoesPorPolitica(e: EstadoPartida, pol: readonly [PoliticaDoJogador, PoliticaDoJogador]): Decisao[] {
+  switch (e.fase) {
+    case 'draft': {
+      const j = e.draft.ordem[e.draft.passo]
+      const p = pol[j]
+      return [{ t: 'draft', jogador: j, charId: p.politica.escolherDraft(visaoPara(e, j), p.rand) }]
+    }
+    case 'builds': {
+      const ds: Decisao[] = []
+      for (const j of [0, 1] as Jogador[]) {
+        const p = pol[j]
+        for (const slot of [0, 1] as (0 | 1)[]) {
+          const b = p.politica.escolherBuild(visaoPara(e, j), slot, p.rand)
+          ds.push({ t: 'build', jogador: j, slot, abilityIndex: b.abilityIndex, passiveIndex: b.passiveIndex })
+        }
+        ds.push({ t: 'pronto', jogador: j })
+      }
+      return ds
+    }
+    case 'loja': {
+      const ds: Decisao[] = []
+      for (const j of [0, 1] as Jogador[]) {
+        const p = pol[j]
+        ds.push(...p.politica.comprar(visaoPara(e, j), p.rand))
+        ds.push({ t: 'pronto', jogador: j })
+      }
+      return ds
+    }
+    default:
+      return []
+  }
+}
+
+/**
+ * A partida inteira conduzida pelas duas políticas de `bot/partida.ts`.
+ *
+ * `recriarPorVisita` existe **só** para a guarda de D-d: quando `true`, as políticas são recriadas a
+ * cada visita à loja, que é exatamente a quebra da invariante "uma política por PARTIDA" que
+ * `criarPolitica` declara em comentário. Nenhum caminho de produção passa `true`.
+ */
+function jogarPartidaComPolitica(matchSeed: number, recriarPorVisita = false): PartidaGravada {
+  let e = criarPartida({ seed: matchSeed, pool: POOL })
+  let pol = criarPoliticas(matchSeed)
+  const decisoes: Decisao[] = []
+  const rejeicoes: string[] = []
+  const eventos: EventoPartida[] = []
+  const rodadas: RodadaGravada[] = []
+
+  for (let passo = 0; e.fase !== 'fim'; passo++) {
+    if (passo > MAX_PASSOS) {
+      throw new Error(`partida por política ${matchSeed} não terminou em ${MAX_PASSOS} passos (fase ${e.fase})`)
+    }
+    if (e.fase === 'rodada') {
+      const f = fecharRodada(e)
+      rodadas.push({ setup: f.setup, comandos: f.comandos, resultado: f.resultado })
+      eventos.push(...f.eventos)
+      e = f.estado
+      continue
+    }
+    if (e.fase === 'loja' && recriarPorVisita) pol = criarPoliticas(matchSeed)
+    for (const d of decisoesPorPolitica(e, pol)) {
+      decisoes.push(d)
+      const t = aplicar(e, d)
+      if (t.erro) rejeicoes.push(`r${e.rodada} ${e.fase} ${d.t}/j${d.jogador}: ${t.erro}`)
+      eventos.push(...t.eventos)
+      e = t.estado
+    }
+  }
+  return {
+    matchSeed,
+    decisoes,
+    rodadas,
+    placar: placarDe(e),
+    vencedor: vencedorDaPartida(e),
+    eventos,
+    rejeicoes,
+  }
+}
+
+/**
+ * D-c + D-d (segunda metade) — a política tem consumidor, é replayável, e recriá-la por visita à
+ * loja é DETECTÁVEL.
+ *
+ * Três coisas medidas, nesta ordem:
+ *
+ *  1. **Cobertura (D-c):** a partida conduzida pelas políticas reais termina e se reproduz sem bot
+ *     nenhum, pelo mesmo `reproduzirPartida`. Se `bot/partida.ts` for apagado ou quebrado, isto fica
+ *     vermelho — que é precisamente o que não acontecia antes.
+ *  2. **Poder discriminante da cobertura:** a partida por política precisa ter COMPRADO alguma
+ *     coisa. Sem esta linha, uma política que devolvesse `[]` em `comprar` passaria verde e o item 1
+ *     estaria provando o replay de uma política que não decide nada — a mesma armadilha que a
+ *     `ponte itemBonus` cobre para a agregação de `shop/`.
+ *  3. **Invariante "uma política por PARTIDA" (D-d):** a MESMA partida, com as políticas recriadas a
+ *     cada visita à loja, tem que DIVERGIR. `criarPolitica` explica por quê — recriar reinicia o
+ *     stream, todo desempate volta ao mesmo sorteio e o bot compra sempre o mesmo item. Era
+ *     invariante declarada em comentário e sem guarda: quebrá-la degrada o bot em silêncio e passa
+ *     verde em qualquer teste de reprodutibilidade, porque as duas execuções degradariam igual.
+ */
+function invariantePolitica(): { linhas: string[]; problemas: string[] } {
+  const linhas: string[] = []
+  const problemas: string[] = []
+  let divergiram = 0
+  let comprasTotais = 0
+
+  for (const matchSeed of MATCH_SEEDS) {
+    const gravada = jogarPartidaComPolitica(matchSeed)
+    problemas.push(...compararPartida(gravada, reproduzirPartida(gravada)))
+
+    const compras = gravada.decisoes.filter((d) => d.t === 'compra').length
+    comprasTotais += compras
+
+    const porVisita = jogarPartidaComPolitica(matchSeed, true)
+    const mesmasDecisoes =
+      JSON.stringify(porVisita.decisoes) === JSON.stringify(gravada.decisoes)
+    if (!mesmasDecisoes) divergiram++
+
+    linhas.push(
+      `  matchSeed ${String(matchSeed).padStart(5)} · ${gravada.rodadas.length} rodada(s) · placar ` +
+        `${gravada.placar.join('-')} · ${gravada.decisoes.length} decisões · ${compras} compra(s) · ` +
+        `${gravada.rejeicoes.length} rejeitada(s) · recriar por visita ${mesmasDecisoes ? 'IGUAL ✗' : 'diverge ✓'}`,
+    )
+  }
+
+  if (comprasTotais === 0) {
+    problemas.push(
+      '  ✗ política: NENHUMA compra em nenhuma das partidas conduzidas pela política — `comprar` ' +
+        'devolveu vazio o tempo todo, e o replay acima está provando a reprodutibilidade de uma ' +
+        'política que não decide nada (D-c, ARCH-E33-001).',
+    )
+  }
+  if (divergiram === 0) {
+    problemas.push(
+      `  ✗ política: recriar a política a cada visita à loja NÃO mudou as decisões em ` +
+        `${MATCH_SEEDS.length} seed(s) — a invariante "uma política por PARTIDA" perdeu poder ` +
+        'discriminante, ou o estado da política deixou de viver no gerador (D-d, ARCH-E33-004). ' +
+        'Ver a doc de `criarPolitica` em `bot/partida.ts`.',
+    )
+  }
+
+  return { linhas, problemas }
+}
+
 // --------------------------------------------------------------------------- invariante M-1
 
 const TIME_M1: PickSetup[] = [
@@ -370,7 +554,7 @@ interface MedidaM1 {
  * §2.5, Regra 2 — a medição que sustenta M-1, refeita aqui em vez de citada.
  *
  * A rodada 1 de uma partida é rodada DUAS vezes, com a mesma seed de rodada e a mesma composição:
- * uma com `BotState` novo e uma com o `BotState` que já jogou a rodada 0. O documento de arquitetura
+ * uma com `BotState` limpo e uma com o `BotState` que já jogou a rodada 0. O documento de arquitetura
  * mediu 1 159 ticks (novo) contra 920 (reusado) — números daquele cenário, não deste; o que este
  * teste exige é a DIVERGÊNCIA, que é o fato invariante.
  *
@@ -378,6 +562,21 @@ interface MedidaM1 {
  * `proximaDecisaoTick` e `prontoDesdeUlt`, que são relógios ABSOLUTOS. Carregados para uma rodada
  * que recomeça no tick 0, eles agendam a próxima decisão para um tick que já passou — o bot fica
  * mudo até lá. Não é um viés sutil: é meia rodada sem política.
+ *
+ * ---
+ *
+ * **D-a / ARCH-E32-001 (dívida de §12.1, paga em `e3.4`) — a versão anterior desta função mudava
+ * DUAS coisas de uma vez e creditava a divergência à errada.** Ela comparava `driverNovo()` sobre
+ * `setup1` (que semeia os bots com `s1`, porque `driverNovo` lê `setup.seed`) contra um par sujo
+ * semeado com `s0`. Seed e sujeira variavam juntas, e o gate mediu que a seed sozinha já basta: dois
+ * bots LIMPOS, um com `s0` e outro com `s1`, divergem em 8/8 seeds. O ramo de falha era portanto
+ * inalcançável — a linha "contamina em N/N" saía verde mesmo que reusar `BotState` fosse inofensivo,
+ * e a guarda media diferença de seed enquanto afirmava medir contaminação.
+ *
+ * A correção é isolar a variável: **os dois pares nascem com a MESMA seed (`s0`)** e a única
+ * diferença passa a ser a rodada 0 rodada por cima de um deles. `novo` deixa de usar `driverNovo()`
+ * de propósito — é justamente o acoplamento `seed do bot = seed do setup` daquela fábrica que
+ * impedia a comparação limpa.
  */
 function medirM1(matchSeed: number): MedidaM1 {
   const s0 = seedDaRodada(matchSeed, 0)
@@ -385,12 +584,16 @@ function medirM1(matchSeed: number): MedidaM1 {
   const setup0: RoundSetup = { seed: s0, teams: [TIME_M1, TIME_M1] }
   const setup1: RoundSetup = { seed: s1, teams: [TIME_M1, TIME_M1] }
 
-  const novo = runRound(CHARS, setup1, driverNovo())
+  // par de controle: limpo, semeado com `s0`, jogando a rodada 1 direto
+  const limpo0 = createBot(s0, 0)
+  const limpo1 = createBot(s0, 1)
+  const novo = runRound(CHARS, setup1, driverComBots(limpo0, limpo1))
 
-  const b0 = createBot(s0, 0)
-  const b1 = createBot(s0, 1)
-  runRound(CHARS, setup0, driverComBots(b0, b1)) // a rodada 0 suja o estado
-  const reusado = runRound(CHARS, setup1, driverComBots(b0, b1))
+  // par de tratamento: MESMA seed, mas passa pela rodada 0 antes — a única diferença é a sujeira
+  const sujo0 = createBot(s0, 0)
+  const sujo1 = createBot(s0, 1)
+  runRound(CHARS, setup0, driverComBots(sujo0, sujo1)) // a rodada 0 suja o estado
+  const reusado = runRound(CHARS, setup1, driverComBots(sujo0, sujo1))
 
   return { matchSeed, novo, reusado, divergiu: novo.hash !== reusado.hash || novo.ticks !== reusado.ticks }
 }
@@ -708,14 +911,23 @@ export function verificarPartida(): { linhas: string[]; problemas: string[] } {
     )
 
     // A partida tem que ter terminado por uma das duas portas de D-02 (AC 16), e não por acidente
-    // do roteiro: ou alguém chegou a 3 vitórias, ou o teto de 7 rodadas fechou.
+    // do roteiro: ou alguém chegou a `vitoriasParaVencer`, ou o `tetoDeRodadas` fechou.
+    //
+    // D-b / ARCH-E32-004 (dívida de §12.1, paga em `e3.4`): estes dois números eram os literais `3`
+    // e `7`. §5.1 é explícita em que as regras são DADO e não constante enterrada no código, e esta
+    // guarda derruba o `sim:check` inteiro quando falha — com os literais, o dia em que `e3.7`
+    // mexesse em `vitoriasParaVencer` produziria um FALSO FAIL num bloco vermelho de bateria, com a
+    // mensagem apontando para D-02 em vez de para o ajuste que foi de fato feito. `jogarPartida` usa
+    // `criarPartida({seed, pool})` sem sobrescrever `regras`, então `REGRAS_PADRAO` é literalmente o
+    // objeto em vigor na partida gravada.
+    const { vitoriasParaVencer, tetoDeRodadas } = REGRAS_PADRAO
     const [v0, v1] = gravada.placar
-    const porVitorias = v0 >= 3 || v1 >= 3
-    const porTeto = gravada.rodadas.length === 7
+    const porVitorias = v0 >= vitoriasParaVencer || v1 >= vitoriasParaVencer
+    const porTeto = gravada.rodadas.length === tetoDeRodadas
     if (!porVitorias && !porTeto) {
       problemas.push(
         `  ✗ matchSeed ${matchSeed}: partida acabou com placar ${v0}-${v1} em ${gravada.rodadas.length} ` +
-          'rodada(s) — não bate nem 3 vitórias nem o teto de 7 (D-02, AC 16)',
+          `rodada(s) — não bate nem ${vitoriasParaVencer} vitórias nem o teto de ${tetoDeRodadas} (D-02, AC 16)`,
       )
     }
     // AC 15 / §5.3 — a alternância de lado tem que estar de fato acontecendo, senão o replay estaria
@@ -751,6 +963,14 @@ export function verificarPartida(): { linhas: string[]; problemas: string[] } {
   }
   linhas.push(
     `ponte itemBonus ${itemDivergiram > 0 ? `✓ ok — ${rodadasComItem} rodada(s) com item comprado; remover o bônus move o hash em ${itemDivergiram} delas` : '✗ sem poder discriminante'}`,
+  )
+
+  // ---- D-c / D-d: a política de partida tem consumidor, replay e guarda de escopo
+  const politica = invariantePolitica()
+  linhas.push(...politica.linhas)
+  problemas.push(...politica.problemas)
+  linhas.push(
+    `política bot   ${politica.problemas.length === 0 ? `✓ ok — ${POLITICA_VERSION}: ${MATCH_SEEDS.length} partidas conduzidas por bot/partida.ts, reproduzidas sem bot; recriar por visita à loja diverge` : `✗ ${politica.problemas.length} problema(s)`}`,
   )
 
   // ---- Invariante M-1
