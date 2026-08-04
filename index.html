@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <title>Battle Balls — fase 0</title>
+    <title>Battle Balls — fase 3</title>
     <style>
       * { box-sizing: border-box; }
       html, body {
@@ -61,6 +61,14 @@
       .op.sel { background: color-mix(in srgb, var(--cor) 16%, transparent); border-color: var(--cor); }
       .op.sel b { color: var(--cor); }
 
+      /* draft (`e3.4`): o card é o próprio botão de escolha — `.op` sozinho viraria 100% de largura */
+      .card.op { width: 220px; text-align: center; padding: 18px 14px; }
+      .card.op b { font-size: 16px; }
+      .card.op:disabled { opacity: 0.45; cursor: default; }
+      .op:disabled { opacity: 0.4; cursor: default; }
+      /* loja/placar (`e3.4`): a tela é a mais alta da fase — precisa rolar, não centralizar à força */
+      #overlay { justify-content: flex-start; }
+
       #start {
         cursor: pointer; border: 0; border-radius: 10px; padding: 13px 34px;
         font: 600 15px system-ui, sans-serif; color: #08111a; background: #4dd6ff;
@@ -73,19 +81,12 @@
   </head>
   <body>
     <canvas id="c"></canvas>
-    <div id="overlay" class="show">
-      <h1>Battle Balls <span>fase 0</span></h1>
-      <p class="sub">
-        Você comanda o time da <b>esquerda</b>. Arraste a partir dos botões para mirar e solte para lançar.
-      </p>
-      <div id="picks"></div>
-      <button id="start">Iniciar rodada</button>
-      <p class="hint">
-        no computador: <code>Q</code>/<code>W</code> Golem ativa/ult · <code>O</code>/<code>P</code> Vex
-        ativa/ult — a mira segue o cursor<br />
-        <code>R</code> reinicia · <code>espaço</code> pausa
-      </p>
-    </div>
+    <!--
+      O conteúdo do overlay é gerado por `src/client/telas.ts` a partir de `FaseDaPartida` (story
+      `e3.4`, arquitetura §11.1): draft, builds, loja/placar e fim. Deixar markup estático aqui seria
+      uma segunda fonte de verdade para a tela — e ele seria descartado no primeiro `desenharTela`.
+    -->
+    <div id="overlay" class="show"></div>
     <script type="module" src="/src/client/main.ts"></script>
   </body>
 </html>

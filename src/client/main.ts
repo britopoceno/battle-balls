@@ -1,62 +1,295 @@
-import { CHARS, ROSTER } from '../chars/index.ts'
-import { dummyCommands } from '../bot/dummy.ts'
-import { createWorld, step, TICK_MS, type PickSetup } from '../sim/world.ts'
+import { CHARS } from '../chars/index.ts'
+import { botCommands, createBot, type BotState } from '../bot/heuristic.ts'
+import { criarPolitica, type PoliticaPartida } from '../bot/partida.ts'
+import { createWorld, step, TICK_MS } from '../sim/world.ts'
 import type { Ball, Command, World } from '../sim/types.ts'
+import type { StatBlock } from '../sim/stats.ts'
+import { hash } from '../tools/harness.ts'
+import {
+  aplicar,
+  criarPartida,
+  ladosDaRodada,
+  registrarRodada,
+  seedDaRodada,
+  setupDaRodada,
+  vencedorDaRodada,
+  visaoPara,
+  type Decisao,
+  type EstadoPartida,
+  type Jogador,
+  type ResultadoRodada,
+} from '../match/index.ts'
 import { criarEntrada, type Disparo } from './input.ts'
 import { ARENA_H, ARENA_W } from './layout.ts'
 import { desenhar, type Flutuante } from './render.ts'
+import { desenharTela, type AcoesDaTela, type ContextoDaTela } from './telas.ts'
 
 /**
- * Fase 0 — fatia vertical local. Sem rede, sem draft, sem loja.
- * A única pergunta que este build precisa responder:
- * mirar habilidades em bolas que andam sozinhas é divertido?
+ * Fase 3 — a partida completa, local, contra o bot real (`docs/architecture-e3.md` §11, story
+ * `e3.4`).
+ *
+ * Era um laço de rodada única com um seletor de build de bancada. Agora é o CONDUTOR de uma partida
+ * Bo5: `EstadoPartida` de `match/` manda, `FaseDaPartida` decide que tela desenhar, e este arquivo
+ * só faz três coisas — traduzir clique em `Decisao`, rodar a rodada no canvas e devolver o resultado
+ * a `registrarRodada`.
+ *
+ * As duas invariantes de CHAMADOR que este arquivo é o primeiro código de produção a carregar
+ * (ARCH-E33-004, §12.1 — antes de `e3.4` elas só existiam como comentário):
+ *
+ *  - **M-1: um `BotState` por RODADA.** `bot` nasce dentro de `abrirRodada` e morre com ela.
+ *    `BotState.porBola` guarda relógios ABSOLUTOS (`proximaDecisaoTick`), e carregá-los para uma
+ *    rodada que recomeça no tick 0 deixa o bot mudo até um instante que já passou — meia rodada sem
+ *    política. Medido em 3/3 seeds pela guarda `invariante M-1` do `sim:check`.
+ *  - **Uma `PoliticaPartida` por PARTIDA.** `politica` nasce em `novaPartida` e atravessa a partida
+ *    inteira. O único estado dela é o gerador; recriá-la a cada visita à loja reiniciaria o stream e
+ *    o bot compraria sempre o mesmo item — degradação silenciosa que passa verde em qualquer teste de
+ *    reprodutibilidade. Medido em 3/3 seeds pela guarda `política bot` do `sim:check`.
+ *
+ * As duas puxam em direções opostas de propósito, e o motivo está em `bot/partida.ts`: o bot de
+ * COMBATE tem relógio, a política de PARTIDA não tem.
  */
 
 /**
- * Atraso de input em ticks. Na Fase 4 o servidor agenda os casts ~6 ticks à frente
- * (~100ms). Aqui fica 0 para o teste de diversão ser honesto — mude para 6 quando
- * quiser sentir a latência do netcode real antes de construí-lo.
+ * Atraso de input em ticks. Na Fase 4 o servidor agenda os casts ~6 ticks à frente (~100ms). Aqui
+ * fica 0 para o teste de diversão ser honesto — desvio consciente já registrado na arquitetura, e
+ * P4.1 é da Fase 4. Não mexer nisto nesta story (AC 12).
  */
 const INPUT_DELAY_TICKS = 0
+
+/** RF-04 — 30 segundos para escolher a build. O relógio de parede mora no CLIENTE (§2.6). */
+const SEGUNDOS_DE_BUILD = 30
+
+/** RF-01 / R-01(B) — roster de 2; os dois jogadores acabam com `[golem, vex]` (§3.2). */
+const POOL = ['golem', 'vex']
+
+/** O humano é sempre o jogador 0. **Jogador ≠ lado** — o lado alterna por rodada (§5.3, R-06). */
+const HUMANO: Jogador = 0
+const BOT: Jogador = 1
 
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const g = canvas.getContext('2d')!
 const overlay = document.getElementById('overlay') as HTMLDivElement
-const picksEl = document.getElementById('picks') as HTMLDivElement
-const btnStart = document.getElementById('start') as HTMLButtonElement
 
-const meuTime: PickSetup[] = [
-  { charId: 'golem', abilityIndex: 0, passiveIndex: 0 },
-  { charId: 'vex', abilityIndex: 0, passiveIndex: 0 },
-]
+let partida: EstadoPartida
+let politica: { politica: PoliticaPartida; rand: () => number }
+
+let world: World | null = null
+let bot: BotState | null = null
+/** o lado (`Team`) que o humano ocupa NESTA rodada — sai de `ladosDaRodada`, nunca é fixo */
+let meuLado: 0 | 1 = 0
+let ladoDoBot: 0 | 1 = 1
 
 let acc = 0
 let ultimo = performance.now()
 let pausado = false
 let pendentes: Command[] = []
 let flutuantes: Flutuante[] = []
-let world: World = novaRodada()
 
-function novaRodada(): World {
-  const inimigo: PickSetup[] = [
-    { charId: 'golem', abilityIndex: 0, passiveIndex: 0 },
-    { charId: 'vex', abilityIndex: 0, passiveIndex: 0 },
-  ]
+/** fim do timer de builds, em `performance.now()`. `null` fora da fase `builds`. */
+let fimDoTimer: number | null = null
+/**
+ * O último segundo já desenhado na tela de builds.
+ *
+ * Existe para que a contagem regressiva **não** redesenhe o overlay a 60Hz: `desenharTela` recria o
+ * DOM inteiro, e fazê-lo por frame descartaria o botão sob o dedo do jogador no meio do toque — o
+ * modo de falha que só aparece no celular, que é onde P3.4 roda.
+ */
+let segundoDesenhado = -1
+
+/** `ball.base` por `charId`, colhido de cada `World` — ver `ContextoDaTela.basePorChar`. */
+const basePorChar: Record<string, Readonly<StatBlock>> = {}
+
+// ---------------------------------------------------------------- partida
+
+function novaPartida(): void {
+  partida = criarPartida({ seed: (Math.random() * 1e9) | 0, pool: POOL })
+  // UMA por partida — ver o cabeçalho. Recriar isto por rodada é o bug que a guarda `política bot` mede.
+  politica = criarPolitica(partida.seed, BOT)
+  world = null
+  bot = null
+  fimDoTimer = null
+  avancarBot()
+  render()
+}
+
+/**
+ * Aplica uma decisão ao estado. **Não desenha e não chama o bot** — separar isto de `decidir` não é
+ * gosto: aplicar e redesenhar no mesmo passo faz o bot reentrar no meio da própria jogada, e emitir
+ * `{t:'build'}` não marca `prontos`, então a reentrada não tem condição de parada. Foi exatamente
+ * assim que a primeira versão desta tela travou o renderizador.
+ */
+function aplicarDecisao(d: Decisao): boolean {
+  const t = aplicar(partida, d)
+  if (t.erro) {
+    // decisão ilegal é evento normal de jogo (o jogador clicou no que não podia): o estado volta
+    // intacto e a tela apenas não muda. Fica no console para o smoke visual de P3.4.
+    console.warn(`[match] decisão rejeitada: ${t.erro}`)
+    return false
+  }
+  partida = t.estado
+  return true
+}
+
+/** Uma decisão do HUMANO: aplica, deixa o bot responder e redesenha UMA vez, no fim. */
+function decidir(d: Decisao): void {
+  aplicarDecisao(d)
+  avancarBot()
+  render()
+}
+
+/**
+ * Teto de jogadas do bot entre dois desenhos. Guarda de terminação, no mesmo espírito de
+ * `MAX_PASSOS` (`tools/partida.ts`): o laço abaixo já termina por construção — cada volta ou avança
+ * `draft.passo` ou marca `prontos[BOT]` —, e o teto existe para que uma regressão futura vire um
+ * erro no console em vez de uma aba congelada no celular.
+ */
+const MAX_JOGADAS_DO_BOT = 32
+
+/**
+ * As decisões do BOT até ele não ter mais o que fazer na fase corrente.
+ *
+ * Espelha o condutor do arnês (`decisoesPorPolitica`, `tools/partida.ts`), e é de propósito: se os
+ * dois divergirem, a partida que o humano joga deixa de ser a que o `sim:check` prova.
+ *
+ * A política é `politica` — a MESMA da partida inteira, nunca recriada aqui. Ver o cabeçalho:
+ * recriá-la por rodada reiniciaria o stream e o bot compraria sempre o mesmo item.
+ */
+function avancarBot(): void {
+  const p = politica
+  for (let jogada = 0; jogada < MAX_JOGADAS_DO_BOT; jogada++) {
+    if (partida.fase === 'draft' && partida.draft.ordem[partida.draft.passo] === BOT) {
+      aplicarDecisao({ t: 'draft', jogador: BOT, charId: p.politica.escolherDraft(visaoPara(partida, BOT), p.rand) })
+      continue
+    }
+    if (partida.fase === 'builds' && !partida.prontos[BOT]) {
+      for (const slot of [0, 1] as (0 | 1)[]) {
+        const b = p.politica.escolherBuild(visaoPara(partida, BOT), slot, p.rand)
+        aplicarDecisao({ t: 'build', jogador: BOT, slot, abilityIndex: b.abilityIndex, passiveIndex: b.passiveIndex })
+      }
+      aplicarDecisao({ t: 'pronto', jogador: BOT })
+      continue
+    }
+    if (partida.fase === 'loja' && !partida.prontos[BOT]) {
+      for (const d of p.politica.comprar(visaoPara(partida, BOT), p.rand)) aplicarDecisao(d)
+      aplicarDecisao({ t: 'pronto', jogador: BOT })
+      continue
+    }
+    return
+  }
+  console.error(`[match] o bot não convergiu em ${MAX_JOGADAS_DO_BOT} jogadas (fase ${partida.fase})`)
+}
+
+/**
+ * Monta o `World` da rodada corrente. `world` deixou de ser variável global montada por mão: ele sai
+ * de `setupDaRodada(partida)`, que é quem carrega a seed da rodada (Regra 1), o lado do jogador
+ * (§5.3) e o `itemBonus` agregado das compras (§5.2).
+ */
+function abrirRodada(): void {
+  const setup = setupDaRodada(partida, CHARS)
+  const lados = ladosDaRodada(partida)
+  meuLado = lados[HUMANO]
+  ladoDoBot = lados[BOT]
+
   pendentes = []
   flutuantes = []
   acc = 0
-  return createWorld(CHARS, {
-    seed: (Math.random() * 1e9) | 0,
-    arena: { w: ARENA_W, h: ARENA_H },
-    teams: [meuTime.map((p) => ({ ...p })), inimigo],
-  })
+  world = createWorld(CHARS, { ...setup, arena: { w: ARENA_W, h: ARENA_H } })
+  // M-1: NOVO a cada rodada, com a seed DAQUELA rodada. Nunca reaproveitar entre rodadas.
+  bot = createBot(setup.seed, ladoDoBot)
+
+  for (const b of world.balls) basePorChar[b.charId] = b.base
 }
 
-const minhasBolas = (): Ball[] => world.balls.filter((b) => b.team === 0)
+/**
+ * A rodada acabou: traduz TIME → JOGADOR e entrega o resultado a `match/`.
+ *
+ * O `hash` é calculado AQUI e entregue pronto — `match/` não importa de `tools/` e
+ * `ResultadoRodada.hash` é `string` e nada mais (§2.2). É a mesma função do arnês
+ * (`tools/harness.ts:75`), não uma cópia: um segundo FNV-1a no cliente seria a segunda fonte de
+ * verdade do hash da rodada.
+ *
+ * `controle` é `['humano','bot']` porque é o que de fato aconteceu, e o campo existe por P3.1
+ * (§10.1): sem ele a mediana de duração misturaria estas rodadas com as bot × bot do `sim:check`.
+ */
+function fecharRodada(w: World): void {
+  const lados = ladosDaRodada(partida)
+  const r: ResultadoRodada = {
+    indice: partida.rodada,
+    seedDaRodada: seedDaRodada(partida.seed, partida.rodada),
+    ladoDoJogador: lados,
+    vencedor: vencedorDaRodada(lados, w.winner),
+    ticks: w.tick,
+    hash: hash(w),
+  }
+  const t = registrarRodada(partida, r, ['humano', 'bot'])
+  if (t.erro) {
+    console.error(`[match] registrarRodada recusou a rodada ${r.indice}: ${t.erro}`)
+    return
+  }
+  partida = t.estado
+  world = null
+  bot = null
+  // a rodada abriu a loja (ou o fim): o bot compra antes de a tela aparecer, para que o placar e as
+  // compras dele já estejam na projeção que o humano lê — as compras não são secretas (§4.1)
+  avancarBot()
+  render()
+}
+
+// ---------------------------------------------------------------- telas
+
+const acoes: AcoesDaTela = {
+  draft: (charId) => decidir({ t: 'draft', jogador: HUMANO, charId }),
+  build: (slot, abilityIndex, passiveIndex) =>
+    decidir({ t: 'build', jogador: HUMANO, slot, abilityIndex, passiveIndex }),
+  prontoBuilds: () => decidir({ t: 'pronto', jogador: HUMANO }),
+  compra: (slot, itemId) => decidir({ t: 'compra', jogador: HUMANO, slot, itemId }),
+  trocaDeBuild: (slot, abilityIndex, passiveIndex) =>
+    decidir({ t: 'trocaDeBuild', jogador: HUMANO, slot, abilityIndex, passiveIndex }),
+  prontoLoja: () => decidir({ t: 'pronto', jogador: HUMANO }),
+  reiniciar: () => novaPartida(),
+}
+
+/**
+ * Desenha a tela da fase corrente. **`FaseDaPartida` é a fonte** (§11.1): não existe variável de
+ * "tela atual" neste arquivo, então a tela não pode discordar da partida.
+ *
+ * **Não decide nada e não chama o bot** — é função de estado para DOM, e só. A única escrita que ela
+ * faz é abrir a rodada quando a fase pede, porque `world` é derivado da fase e não estado próprio.
+ */
+function render(): void {
+  if (partida.fase === 'rodada') {
+    overlay.classList.remove('show')
+    if (!world) abrirRodada()
+    fimDoTimer = null
+    return
+  }
+
+  overlay.classList.add('show')
+
+  // o relógio de parede de RF-04 só corre na fase builds, e só uma vez por entrada nela
+  if (partida.fase === 'builds' && !partida.prontos[HUMANO]) {
+    if (fimDoTimer === null) fimDoTimer = performance.now() + SEGUNDOS_DE_BUILD * 1000
+  } else {
+    fimDoTimer = null
+  }
+
+  const segundos = fimDoTimer === null ? null : segundosRestantes(performance.now())
+  segundoDesenhado = segundos ?? -1
+  const ctx: ContextoDaTela = { segundosRestantes: segundos, basePorChar, humano: HUMANO }
+  desenharTela(overlay, visaoPara(partida, HUMANO), ctx, acoes)
+}
+
+function segundosRestantes(agora: number): number {
+  return fimDoTimer === null ? 0 : Math.max(0, Math.ceil((fimDoTimer - agora) / 1000))
+}
 
 // ---------------------------------------------------------------- entrada
 
+/** §5.3 / AC 9 — filtra por `meuLado`, **nunca** por `team === 0`: o lado alterna a cada rodada. */
+const minhasBolas = (): Ball[] => (world ? world.balls.filter((b) => b.team === meuLado) : [])
+
 function disparar(d: Disparo): void {
+  if (!world) return
   const bola = minhasBolas()[d.ballIndex]
   if (!bola || !bola.alive || world.over) return
   pendentes.push({
@@ -70,14 +303,11 @@ function disparar(d: Disparo): void {
 }
 
 const entrada = criarEntrada(canvas, disparar, (k) => {
-  if (k === 'r') {
-    world = novaRodada()
-    return
-  }
   if (k === ' ') {
     pausado = !pausado
     return
   }
+  if (!world) return
   const mapa: Record<string, [0 | 1, 'ability' | 'ult']> = {
     q: [0, 'ability'],
     w: [0, 'ult'],
@@ -105,17 +335,23 @@ function frame(agora: number): void {
   const dtReal = Math.min(120, agora - ultimo)
   ultimo = agora
 
-  if (!pausado && !world.over) {
+  // o timer de builds é do cliente (§2.6) e o estouro vira uma DECISÃO — `match/` não tem relógio
+  if (fimDoTimer !== null && agora >= fimDoTimer) {
+    fimDoTimer = null
+    decidir({ t: 'buildPadrao', jogador: HUMANO })
+  }
+
+  const w = world
+  if (w && !pausado && !w.over) {
     acc += dtReal
     let passos = 0
     while (acc >= TICK_MS && passos < 5) {
-      const doTick = pendentes.filter((c) => c.tick <= world.tick)
-      pendentes = pendentes.filter((c) => c.tick > world.tick)
-      step(world, [
-        ...doTick.map((c) => ({ ...c, tick: world.tick })),
-        ...dummyCommands(world, 1),
-      ])
-      for (const ev of world.events) {
+      const doTick = pendentes.filter((c) => c.tick <= w.tick)
+      pendentes = pendentes.filter((c) => c.tick > w.tick)
+      // AC 10 — `dummyCommands` saiu; quem joga o outro lado é o `heuristic` real, com o `BotState`
+      // desta rodada (M-1) e o lado que o bot ocupa NESTA rodada.
+      step(w, [...doTick.map((c) => ({ ...c, tick: w.tick })), ...(bot ? botCommands(w, bot) : [])])
+      for (const ev of w.events) {
         if (ev.t === 'hit') {
           flutuantes.push({ x: ev.x, y: ev.y, valor: ev.amount, nascidoEm: agora, crit: ev.crit })
         }
@@ -127,13 +363,25 @@ function frame(agora: number): void {
   }
 
   redimensionar()
-  desenhar(g, canvas.clientWidth, canvas.clientHeight, world, {
-    entrada,
-    flutuantes,
-    minhasBolas: minhasBolas(),
-    agora,
-    pausado,
-  })
+  if (w) {
+    desenhar(g, canvas.clientWidth, canvas.clientHeight, w, {
+      entrada,
+      flutuantes,
+      minhasBolas: minhasBolas(),
+      agora,
+      pausado,
+      // AC 15 — o HUD passa a mostrar o placar REAL da partida, e o lado do humano pode ser 1
+      placar: [partida.jogadores[HUMANO].vitorias, partida.jogadores[BOT].vitorias],
+      meuLado,
+      vitoriasParaVencer: partida.regras.vitoriasParaVencer,
+    })
+    // AC 11 — o fim da rodada deixou de ser estado morto: ele registra o resultado na partida
+    if (w.over) fecharRodada(w)
+  } else if (fimDoTimer !== null && segundosRestantes(agora) !== segundoDesenhado) {
+    // a contagem regressiva aparece na tela de builds, mas só quando o SEGUNDO muda — ver
+    // `segundoDesenhado`. Redesenhar por frame arrancaria o botão de baixo do dedo no celular.
+    render()
+  }
   requestAnimationFrame(frame)
 }
 
@@ -148,42 +396,5 @@ function redimensionar(): void {
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 
-// ---------------------------------------------------------------- build
-
-function montarSeletor(): void {
-  picksEl.innerHTML = ''
-  meuTime.forEach((pick, idx) => {
-    const def = ROSTER.find((c) => c.id === pick.charId)!
-    const card = document.createElement('div')
-    card.className = 'card'
-    card.style.setProperty('--cor', def.color)
-    card.innerHTML = `<h3>${def.name}<span>${idx === 0 ? 'polegar esquerdo' : 'polegar direito'}</span></h3>`
-
-    for (const grupo of ['abilities', 'passives'] as const) {
-      const linha = document.createElement('div')
-      linha.className = 'grupo'
-      linha.innerHTML = `<label>${grupo === 'abilities' ? 'ativa' : 'passiva'}</label>`
-      def[grupo].forEach((op, i) => {
-        const b = document.createElement('button')
-        const chave = grupo === 'abilities' ? 'abilityIndex' : 'passiveIndex'
-        b.className = 'op' + (pick[chave] === i ? ' sel' : '')
-        b.innerHTML = `<b>${op.name}</b><i>${op.desc}</i>`
-        b.onclick = () => {
-          pick[chave] = i as 0 | 1
-          montarSeletor()
-        }
-        linha.appendChild(b)
-      })
-      card.appendChild(linha)
-    }
-    picksEl.appendChild(card)
-  })
-}
-
-btnStart.onclick = () => {
-  overlay.classList.remove('show')
-  world = novaRodada()
-}
-
-montarSeletor()
+novaPartida()
 requestAnimationFrame(frame)

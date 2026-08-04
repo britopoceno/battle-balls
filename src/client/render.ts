@@ -21,6 +21,20 @@ export interface OpcoesRender {
   minhasBolas: Ball[]
   agora: number
   pausado: boolean
+  /**
+   * `e3.4`, AC 15 — o placar REAL da partida, na ordem `[humano, oponente]`.
+   *
+   * Vem de `EstadoPartida.jogadores`, e não de `World`: placar é do JOGADOR e atravessa a partida,
+   * enquanto `World` é o que a Fase 4 serializa 60×/s e o que o golden hash mede (§2.2 — economia e
+   * placar ficam FORA de `World`, e a razão está escrita lá).
+   */
+  placar: [number, number]
+  /**
+   * O `Team` que o humano ocupa NESTA rodada (§5.3, R-06). **Não é constante** — com a alternância
+   * ligada ele é 1 nas rodadas ímpares, e é por isso que o HUD não pode assumir "o meu é o time 0".
+   */
+  meuLado: 0 | 1
+  vitoriasParaVencer: number
 }
 
 export function desenhar(
@@ -310,19 +324,35 @@ function desenharHud(
     })
   }
 
-  // relógio da rodada
+  // placar da partida (`e3.4`, AC 15). Fica no topo central, acima do relógio, e é rotulado por
+  // LADO para que a alternância de R-06 seja legível: numa rodada em que o humano é o time 1, o
+  // "VOCÊ" aparece à direita, junto das bolas que ele de fato comanda.
   g.textAlign = 'center'
+  const meu = o.placar[0]
+  const dele = o.placar[1]
+  g.font = '700 15px system-ui, sans-serif'
+  g.fillStyle = COR_TIME[o.meuLado]
+  g.fillText(`VOCÊ ${meu}`, cw / 2 - 52, 34)
+  g.fillStyle = 'rgba(255,255,255,0.35)'
+  g.fillText('·', cw / 2, 34)
+  g.fillStyle = COR_TIME[o.meuLado === 0 ? 1 : 0]
+  g.fillText(`${dele} BOT`, cw / 2 + 52, 34)
+  g.fillStyle = 'rgba(255,255,255,0.28)'
+  g.font = '500 10px system-ui, sans-serif'
+  g.fillText(`melhor de ${o.vitoriasParaVencer * 2 - 1}`, cw / 2, 48)
+
+  // relógio da rodada
   const seg = world.time / 1000
   g.fillStyle = world.arena.pad > 0 ? '#ff7a6b' : 'rgba(255,255,255,0.6)'
   g.font = '600 18px system-ui, sans-serif'
-  g.fillText(seg.toFixed(1) + 's', cw / 2, 34)
+  g.fillText(seg.toFixed(1) + 's', cw / 2, 70)
   if (world.arena.pad > 0) {
     g.font = '700 13px system-ui, sans-serif'
-    g.fillText('MORTE SÚBITA', cw / 2, 54)
+    g.fillText('MORTE SÚBITA', cw / 2, 90)
   } else {
     g.fillStyle = 'rgba(255,255,255,0.28)'
     g.font = '500 11px system-ui, sans-serif'
-    g.fillText(`morte súbita em ${Math.max(0, SUDDEN_DEATH_MS / 1000 - seg).toFixed(0)}s`, cw / 2, 52)
+    g.fillText(`morte súbita em ${Math.max(0, SUDDEN_DEATH_MS / 1000 - seg).toFixed(0)}s`, cw / 2, 88)
   }
 
   for (const bt of botoes(cw, ch)) {
