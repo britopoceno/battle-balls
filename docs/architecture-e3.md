@@ -1121,10 +1121,27 @@ fase está no passo 6, que é o único autorizado a movê-lo (§9.2).
 | **1** | `src/shop/`: `catalogo.ts` (8 itens, preços provisórios), `agregar.ts` (ordem canônica), extração do helper de **bola sintética** de `balance.ts` para preview de stat | **idêntico** (nada em `sim/`) | **A-10 da dívida**: embaralhar a ordem de compra ⇒ `bonusItem` byte-idêntico (§1.6 mostra o que acontece sem isso) | baixo |
 | **2** | `src/match/`: tipos, redutor `aplicar`, `setupDaRodada`, Bo5 + D-02, economia provisória, `visaoPara` | **idêntico** | Partida headless em `sim:check`: bot × bot com `matchSeed` fixo ⇒ **placar e hashes de todas as rodadas reproduzíveis** (Regra 3, §2.5). Invariante M-1 coberta | **médio** — é o passo grande; §2 e §5 e §6 inteiras estão aqui |
 | **3** | `bot/partida.ts`: política de draft/build/compra, streams 5/6, `PRESET_SOLO` | **idêntico** | Duas partidas com a mesma `matchSeed` dão o mesmo placar; trocar `POLITICA_VERSION` **não** muda o hash de uma rodada cujos comandos foram gravados | baixo |
-| **4** | Cliente: fluxo `draft → builds → rodada → loja → placar`, `dummy` → `heuristic`, `minhasBolas` por lado | **idêntico** | **Smoke visual (P3.4)**: uma partida completa no celular, sem erro de console. `sim:check` não vê o cliente — esta é a prova que ele não dá (lição de P1.2) | médio |
+| **4** | Cliente: fluxo `draft → builds → rodada → loja → placar`, `dummy` → `heuristic`, `minhasBolas` por lado. **Mais as quatro dívidas abertas abaixo** | **idêntico** | **Smoke visual (P3.4)**: uma partida completa no celular, sem erro de console. `sim:check` não vê o cliente — esta é a prova que ele não dá (lição de P1.2) | médio |
 | **5** | Telemetria: eventos de `match/` + coletor em `client/telemetria.ts` + exportação JSON | **idêntico** | Uma partida jogada gera **P3.1, P3.2 e P3.3** a partir do arquivo exportado, sem cálculo manual | baixo |
 | **6** | **Ajuste de D-05** (`chars/tuning.ts`), com re-baseline registrado | **MUDA — o único passo autorizado** | T-1 a T-4 da §9.2. A mediana com humano no controle entra na faixa; o arnês de E2 continua detectando o mutante | **alto** — é o passo que muda o jogo, e por isso vem depois de a telemetria existir |
 | **7** | *(não bloqueia o portão)* revisão dos números de D-09 com os dados da §10; randomização da ordem de builds se a default de D-06 virou meta | idêntico ou re-baseline conforme o caso | Fecha os provisórios com medição em vez de raciocínio | baixo |
+
+### 12.1 Dívidas que o passo 4 herda dos gates de `e3.2` e `e3.3` — entradas obrigatórias da story
+
+> **Por que isto está no documento de arquitetura e não só nos YAMLs de gate.** O gate de `e3.2`
+> registrou ARCH-E32-001 como "entrada bloqueante do gate de `e3.3`" e ele **não foi pago**: a story
+> `e3.3` foi redigida a partir de §8 deste documento, não do gate anterior, e o AC 15 dela fixou os
+> arquivos tocados em dois — nenhum deles é `src/tools/partida.ts`, onde a correção mora. A obrigação
+> era real, o @dev cumpriu a story corretamente, e mesmo assim a dívida atravessou a story inteira sem
+> ninguém a ver. **Uma obrigação que só existe num gate é invisível para quem escreve a story
+> seguinte.** As quatro abaixo ficam aqui, onde o @sm lê, e é daqui que elas viram AC.
+
+| # | Dívida | Onde | Custo | Origem |
+|---|---|---|---|---|
+| **D-a** | `medirM1` compara `createBot(s1)` novo contra `createBot(s0)` sujo — muda a **seed** e a **sujeira** juntas, e credita a divergência à errada. Medido: um bot limpo com `s0` já diverge de um limpo com `s1` em 8/8 seeds, logo o ramo de falha da guarda é inalcançável e a linha "contamina em 3/3" não mede o que afirma. **Conserto:** dois pares de bots com a **mesma** seed, sujar só um (diverge em 8/8 — a guarda ganha dentes) | `src/tools/partida.ts` | ~4 linhas | ARCH-E32-001 |
+| **D-b** | Literais `3` e `7` soltos na guarda de D-02, onde `REGRAS_PADRAO` (ou `e.regras` da partida gravada) já é importável. Se `e3.7` mexer em `vitoriasParaVencer`, a guarda vira **falso FAIL** num bloco que derruba o `sim:check` inteiro | `src/tools/partida.ts` | 2 linhas | ARCH-E32-004 |
+| **D-c** | **`bot/partida.ts` não tem um único consumidor em `src/` e nenhuma cobertura no `sim:check`** — o arquivo inteiro pode ser apagado hoje sem uma linha vermelha. O passo 4 é justamente quem passa a consumi-lo. **Somar** um bloco de política ao lado do `ROTEIRO_*` fixo, sem substituí-lo (o roteiro exercita `buildPadrao`, `trocaDeBuild` e o caminho de rejeição por saldo, que a política v1 nunca produz) | `src/tools/partida.ts` | bloco novo | ARCH-E33-001 |
+| **D-d** | Duas invariantes de chamador **declaradas em comentário e sem guarda**: (1) **um `BotState` por rodada** (M-1, §2.5) e (2) **uma política por PARTIDA**, não por rodada — recriar a política a cada visita à loja muda as compras em 8/8 seeds (medido no gate de `e3.3`). O cliente do passo 4 é o primeiro chamador de produção das duas, e é onde elas podem ser quebradas em silêncio | `src/client/`, guarda em `src/tools/partida.ts` | guarda | ARCH-E33-004 |
 
 **Ordem defendida nos três pontos em que ela poderia ser outra:**
 
@@ -1298,8 +1315,8 @@ fechando RF-36 pelo custo de um evento a mais. Decisão de escopo do @pm.
 | `src/match/types.ts` | **novo** — `EstadoPartida`, `Decisao`, `VisaoPartida`, `EventoPartida` | 2 |
 | `src/match/partida.ts` | **novo** — redutor `aplicar`, `setupDaRodada`, `registrarRodada`, `visaoPara` | 2 |
 | `src/match/economia.ts` | **novo** — `ECONOMIA_PROVISORIA` (D-09), renda, juros, teto | 2 |
-| `src/bot/partida.ts` | **novo** — política de draft/build/compra, streams 5/6, `PRESET_SOLO` | 3 |
-| `src/bot/heuristic.ts` | **inalterado** — serve à partida sem modificação (invariante M-1 é do chamador) | — |
+| `src/bot/partida.ts` | **novo** — política de draft/build/compra, streams 5/6 | 3 |
+| `src/bot/heuristic.ts` | **adição aditiva** — `PRESET_SOLO` ao lado de `PRESET_ARNES` (§8.1). Lógica de combate, `PRESET_ARNES` e `BOT_VERSION` **inalterados**: serve à partida sem modificação (invariante M-1 é do chamador) | 3 |
 | `src/bot/dummy.ts` | **inalterado** — fixture congelado do golden hash | — |
 | `src/sim/rng.ts` | tabela de streams reservados estendida (5, 6, 8+i) — comentário, não código | 2 |
 | `src/chars/tuning.ts` | **novo** — `ESCALA_HP` / `ESCALA_DMG` (D-05), aplicadas ao montar `CHARS` | 6 |

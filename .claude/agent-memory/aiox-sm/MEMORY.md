@@ -1,1 +1,1 @@
-- [Battle Balls project structure](project_battle_balls_structure.md) — monolithic docs despite sharded config; `debt.N` story-id convention for the arch-debt epic; STAT_KEYS 14-vs-15 doc inconsistency
+- [Battle Balls project structure](project_battle_balls_structure.md) — monolithic docs despite sharded config; `debt.N`/`e3.N` story-id conventions; STAT_KEYS 14-vs-15 and PRESET_SOLO doc inconsistencies

@@ -26,3 +26,16 @@ number — story numbers were made to match the architecture doc's own step numb
 of `StatBlock`, but the literal `STAT_KEYS` array and the §1.4 table only list **14** keys. Flagged
 explicitly in story `debt.1` as a documented discrepancy, not resolved/invented — don't silently add a 15th
 field to make the count match; ask @architect if it needs reconciling.
+
+**E3 epic (Fase 3 — Loop) story convention:** created 2026-07-29 as `docs/stories/e3.0.*` through
+`e3.7.*`, one story per numbered step (0-7) in `docs/architecture-e3.md` §12's "Plano de construção" table
+— same 1:1 traceability pattern as the `debt.*` epic. Dependency chain is linear
+(e3.0→e3.1→e3.2→e3.3→e3.4→e3.5→e3.6→e3.7) except e3.2, which depends on **both** e3.0 and e3.1 (not just
+e3.0) — confirmed by reading §5.2/§2.2 of the architecture doc: `setupDaRodada` (built in e3.2) literally
+calls `agregarItens` from `shop/agregar.ts` (built in e3.1). A naive reading of the spawn prompt hedged this
+dependency as "not necessarily e3.1"; the source doc resolves it in favor of the dependency. `e3.6` is the
+**only** story across the whole epic allowed to move the golden hash (D-05 tuning, `chars/tuning.ts`) — its
+ACs are T-1 to T-4 from architecture §9.2, not "hash idêntico". Also found and flagged (not resolved) a
+second doc inconsistency in `architecture-e3.md`: §8.1 says `PRESET_SOLO` lives in the same file as
+`PRESET_ARNES` (`heuristic.ts`), but Anexo A's file map lists it under `bot/partida.ts` — registered as an
+open question for @architect in story `e3.3`, not decided unilaterally.

@@ -1120,6 +1120,54 @@ A mitigação projetada é golden hash **de partida**: a partida headless bot ×
 fixo entra no `sim:check` e trava **placar, sequência de vencedores e hashes de todas as rodadas**,
 com a mesma disciplina — não se "atualiza" para o teste passar.
 
+#### Errata medida (gate de `e3.2`, 2026-07-30) — essa mitigação NÃO cobre o exemplo que o próprio parágrafo dá
+
+O parágrafo acima está certo no diagnóstico e **errado na conclusão**. O replay de partida foi
+implementado em `e3.2` e mede exatamente o que promete — mas o que ele promete é
+**reprodutibilidade**, e reprodutibilidade é **cega a erro consistente**.
+
+Medido, com a perturbação aplicada na árvore real e o patch confirmado no disco: um `aplicar` que
+aceita compra **sem debitar o ouro** — literalmente "ouro debitado sem item", o exemplo do
+parágrafo — erra igual na gravação e no replay. As três partidas se reproduzem perfeitamente e os
+hashes saem **byte-idênticos aos da implementação correta**:
+
+| | hashes das rodadas (`matchSeed` 1) | veredito |
+|---|---|---|
+| implementação correta | `d4c28105 e1dde398 15c4854d` | replay ✓ |
+| **sem debitar ouro** | `d4c28105 e1dde398 15c4854d` | replay ✓ **— não acusa** |
+
+O mesmo vale para a ponte `shop → match → sim`: zerar `itemBonus` em `setupDaRodada` mantém o
+golden hash ✓, o determinismo ✓ **e** o replay de partida ✓.
+
+**A regra que sai disto, e que vale para toda camada que o golden hash não cobre:**
+
+> Um teste de reprodutibilidade prova que o sistema é **função** de suas entradas. Ele **não** prova
+> que a função é a certa. Toda camada nova precisa das duas redes:
+>
+> | Rede | Forma | Pega | Não pega |
+> |---|---|---|---|
+> | **Reprodutibilidade** | comparar duas execuções entre si | não-determinismo, estado vazando entre rodadas, leitura de relógio/RNG errado | **qualquer erro sistemático** — ele aparece igual nas duas pontas |
+> | **Valor** | comparar contra um número/identidade **esperado** | débito ≠ preço, evento que não bate o estado, rejeição que altera o estado | não-determinismo (dois erros consistentes diferentes passam) |
+>
+> Um erro sistemático só é detectável por quem **conhece a resposta certa**, não por quem compara o
+> sistema consigo mesmo.
+
+As duas guardas que fazem o serviço em `e3.2`, ambas escritas FORA da letra dos ACs e ambas
+obrigatórias — sem elas os ACs que elas cercam estariam provados só por leitura de código:
+
+- **`invarianteCompra`** (`tools/partida.ts`) — confere VALORES: `ouro_antes − ouro_depois == preço`,
+  `evento.ouroDepois == estado.ouro`, e a rejeição devolve o estado original **por identidade
+  referencial** (`===`, não comparação campo a campo, que uma implementação errada satisfaria com um
+  clone). Pegou 5/5 mutações de `match/`; sem ela, 1/5 passava.
+- **`ponte itemBonus`** — confere **poder discriminante**: roda a MESMA rodada com os MESMOS comandos,
+  com e sem o bônus agregado, e exige hashes **diferentes**. Existe porque nenhuma seed do baseline
+  exercita `itemBonus`, então "o teste passou" não distinguia "a ponte funciona" de "a ponte é oca".
+
+Corolário para o processo (§8.2): a bateria negativa não pode se contentar com "a mutação foi
+detectada". Ela precisa registrar **qual** guarda detectou. Foi assim que este achado apareceu: as
+cinco mutações de `e3.2` foram pegas, mas quatro por guardas de valor e nenhuma pelo replay — e
+uma delas, na primeira rodada da bateria (antes de `invarianteCompra` existir), **passou verde**.
+
 ---
 
 ## 8. O processo de qualidade que emergiu nas ~25 stories
