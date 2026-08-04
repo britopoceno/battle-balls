@@ -55,6 +55,13 @@
         display: block; width: 100%; text-align: left; margin-bottom: 5px; cursor: pointer;
         background: rgba(255,255,255,0.04); border: 1px solid transparent;
         border-radius: 8px; padding: 8px 10px; color: #c7d0e0; font: inherit;
+        /*
+          Piso de alvo de toque. Medido em Pixel 9 deitado: os quatro botões de "trocar build" da
+          loja saíam com 35px, abaixo do mínimo de toque usual (44px). Eles são os únicos `.op` sem
+          linha de descrição, e são justamente os que custam 5 de ouro por D-01 — errar o dedo ali
+          tem preço. Os demais `.op` já vinham com 46-67px, então isto só levanta esses quatro.
+        */
+        min-height: 44px;
       }
       .op b { display: block; font-size: 13px; font-weight: 600; }
       .op i { display: block; font-style: normal; font-size: 11px; color: #7f8ba3; margin-top: 2px; line-height: 1.35; }
@@ -78,9 +85,23 @@
       }
       #exportar:hover { color: #c7d0e0; border-color: rgba(255,255,255,0.28); }
 
+      /*
+        A ação primária fica GRUDADA no rodapé do overlay.
+
+        Medido em viewport de celular deitado (Pixel 9, 768×425 CSS): a tela de builds tem 642px de
+        conteúdo, e o "Pronto" nascia 158px ABAIXO da dobra — com o timer de 30s de RF-04 correndo.
+        Quem não descobrisse que a tela rola veria o tempo acabar e a `{t:'buildPadrao'}` sobrescrever
+        a build que acabou de escolher. Na loja é o mesmo botão e o mesmo risco, sem timer.
+
+        `sticky` e não `fixed`: ele volta ao fluxo quando a tela cabe inteira (telas curtas, desktop),
+        em vez de pairar sobre o conteúdo o tempo todo.
+      */
       #start {
         cursor: pointer; border: 0; border-radius: 10px; padding: 13px 34px;
         font: 600 15px system-ui, sans-serif; color: #08111a; background: #4dd6ff;
+        /* 46px, e não 12: o #exportar é fixo no rodapé central e os dois se empilham em vez de colidir */
+        position: sticky; bottom: 46px; z-index: 5; flex: none;
+        box-shadow: 0 6px 22px rgba(8, 10, 14, 0.92), 0 0 0 10px rgba(8, 10, 14, 0.72);
       }
       .hint { margin: 0; font-size: 11px; color: #5e6a80; text-align: center; line-height: 1.6; }
       .hint code {
