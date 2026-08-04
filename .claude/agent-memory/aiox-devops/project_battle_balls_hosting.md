@@ -19,6 +19,15 @@ ser compilado, a fonte tem que ser Actions e não branch estático.
 automático. Não converter Pages para fonte de branch (quebraria o build do Vite).
 Atenção ao nome do branch: comandos com `main` falham neste repo.
 
+**Gotcha de verificação (não use o hash do bundle como prova):** o CSS do jogo vive
+num bloco `<style>` inline dentro de `index.html` — não existe `.css` como asset
+separado nem `<link rel=stylesheet>`. Logo, um commit só de CSS **não muda** o nome
+de `assets/index-<hash>.js`, e isso não significa que o deploy falhou. Para provar
+que uma mudança de CSS foi ao ar, faça grep das regras novas no HTML servido e
+confira o SHA publicado em
+`gh api "repos/britopoceno/battle-balls/deployments?environment=github-pages&per_page=1"`.
+O deploy inteiro leva ~35s, então não vale ficar em polling longo.
+
 **Gotcha operacional:** o hook `.claude/hooks/enforce-git-push-authority.cjs`
 (Constitution Art. II) bloqueia `git push` / `gh pr create|merge` e a mensagem de erro
 não diz como resolver. A identidade do agente vem de env var — declarar no escopo do
