@@ -69,6 +69,15 @@
       /* loja/placar (`e3.4`): a tela é a mais alta da fase — precisa rolar, não centralizar à força */
       #overlay { justify-content: flex-start; }
 
+      /* `e3.5` — discreto e sempre alcançável; canto inferior central, onde não há botão de habilidade */
+      #exportar {
+        position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); bottom: 10px;
+        cursor: pointer; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+        padding: 6px 12px; font: 500 11px system-ui, sans-serif;
+        background: rgba(20,24,32,0.82); color: #7f8ba3;
+      }
+      #exportar:hover { color: #c7d0e0; border-color: rgba(255,255,255,0.28); }
+
       #start {
         cursor: pointer; border: 0; border-radius: 10px; padding: 13px 34px;
         font: 600 15px system-ui, sans-serif; color: #08111a; background: #4dd6ff;
@@ -87,6 +96,12 @@
       uma segunda fonte de verdade para a tela — e ele seria descartado no primeiro `desenharTela`.
     -->
     <div id="overlay" class="show"></div>
+    <!--
+      `e3.5` AC 5 — gatilho de exportação da telemetria. FORA do #overlay: `telas.ts` recria o
+      conteúdo do overlay a cada fase, e um botão lá dentro sumiria a cada transição. z-index acima
+      do overlay para continuar alcançável nas telas de DOM e durante a rodada.
+    -->
+    <button id="exportar" title="exportar telemetria como JSON (atalho: T)">⬇ telemetria</button>
     <script type="module" src="/src/client/main.ts"></script>
   </body>
 </html>

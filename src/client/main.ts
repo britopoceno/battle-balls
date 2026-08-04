@@ -19,10 +19,11 @@ import {
   type Jogador,
   type ResultadoRodada,
 } from '../match/index.ts'
-import { criarEntrada, type Disparo } from './input.ts'
+import { criarEntrada, TECLADO, type Disparo } from './input.ts'
 import { ARENA_H, ARENA_W } from './layout.ts'
 import { desenhar, type Flutuante } from './render.ts'
 import { desenharTela, type AcoesDaTela, type ContextoDaTela } from './telas.ts'
+import { anguloErroGraus, criarTelemetria } from './telemetria.ts'
 
 /**
  * Fase 3 — a partida completa, local, contra o bot real (`docs/architecture-e3.md` §11, story
@@ -69,6 +70,13 @@ const BOT: Jogador = 1
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const g = canvas.getContext('2d')!
 const overlay = document.getElementById('overlay') as HTMLDivElement
+const btnExportar = document.getElementById('exportar') as HTMLButtonElement
+
+/**
+ * O coletor de `e3.5`. Este arquivo só o ALIMENTA: entrega os eventos que `match/` já produziu e
+ * liga o gatilho de exportação. Nenhum cálculo de métrica mora aqui (AC 13).
+ */
+const telemetria = criarTelemetria()
 
 let partida: EstadoPartida
 let politica: { politica: PoliticaPartida; rand: () => number }
@@ -127,6 +135,9 @@ function aplicarDecisao(d: Decisao): boolean {
     return false
   }
   partida = t.estado
+  // `e3.5` — os eventos já existem desde `e3.2`; a story só os entrega ao coletor. Registrar DEPOIS
+  // de aceitar é o que garante que uma decisão rejeitada não vire evidência de portão.
+  telemetria.registrar(partida.seed, t.eventos)
   return true
 }
 
@@ -227,6 +238,10 @@ function fecharRodada(w: World): void {
     return
   }
   partida = t.estado
+  // `rodadaFim` (P3.1 e P3.2) e `partidaFim` nascem aqui, não em `aplicar` — `registrarRodada` é a
+  // outra porta de saída de eventos de `match/`, e esquecê-la deixaria o portão sem a métrica
+  // principal
+  telemetria.registrar(partida.seed, t.eventos)
   world = null
   bot = null
   // a rodada abriu a loja (ou o fim): o bot compra antes de a tela aparecer, para que o placar e as
@@ -300,11 +315,33 @@ function disparar(d: Disparo): void {
     dy: d.dy,
     mag: d.mag,
   })
+  // RF-36 / `e3.5` — o cast é registrado com o PONTEIRO que o produziu e o erro de mira contra o
+  // inimigo vivo mais próximo. A definição da métrica está em `telemetria.ts`; aqui só se colhe o
+  // que só o cliente sabe: quem é o inimigo e onde ele está neste instante.
+  telemetria.registrar(partida.seed, [
+    {
+      t: 'cast',
+      rodada: partida.rodada,
+      ballIndex: d.ballIndex,
+      ponteiro: d.ponteiro,
+      anguloErro: anguloErroGraus(
+        bola,
+        { dx: d.dx, dy: d.dy },
+        world.balls.filter((b) => b.team !== meuLado && b.alive),
+      ),
+    },
+  ])
 }
 
 const entrada = criarEntrada(canvas, disparar, (k) => {
   if (k === ' ') {
     pausado = !pausado
+    return
+  }
+  // `e3.5`, AC 5 — o ATALHO de exportar, ao lado do botão. Fora da fase rodada o overlay cobre a
+  // tela e o botão é o caminho; durante a rodada o teclado é o único que não some.
+  if (k === 't') {
+    telemetria.exportar()
     return
   }
   if (!world) return
@@ -326,8 +363,13 @@ const entrada = criarEntrada(canvas, disparar, (k) => {
   const def = CHARS[bola.charId]
   const hab = alvo[1] === 'ult' ? def.ult : def.abilities[bola.abilityIndex]
   const mag = hab.maxRange > hab.minRange ? (d - hab.minRange) / (hab.maxRange - hab.minRange) : 1
-  disparar({ ballIndex: alvo[0], slot: alvo[1], dx: dx / d, dy: dy / d, mag })
+  disparar({ ballIndex: alvo[0], slot: alvo[1], dx: dx / d, dy: dy / d, mag, ponteiro: TECLADO })
 })
+
+// `e3.5`, AC 5 — o BOTÃO de exportar. Vive fora do `#overlay` de propósito: `desenharTela` recria o
+// conteúdo do overlay a cada fase, e um botão lá dentro sumiria a cada transição — inclusive na
+// única tela em que exportar é mais útil, a de fim de partida.
+btnExportar.onclick = () => telemetria.exportar()
 
 // ---------------------------------------------------------------- laço
 

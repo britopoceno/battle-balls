@@ -13,7 +13,23 @@ export interface Disparo {
   dx: number
   dy: number
   mag: number
+  /**
+   * `PointerEvent.pointerId` do dedo que fez o arrasto, ou `TECLADO` quando o cast veio do teclado.
+   *
+   * Existe por RF-36 / §10.3 (`e3.5`): "% de rodadas com **uma só mão**" é uma pergunta sobre
+   * PONTEIROS, não sobre botões. Contar `ballIndex` distintos responderia outra coisa — um jogador
+   * pode alternar o mesmo polegar entre os dois botões, e isso continua sendo uma mão só. Este é o
+   * único dado das três que RF-36 pede que **só** existe aqui, na borda do Pointer Events.
+   */
+  ponteiro: number
 }
+
+/**
+ * Ponteiro sintético dos casts de teclado. Negativo de propósito: `pointerId` real é sempre >= 0,
+ * então a análise de RF-36 separa teclado de dedo sem heurística, e uma sessão de mesa não entra na
+ * conta de "uma só mão" fingindo ser um polegar.
+ */
+export const TECLADO = -1
 
 /** distância de arrasto (px de tela) que corresponde a mag = 1 */
 const ARRASTO_MAX = 130
@@ -89,6 +105,7 @@ export function criarEntrada(
       dx: mira.dx,
       dy: mira.dy,
       mag: mira.mag,
+      ponteiro: e.pointerId,
     })
   }
   canvas.addEventListener('pointerup', soltar)
