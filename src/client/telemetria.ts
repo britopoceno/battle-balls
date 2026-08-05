@@ -31,21 +31,44 @@ export const CHAVE = 'bb.telemetria.v1'
  *
  * As duas métricas que RF-36 pede saem destes campos, e a story exige que saiam **as duas**:
  *
- *  - **% de rodadas com uma só mão** — agrupar por `(partida, rodada)` e contar `ponteiro` DISTINTOS
- *    e não-teclado. Um só ⇒ a rodada foi jogada com uma mão. É por isso que `ponteiro` é o
- *    `pointerId` do dedo e não o `ballIndex`: o mesmo polegar alternando entre os dois botões
- *    continua sendo uma mão, e contar botões diria o contrário.
- *  - **taxa de cast desperdiçado** — a fração de casts com `anguloErro` alto. O limiar é decisão de
- *    ANÁLISE e mora no agregador, não aqui: gravar "desperdiçado: true" congelaria um limiar que
- *    ninguém mediu ainda dentro do dado bruto.
+ *  - **% de rodadas com uma só mão** — agrupar por `(partida, rodada)` e olhar `ladoDaTela` dos
+ *    casts de toque (`ponteiro >= 0`). Uma só região ⇒ a rodada foi jogada com uma mão.
+ *    **Correção de premissa (gate FAIL, TEL-E35-006): esta métrica NÃO usa `ponteiro`.**
+ *    `pointerId` identifica um CONTATO, não um dedo — num touchscreen cada toque novo recebe um id
+ *    novo, então contar `pointerId` distintos por rodada mede "quantos toques", não "quantas mãos",
+ *    e reporta ~100% de "duas mãos" em qualquer sessão real. Medido sobre uma sessão de toque real
+ *    deste build: 23 casts, 23 `pointerId` distintos. `ladoDaTela` persiste através de vários
+ *    toques do mesmo dedo porque é uma REGIÃO da tela, não um identificador de evento.
+ *  - **taxa de cast desperdiçado** — a fração de casts com `anguloErro` alto, **excluindo os que
+ *    saíram sem mira real** (`mag` abaixo do limiar de arrasto — TEL-E35-001, ver campo `mag`
+ *    abaixo). O limiar de ângulo é decisão de ANÁLISE e mora no agregador, não aqui: gravar
+ *    "desperdiçado: true" congelaria um limiar que ninguém mediu ainda dentro do dado bruto.
  */
 export interface EventoCast {
   t: 'cast'
   /** índice da rodada em que o cast aconteceu — sem ele, "% de RODADAS com uma só mão" é inderivável */
   rodada: number
   ballIndex: 0 | 1
-  /** `pointerId` do dedo, ou `TECLADO` (-1) — ver `Disparo.ponteiro` */
+  /**
+   * `pointerId` do CONTATO, ou `TECLADO` (-1) — ver `Disparo.ponteiro`. Identifica um contato
+   * (útil para multitoque simultâneo e para separar teclado de toque), **não** um dedo através de
+   * toques separados — ver a correção de premissa em `Disparo.ponteiro`.
+   */
   ponteiro: number
+  /**
+   * Região da tela onde o toque começou (`'esq' | 'dir'`), ou `null` para casts de teclado —
+   * TEL-E35-006. É o proxy honesto de "uma só mão": ao contrário de `ponteiro`, persiste através
+   * de vários toques do mesmo dedo. Ver `Disparo.ladoDaTela`.
+   */
+  ladoDaTela: 'esq' | 'dir' | null
+  /**
+   * Fração de arrasto (0..1, ver `input.ts:ARRASTO_MAX`) no instante do disparo — TEL-E35-001. Um
+   * toque sem arrasto (`mag` abaixo de `LIMIAR_ARRASTO_PX / ARRASTO_MAX`) dispara com a mira ainda
+   * no placeholder `{dx:1, dy:0}` de `pointerdown`, e `anguloErro` desse cast mede a direção
+   * inventada, não a intenção do jogador. Fica no arquivo para a exclusão ser decisão de análise
+   * (do agregador), não perda de dado bruto.
+   */
+  mag: number
   /**
    * Ângulo em GRAUS (0..180) entre a direção mirada e a direção do inimigo vivo mais próximo, no
    * instante do disparo. `-1` quando não havia inimigo vivo para comparar.

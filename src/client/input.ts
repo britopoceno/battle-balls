@@ -14,15 +14,30 @@ export interface Disparo {
   dy: number
   mag: number
   /**
-   * `PointerEvent.pointerId` do dedo que fez o arrasto, ou `TECLADO` quando o cast veio do teclado.
-   *
-   * Existe por RF-36 / §10.3 (`e3.5`): "% de rodadas com **uma só mão**" é uma pergunta sobre
-   * PONTEIROS, não sobre botões. Contar `ballIndex` distintos responderia outra coisa — um jogador
-   * pode alternar o mesmo polegar entre os dois botões, e isso continua sendo uma mão só. Este é o
-   * único dado das três que RF-36 pede que **só** existe aqui, na borda do Pointer Events.
+   * `PointerEvent.pointerId` do CONTATO que fez o arrasto, ou `TECLADO` quando o cast veio do
+   * teclado. **Correção de premissa (gate FAIL de `e3.5`, TEL-E35-006):** este campo NÃO identifica
+   * um dedo através de toques separados — identifica um contato. Num touchscreen, cada
+   * `pointerdown` novo recebe um `pointerId` novo, mesmo sendo o mesmo dedo que tocou de novo. O que
+   * ele responde de verdade, e continua útil para isso, é: (1) quantos contatos SIMULTÂNEOS houve
+   * (multitoque real) e (2) separar teclado de toque (`TECLADO` é negativo, `pointerId` real não é).
+   * "% de rodadas com uma só mão" (RF-36) usa `ladoDaTela`, não este campo — ver lá.
    */
   ponteiro: number
+  /**
+   * Região da tela (metade esquerda/direita, em pixels de cliente do canvas) onde o contato começou
+   * — TEL-E35-006. É o proxy honesto de "mão": ao contrário de `pointerId`, uma região persiste
+   * através de vários toques do mesmo dedo. `null` para casts de teclado (`TECLADO`), onde a
+   * pergunta não faz sentido.
+   */
+  ladoDaTela: 'esq' | 'dir' | null
 }
+
+/**
+ * Distância de arrasto (px) abaixo da qual a mira NÃO foi reescrita e ainda é o placeholder
+ * `{dx:1, dy:0}` de `pointerdown` — TEL-E35-001. Exportado para que quem consome `EventoCast.mag`
+ * (o agregador de `tools/telemetria.ts`) possa reconhecer o mesmo limiar sem duplicar o número.
+ */
+export const LIMIAR_ARRASTO_PX = 6
 
 /**
  * Ponteiro sintético dos casts de teclado. Negativo de propósito: `pointerId` real é sempre >= 0,
@@ -31,8 +46,12 @@ export interface Disparo {
  */
 export const TECLADO = -1
 
-/** distância de arrasto (px de tela) que corresponde a mag = 1 */
-const ARRASTO_MAX = 130
+/**
+ * Distância de arrasto (px de tela) que corresponde a mag = 1. Exportado junto com
+ * `LIMIAR_ARRASTO_PX` pelo mesmo motivo: `EventoCast.mag / ARRASTO_MAX` reconstrói a fração de
+ * arrasto sem o agregador precisar reimplementar a conta.
+ */
+export const ARRASTO_MAX = 130
 
 export interface Entrada {
   /** mira em andamento por ponteiro — o render desenha a partir daqui */
@@ -86,7 +105,7 @@ export function criarEntrada(
     const dx = x - ini.x
     const dy = y - ini.y
     const d = Math.hypot(dx, dy)
-    if (d > 6) {
+    if (d > LIMIAR_ARRASTO_PX) {
       mira.dx = dx / d
       mira.dy = dy / d
     }
@@ -96,6 +115,9 @@ export function criarEntrada(
 
   const soltar = (e: PointerEvent) => {
     const mira = entrada.miras.get(e.pointerId)
+    // TEL-E35-006: a região é do INÍCIO do toque, não da posição de soltar — é onde a mão estava,
+    // não para onde o arrasto mirou. Lida antes de apagar `inicio`.
+    const ini = inicio.get(e.pointerId)
     entrada.miras.delete(e.pointerId)
     inicio.delete(e.pointerId)
     if (!mira) return
@@ -106,6 +128,7 @@ export function criarEntrada(
       dy: mira.dy,
       mag: mira.mag,
       ponteiro: e.pointerId,
+      ladoDaTela: ini ? (ini.x < canvas.clientWidth / 2 ? 'esq' : 'dir') : null,
     })
   }
   canvas.addEventListener('pointerup', soltar)

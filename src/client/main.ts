@@ -324,6 +324,8 @@ function disparar(d: Disparo): void {
       rodada: partida.rodada,
       ballIndex: d.ballIndex,
       ponteiro: d.ponteiro,
+      ladoDaTela: d.ladoDaTela,
+      mag: d.mag,
       anguloErro: anguloErroGraus(
         bola,
         { dx: d.dx, dy: d.dy },
@@ -363,7 +365,15 @@ const entrada = criarEntrada(canvas, disparar, (k) => {
   const def = CHARS[bola.charId]
   const hab = alvo[1] === 'ult' ? def.ult : def.abilities[bola.abilityIndex]
   const mag = hab.maxRange > hab.minRange ? (d - hab.minRange) / (hab.maxRange - hab.minRange) : 1
-  disparar({ ballIndex: alvo[0], slot: alvo[1], dx: dx / d, dy: dy / d, mag, ponteiro: TECLADO })
+  disparar({
+    ballIndex: alvo[0],
+    slot: alvo[1],
+    dx: dx / d,
+    dy: dy / d,
+    mag,
+    ponteiro: TECLADO,
+    ladoDaTela: null,
+  })
 })
 
 // `e3.5`, AC 5 — o BOTÃO de exportar. Vive fora do `#overlay` de propósito: `desenharTela` recria o

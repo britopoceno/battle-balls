@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { ARRASTO_MAX, LIMIAR_ARRASTO_PX } from '../client/input.ts'
 import type { ArquivoTelemetria, EventoRegistrado } from '../client/telemetria.ts'
 
 /**
@@ -29,6 +30,15 @@ import type { ArquivoTelemetria, EventoRegistrado } from '../client/telemetria.t
  * mudá-lo seja reanálise e não recoleta. Mesma marcação estrutural de `ECONOMIA_PROVISORIA`.
  */
 const LIMIAR_DESPERDICIO_GRAUS = 30
+
+/**
+ * Fração de arrasto (`EventoCast.mag`) abaixo da qual `input.ts` nunca reescreveu a mira, e o cast
+ * saiu com o placeholder `{dx:1, dy:0}` de `pointerdown` — TEL-E35-001. Mesmo limiar de `input.ts`
+ * (`d > LIMIAR_ARRASTO_PX`), só que expresso em fração de `ARRASTO_MAX` porque é isso que o arquivo
+ * exportado guarda. Casts abaixo deste limiar não têm mira real: incluí-los na taxa de desperdício
+ * mediria a direção inventada, não a intenção do jogador.
+ */
+const LIMIAR_MAG_MIRA_REAL = LIMIAR_ARRASTO_PX / ARRASTO_MAX
 
 function mediana(xs: readonly number[]): number {
   if (xs.length === 0) return NaN
@@ -68,10 +78,14 @@ export function agregar(eventos: readonly EventoRegistrado[]): string[] {
       `(n=${comHumano.length}${soBot ? `, ${soBot} rodada(s) bot×bot excluída(s)` : ''})`,
   )
 
-  // ---- P3.2 — % de rodadas que atingem 60s
+  // ---- P3.2 — % de rodadas que atingem 60s (TEL-E35-004: rótulo agora declara o mesmo filtro por
+  // `controle` que P3.1 e P3.3 já declaram — o cálculo sempre foi filtrado, só o texto não dizia)
   const em60 = comHumano.filter((r) => r.atingiu60s).length
-  linhas.push('P3.2  rodadas que atingem 60s (morte súbita)')
-  linhas.push(`      ${pct(em60, comHumano.length)} — ${em60} de ${comHumano.length}`)
+  linhas.push('P3.2  rodadas que atingem 60s (morte súbita, só com humano no controle)')
+  linhas.push(
+    `      ${pct(em60, comHumano.length)} — ${em60} de ${comHumano.length}` +
+      (soBot ? ` (${soBot} rodada(s) bot×bot excluída(s))` : ''),
+  )
 
   // ---- P3.3 — distribuição física × combate, SÓ DAS COMPRAS DO HUMANO
   //
@@ -113,27 +127,65 @@ export function agregar(eventos: readonly EventoRegistrado[]): string[] {
   linhas.push('')
 
   // ---- RF-36 (Risco #4) — as DUAS métricas que o PRD §6 pede
-  const porRodada = new Map<string, Set<number>>()
+  //
+  // TEL-E35-006 (correção de gate FAIL): "uma só mão" agrupa por REGIÃO da tela (`ladoDaTela`), não
+  // por `ponteiro`. `pointerId` identifica um contato, não um dedo — num touchscreen cada toque
+  // novo recebe um id novo, então contar `pointerId` distintos por rodada mede "quantos toques"
+  // (quase sempre > 1), não "quantas mãos". `ladoDaTela` persiste através de vários toques do mesmo
+  // dedo porque é uma região, não um identificador de evento.
+  const ladosPorRodada = new Map<string, Set<'esq' | 'dir'>>()
   for (const c of casts) {
-    const k = `${c.partida}#${c.rodada}`
-    if (!porRodada.has(k)) porRodada.set(k, new Set())
     // ponteiro negativo é teclado (ver `Disparo.ponteiro`): não conta como mão
-    if (c.ponteiro >= 0) porRodada.get(k)!.add(c.ponteiro)
+    if (c.ponteiro < 0 || !c.ladoDaTela) continue
+    const k = `${c.partida}#${c.rodada}`
+    if (!ladosPorRodada.has(k)) ladosPorRodada.set(k, new Set())
+    ladosPorRodada.get(k)!.add(c.ladoDaTela)
   }
-  const comDedo = [...porRodada.values()].filter((s) => s.size > 0)
-  const umaMao = comDedo.filter((s) => s.size === 1).length
-  const medidos = casts.filter((c) => c.anguloErro >= 0)
+  const comToque = [...ladosPorRodada.values()].filter((s) => s.size > 0)
+  const umaMao = comToque.filter((s) => s.size === 1).length
+
+  // TEL-E35-001: exclui da taxa de desperdício os casts sem mira real (mag abaixo do limiar de
+  // arrasto de `input.ts`) — esses medem a direção placeholder de `pointerdown`, não a intenção do
+  // jogador. TEL-E35-002: `anguloErro` precisa ser um número finito e não-negativo; `null`/`NaN`
+  // (o que sobra de um coletor futuro ou de edição manual do arquivo) é DESCARTADO com aviso, nunca
+  // tratado como "sem desperdício" — `null >= 0` é `true` em JS e mentiria silenciosamente.
+  // `mag` ausente (arquivo exportado por um coletor anterior a esta correção) não é "sem mira
+  // real" — é dado que nunca existiu, e as duas coisas não podem virar o mesmo "excluído" silencioso.
+  const magAusente = casts.filter((c) => !Number.isFinite(c.mag)).length
+  if (magAusente > 0) {
+    console.warn(
+      `[telemetria] ${magAusente} cast(s) sem campo 'mag' (arquivo exportado antes da correção TEL-E35-001/006) — taxa de desperdício não inclui esses casts`,
+    )
+  }
+  const semMiraReal = casts.filter(
+    (c) => Number.isFinite(c.mag) && c.mag < LIMIAR_MAG_MIRA_REAL,
+  ).length
+  const comMiraReal = casts.filter((c) => Number.isFinite(c.mag) && c.mag >= LIMIAR_MAG_MIRA_REAL)
+  const naoFinito = comMiraReal.filter(
+    (c) => !Number.isFinite(c.anguloErro) || c.anguloErro < -1,
+  ).length
+  if (naoFinito > 0) {
+    console.warn(
+      `[telemetria] ${naoFinito} cast(s) com anguloErro inválido (não-finito ou < -1) — descartado(s) da taxa de desperdício`,
+    )
+  }
+  const medidos = comMiraReal.filter(
+    (c) => Number.isFinite(c.anguloErro) && c.anguloErro >= 0,
+  )
   const desperdicados = medidos.filter((c) => c.anguloErro > LIMIAR_DESPERDICIO_GRAUS).length
 
   linhas.push('RF-36 Risco #4 (indicador aprovado no PRD §6, instrumentado em e3.5)')
   linhas.push(
-    `      rodadas com uma só mão: ${pct(umaMao, comDedo.length)} — ${umaMao} de ${comDedo.length}` +
-      (comDedo.length === 0 ? ' (nenhuma rodada com cast por toque)' : ''),
+    `      rodadas com uma só mão: ${pct(umaMao, comToque.length)} — ${umaMao} de ${comToque.length}` +
+      (comToque.length === 0 ? ' (nenhuma rodada com cast por toque)' : ''),
   )
   linhas.push(
     `      cast desperdiçado (erro > ${LIMIAR_DESPERDICIO_GRAUS}°): ` +
       `${pct(desperdicados, medidos.length)} — ${desperdicados} de ${medidos.length}` +
-      (medidos.length ? ` · erro mediano ${mediana(medidos.map((c) => c.anguloErro)).toFixed(1)}°` : ''),
+      (medidos.length ? ` · erro mediano ${mediana(medidos.map((c) => c.anguloErro)).toFixed(1)}°` : '') +
+      (semMiraReal ? ` · ${semMiraReal} cast(s) sem mira real excluído(s)` : '') +
+      (magAusente ? ` · ${magAusente} sem campo 'mag' (arquivo pré-correção) excluído(s)` : '') +
+      (naoFinito ? ` · ${naoFinito} inválido(s) descartado(s)` : ''),
   )
 
   return linhas

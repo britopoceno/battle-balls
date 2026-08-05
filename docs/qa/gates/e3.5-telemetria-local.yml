@@ -1,0 +1,166 @@
+schema: 1
+story: 'e3.5'
+story_title: 'Telemetria local — coletor em `client/telemetria.ts`, exportação JSON (P3.1-P3.3)'
+gate: CONCERNS
+status_reason: >-
+  **Re-review após `apply-qa-fixes`.** TEL-E35-006 (bloqueante, high) está CORRIGIDO e verificado
+  de forma independente: escrevi um fixture sintético NOVO (não reusei o do @dev nem o da rodada
+  anterior deste gate), com 3 rodadas — uma com toques nos dois lados da tela (duas mãos esperada),
+  uma com todos os toques do mesmo lado (uma mão esperada) e uma só de teclado (deve ser EXCLUÍDA do
+  denominador, não contar como "duas mãos" por default). As 8 métricas (P3.1, P3.2, ambas de RF-36,
+  mais os valores auxiliares) bateram exatamente com o previsto antes de rodar. Os três recomendados
+  da rodada anterior (TEL-E35-001, 002, 004) também estão aplicados e verificados.
+  **CONCERNS, não PASS limpo, por dois achados NOVOS de severidade baixa** encontrados durante esta
+  verificação (TEL-E35-007, TEL-E35-008) — nenhum bloqueia porque nenhum é alcançável pelo cliente
+  atual, mas ambos são reais e ficam registrados para não se perderem.
+  `npm run check` 0 erros; `npm run sim:check` golden hash idêntico; `git diff --stat` — quatro
+  arquivos, todos dentro do escopo já julgado pelo AC 13 (incluindo o desvio de `tools/telemetria.ts`,
+  ainda CONCERNS pela mesma razão da rodada anterior, não reaberto aqui).
+reviewer: 'Quinn (@qa) — quality_gate declarado na story'
+reviewed_revision: >-
+  Working tree em 2026-08-05, após a correção aplicada por `apply-qa-fixes` sobre o gate FAIL de
+  2026-08-04 (`commit:eb0ef0c` + working tree). `git diff --stat` desta rodada: src/client/input.ts
+  (+20/−5), src/client/main.ts (+10/−1), src/client/telemetria.ts (+27/−4),
+  src/tools/telemetria.ts (+59/−9), docs/stories/e3.5.telemetria-local.story.md (+45/−1). NADA em
+  `src/sim/`, `src/match/`, `src/shop/`, `src/bot/`, `src/chars/`.
+
+acceptance_criteria:
+  - id: 'AC11 (RF-36 de carona: evento cast, AS DUAS métricas deriváveis) — RE-VERIFICADO'
+    verdict: PASS
+    evidence: >-
+      **Ambas as métricas agora são deriváveis em aparelho de toque.**
+      *(a) % de rodadas com uma só mão* — `EventoCast.ladoDaTela` (região onde o TOQUE COMEÇOU,
+      não onde soltou) substitui `ponteiro` como base da métrica. Fixture próprio, valores
+      conhecidos antes de rodar: rodada com toques em 'esq' e 'dir' → contada como "duas mãos";
+      rodada com todos os toques em 'dir' → "uma mão"; rodada só de teclado (`ponteiro: TECLADO`,
+      `ladoDaTela: null`) → CORRETAMENTE EXCLUÍDA do denominador (comToque.length = 2, não 3).
+      Saída: `50.0% — 1 de 2`, exata.
+      *(b) taxa de cast desperdiçado* — mantida e reforçada: agora exclui casts sem mira real
+      (`mag` abaixo do limiar de arrasto, TEL-E35-001) e valores de `anguloErro` inválidos
+      (TEL-E35-002). Testado com um cast de `mag` exatamente no limiar (ver TEL-E35-008) e um
+      `anguloErro: -5` inválido (fora do sentinela -1) — o inválido foi corretamente descartado
+      com aviso, saída `75.0% — 3 de 4 · erro mediano 37.5° · 1 inválido(s) descartado(s)`, exata.
+      Corrigido nos dois lugares de código onde a premissa errada estava escrita (`input.ts`,
+      `telemetria.ts`); a redação do AC 11 na story é campo do @po, não do @dev — fica pendência de
+      redação registrada no Dev Agent Record, não bloqueia o gate porque o comportamento está certo.
+
+  - id: 'TEL-E35-001 (mag no EventoCast) — RE-VERIFICADO'
+    verdict: PASS
+    evidence: >-
+      `Disparo.mag` (já existia) propagado para `EventoCast.mag`. `input.ts` exporta
+      `LIMIAR_ARRASTO_PX` (renomeado do literal `6`) e `ARRASTO_MAX`; o agregador importa os dois
+      para excluir casts sem mira real sem duplicar o número. Ver TEL-E35-008 sobre um
+      off-by-one de fronteira, baixo e não bloqueante.
+
+  - id: 'TEL-E35-002 (Number.isFinite no agregador) — RE-VERIFICADO'
+    verdict: PASS
+    evidence: >-
+      `c.anguloErro >= 0` → `Number.isFinite(c.anguloErro) && c.anguloErro >= 0`. Testado com
+      `anguloErro: -5` (fora do sentinela -1): descartado com aviso explícito no console, não
+      mais tratado como "sem desperdício". Ver TEL-E35-007 sobre uma lacuna estreita e não
+      bloqueante do mesmo guard.
+
+  - id: 'TEL-E35-004 (rótulo de P3.2) — RE-VERIFICADO'
+    verdict: PASS
+    evidence: >-
+      Rótulo agora declara "só com humano no controle", como P3.1/P3.3. Testado: rodada com
+      `atingiu60s: true` entre 3 rodadas com humano → `33.3% — 1 de 3`, exato.
+
+  - id: 'Regressão — AC1/AC2/AC6/AC13 não quebrados pela correção'
+    verdict: PASS
+    evidence: >-
+      `npm run check`: 0 erros. `npm run sim:check`: golden hash idêntico nas 5 seeds e 5
+      variantes — a correção não tocou `sim/`/`match/`. `grep -rn localStorage`: ainda exatamente
+      2 ocorrências de código, ambas em `telemetria.ts` (mesmas linhas de sempre, só deslocadas
+      pelas novas docstrings). AC 13: escopo continua os mesmos quatro arquivos de sempre +
+      `tools/telemetria.ts` (desvio já julgado ACEITO na rodada anterior, não reaberto).
+
+issues:
+  - id: TEL-E35-007
+    severity: low
+    category: code
+    finding: >-
+      **Lacuna estreita no guard de `anguloErro` do agregador: valores no intervalo `(-1, 0)`
+      exclusivo desaparecem sem contagem nem aviso.** `naoFinito` captura `!Number.isFinite(x) ||
+      x < -1`; `medidos` requer `x >= 0`. Um valor como `-0.5` não é capturado por nenhum dos dois:
+      não é "inválido descartado" (não é não-finito, não é `< -1`) e não é "medido" (não é `>= 0`).
+      Ele só some da conta, sem aparecer em nenhum total.
+      **Medido, não deduzido:** fixture com `anguloErro: -0.5` — não apareceu em `naoFinito` (sem
+      aviso) nem em `medidos` (`medidos.length` não o inclui).
+    impacto: >-
+      **Não alcançável pelo cliente atual.** `anguloErroGraus()` só retorna `-1` (sentinela) ou um
+      valor em `[0, 180]` (produto de `Math.acos` multiplicado por `180/Math.PI`, sempre
+      não-negativo) — nunca um número no intervalo aberto `(-1, 0)`. Só ocorreria com um arquivo
+      editado manualmente ou um coletor `v2` malformado, o mesmo cenário hipotético que motivou
+      TEL-E35-002 original (por isso ali foi `medium`, aqui é `low` — a lacuna é mais estreita
+      ainda).
+    recommendation: >-
+      Trocar a condição de `naoFinito` para `!Number.isFinite(x) || (x < 0 && x !== -1)`, que cobre
+      todo negativo exceto o sentinela documentado, sem lacuna. Baixo custo, pode ir junto de
+      TEL-E35-003 (cobertura permanente) em `e3.6`, já que os dois são sobre o mesmo guard.
+
+  - id: TEL-E35-008
+    severity: low
+    category: code
+    finding: >-
+      **Fronteira do limiar de "mira real" é inclusive onde `input.ts` é exclusivo.** `input.ts`
+      só reescreve a direção quando `d > LIMIAR_ARRASTO_PX` (estrito). O agregador exclui da taxa
+      de desperdício quando `mag < LIMIAR_ARRASTO_PX / ARRASTO_MAX` (também estrito). No ponto exato
+      `d === LIMIAR_ARRASTO_PX` (`mag === limiar` exatamente), a direção NÃO foi reescrita em
+      `input.ts` (ainda é o placeholder), mas o agregador NÃO exclui esse cast (porque `mag < limiar`
+      é falso quando são iguais) — um desalinhamento de um ponto na fronteira.
+      **Medido:** fixture com `mag` ajustado para `LIMIAR_ARRASTO_PX / ARRASTO_MAX` exato — o cast
+      foi tratado como "mira real" pelo agregador.
+    impacto: >-
+      **Praticamente inatingível com dado real.** `mag` vem de `d / ARRASTO_MAX` com `d` derivado de
+      coordenadas de ponteiro em ponto flutuante — bater o valor exato do limiar por acaso é medida
+      zero. Não é um bug de lógica errada, é uma inconsistência de fronteira (`<` vs `<=`) sem
+      consequência prática observável.
+    recommendation: >-
+      Trocar `mag < LIMIAR_MAG_MIRA_REAL` por `mag <= LIMIAR_MAG_MIRA_REAL` no agregador, para casar
+      exatamente com `d > LIMIAR_ARRASTO_PX` de `input.ts` (o complemento lógico correto de "direção
+      NÃO foi reescrita" é `d <= LIMIAR_ARRASTO_PX`). Cosmético; não precisa bloquear nada.
+
+  - id: TEL-E35-009
+    severity: low
+    category: architecture
+    finding: >-
+      **`agregar()` deixou de ser uma função pura.** A correção adicionou dois `console.warn`
+      dentro de `agregar()` (avisos de `magAusente` e `naoFinito`). Isso é uma boa prática de
+      diagnóstico, mas contradiz a premissa que o próprio gate anterior usou para justificar adiar
+      TEL-E35-003 (cobertura permanente) para `e3.6`: *"barato porque `agregar()` é pura e recebe um
+      array"*. Uma função pura com side-effect de I/O ainda é testável, mas um teste que rode
+      `agregar()` sobre um fixture vai agora poluir a saída do `sim:check` com avisos sempre que o
+      fixture incluir os casos que os avisos cobrem — o que é bom para visibilidade, mas precisa ser
+      couinstrado (ex.: mockar `console.warn` no teste) para não ser lido como falha.
+    impacto: >-
+      Nenhum hoje — `agregar()` não é chamada de `sim:check`. **Datado:** quando TEL-E35-003 for
+      implementado em `e3.6`, o fixture terá de incluir casos que disparam os avisos (é exatamente
+      o que a lição de TEL-E35-006 pede — "o fixture tem de incluir um caso de toque"), então o
+      teste precisa decidir explicitamente se aceita o `console.warn` como parte do comportamento
+      esperado ou o silencia.
+    recommendation: >-
+      Nenhuma ação agora. Registrar como nota para quem implementar a cobertura permanente de
+      `e3.6`: os avisos são comportamento intencional, não ruído a suprimir.
+
+escopo_negativo_confirmado:
+  - >-
+    `src/sim/`, `src/match/`, `src/shop/`, `src/bot/`, `src/chars/` — zero linhas nesta rodada de
+    correção, igual à rodada anterior.
+  - >-
+    Golden hash idêntico nas 5 seeds e 5 variantes — reexecutado por mim, não aceito do relato.
+  - >-
+    `localStorage` continua em exatamente 2 linhas de código, ambas em `src/client/telemetria.ts`.
+
+nota_de_higiene:
+  - >-
+    `docs/battle-balls-telemetria-1785816621271.json` continua untracked. Com a correção aplicada,
+    rodar o agregador sobre ele agora mostra corretamente `— — 0 de 0 (nenhuma rodada com cast por
+    toque)` para a métrica (a) — o arquivo não tem `ladoDaTela` (formato anterior à correção) e
+    não pode mais aparentar uma resposta falsa. **Ainda é necessário jogar uma sessão de toque real
+    NOVA, com o coletor corrigido, para fechar o Risco #4 de fato.** Isso não é bloqueante deste
+    gate (a story pede que a métrica seja DERIVÁVEL do formato, não que o Risco #4 esteja medido),
+    mas é o próximo passo natural fora desta story.
+
+waiver:
+  active: false
