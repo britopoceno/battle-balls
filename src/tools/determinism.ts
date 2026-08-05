@@ -78,13 +78,31 @@ function rodar(seed: number, team: PickSetup[] = TIME): RoundResult {
  * está na execução. Mudança de baseline exige justificativa registrada no commit.
  *
  * Fonte: `docs/architecture.md` §6.0 · Anexo B item A-2 · story `debt.0`
+ *
+ * **RE-BASELINE — `e3.6`, T-1 (a exceção declarada de §9.2: esta é a ÚNICA story da Fase 3
+ * autorizada a mover este hash).** `ESCALA_HP = 6.0` (`src/chars/tuning.ts`) — valor de decisão
+ * de PRODUTO do usuário, não da bissecção original de D-05 (25-35s): duas sessões humanas reais
+ * em ×2.0 e ×3.0 mediram medianas de ~23s (achatadas, dentro do ruído de 4-5 rodadas); uma sessão
+ * em ×6.0 rendeu uma partida de ~26s e outra de ~67s (3 das 4 rodadas bateram o teto de 60s). O
+ * usuário, direto: *"Não tem problema algum o sudden-death, gostei da escala HPx6.0"* — decisão
+ * de produto explícita que fica FORA da faixa numérica do AC 8, e que resolve de carona R-05
+ * (Risco #6): sudden death deixa de ser "código morto a decidir depois" e passa a ser aceito como
+ * parte do jogo. Ver Dev Agent Record de `e3.6` para a íntegra da bissecção e o veredito do @qa
+ * sobre o desvio do AC 8.
+ *
+ * **Achado registrado, não corrigido aqui:** a seed 11 era deliberada para exercitar o caminho de
+ * EMPATE (`winner === -1`, ver comentário acima). Neste re-baseline ela não empata mais
+ * (`winner: 1`) — a cobertura do caminho de empate perdeu a seed que a garantia. Não é escopo
+ * desta story achar uma seed substituta (T-1 pede re-gravar com justificativa, não re-desenhar a
+ * tabela); fica para quem tocar `BASELINE` a seguir confirmar se algum caminho ainda exercita
+ * `winner === -1`, ou se a Fase 3 perdeu essa rede sem perceber.
  */
 const BASELINE: { seed: number; hash: string; ticks: number; winner: number }[] = [
-  { seed: 1, hash: '96de1201', ticks: 753, winner: 1 },
-  { seed: 2, hash: 'f66a7416', ticks: 961, winner: 0 },
-  { seed: 3, hash: 'a8db9c28', ticks: 830, winner: 0 },
-  { seed: 7, hash: 'cb77dbe0', ticks: 831, winner: 0 },
-  { seed: 11, hash: '6aede2d9', ticks: 1168, winner: -1 },
+  { seed: 1, hash: '327b60f3', ticks: 4110, winner: 1 },
+  { seed: 2, hash: '6c9ec9a8', ticks: 4177, winner: 0 },
+  { seed: 3, hash: 'adfceac2', ticks: 4099, winner: 0 },
+  { seed: 7, hash: 'cdd32326', ticks: 3972, winner: 1 },
+  { seed: 11, hash: '5904fbe4', ticks: 4279, winner: 1 },
 ]
 
 /**
@@ -100,6 +118,9 @@ const BASELINE: { seed: number; hash: string; ticks: number; winner: number }[] 
  * Cobre a 2ª ativa e a 2ª passiva de cada personagem, isolada e em combinação — não é
  * cobertura exaustiva (isso é o arnês de 10k lutas da Fase 2), é a rede mínima para que
  * nenhum ramo de código fique inteiramente sem teste de regressão.
+ *
+ * **RE-BASELINE — `e3.6`, T-1.** Mesma alavanca `ESCALA_HP = 6.0`, ver justificativa completa
+ * no comentário do `BASELINE` acima.
  */
 const BUILD_BASELINE: {
   label: string
@@ -112,11 +133,11 @@ const BUILD_BASELINE: {
   ticks: number
   winner: number
 }[] = [
-  { label: 'golem Tremor (ability1)', seed: 101, golemAbility: 1, golemPassive: 0, vexAbility: 0, vexPassive: 0, hash: '19d30541', ticks: 1091, winner: 1 },
-  { label: 'golem Casca (passive1)', seed: 102, golemAbility: 0, golemPassive: 1, vexAbility: 0, vexPassive: 0, hash: '7e6aa71d', ticks: 860, winner: 1 },
-  { label: 'vex Deslize (ability1)', seed: 103, golemAbility: 0, golemPassive: 0, vexAbility: 1, vexPassive: 0, hash: '6c14e971', ticks: 679, winner: 1 },
-  { label: 'vex Fantasma (passive1)', seed: 104, golemAbility: 0, golemPassive: 0, vexAbility: 0, vexPassive: 1, hash: 'f1e405ff', ticks: 899, winner: 0 },
-  { label: 'golem Casca + vex Fantasma', seed: 105, golemAbility: 0, golemPassive: 1, vexAbility: 0, vexPassive: 1, hash: '1c1c71bb', ticks: 951, winner: 1 },
+  { label: 'golem Tremor (ability1)', seed: 101, golemAbility: 1, golemPassive: 0, vexAbility: 0, vexPassive: 0, hash: 'dbb0d9cb', ticks: 3197, winner: 1 },
+  { label: 'golem Casca (passive1)', seed: 102, golemAbility: 0, golemPassive: 1, vexAbility: 0, vexPassive: 0, hash: '3fec7f2c', ticks: 4247, winner: 0 },
+  { label: 'vex Deslize (ability1)', seed: 103, golemAbility: 0, golemPassive: 0, vexAbility: 1, vexPassive: 0, hash: 'acbd87c3', ticks: 3882, winner: 0 },
+  { label: 'vex Fantasma (passive1)', seed: 104, golemAbility: 0, golemPassive: 0, vexAbility: 0, vexPassive: 1, hash: '9c156606', ticks: 4347, winner: 0 },
+  { label: 'golem Casca + vex Fantasma', seed: 105, golemAbility: 0, golemPassive: 1, vexAbility: 0, vexPassive: 1, hash: '9636d92d', ticks: 4576, winner: 0 },
 ]
 
 const SEEDS = 40
