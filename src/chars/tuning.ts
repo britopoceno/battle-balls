@@ -7,5 +7,5 @@
  * o estado de entrega — a story que resolve D-05 termina com o valor que a bissecção encontrar,
  * baseline re-gravado e o novo hash justificado no commit.
  */
-export const ESCALA_HP = 2.0
+export const ESCALA_HP = 3.0
 export const ESCALA_DMG = 1.0
