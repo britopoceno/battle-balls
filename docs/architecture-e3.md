@@ -1243,6 +1243,33 @@ primeiros bloqueiam stories específicas; os três últimos podem ser decididos 
 >   provisório, marcado explicitamente; R-05 (Risco #6) decide depois de medir com humano
 >   (P3.2), na própria Fase 3; R-07 (telemetria RF-36) entra de carona no substrato de §10.
 
+> **Resolução do usuário (2026-08-05, durante `e3.6`; registrada pelos gates de QA em 2026-08-16):**
+>
+> - **R-05 — RESOLVIDA: aceitar.** A medição P3.2 com humano no controle invalidou a premissa de
+>   "código morto": em `ESCALA_HP = 6.0`, 3 das 4 rodadas finais da sessão ×6.0 atingiram 60s, e o
+>   arnês mediu **77,2% de 9020 rodadas**. Decisão explícita do usuário, verbatim: *"Não tem
+>   problema algum o sudden-death, gostei da escala hpx6.0"*. `SUDDEN_DEATH_MS` fica como está e
+>   passa a ser o **gatilho normal do clímax** (atingir 60s abre o encolhimento progressivo da
+>   arena, não decide por tempo; o empate real pelo teto de 150s ficou em 0,2%, quase igual ao
+>   anterior). §7.3 ("rede que nunca morde") e §13.5 ficam corretos como registro histórico de
+>   ×1.0-×3.0 — superados em ×6.0. Registro: story `e3.6` + gate WAIVED
+>   `docs/qa/gates/e3.6-ajuste-d05-tuning.yml` (waiver, REQ-105).
+> - **D-05 — fixada FORA da faixa planejada, por decisão de produto.** A faixa 25-35s de
+>   §9.1/§9.2/T-2 não foi atingida nem adotada: a bissecção humana mediu resposta muito mais
+>   achatada que a curva do bot de §1.4 (×2.0 → 22,9s; ×3.0 → 23,0s; só ×6.0 saiu do platô), e o
+>   valor entregue é **`ESCALA_HP = 6.0`, mediana humana medida 58,4s** (bimodal, 26-72s entre
+>   partidas). Onde este documento diz "25-35s", leia-se o alvo histórico do plano, não o jogo
+>   entregue. Evidência bruta: `docs/evidence/telemetria/`; registro: story `e3.6` (Dev Agent
+>   Record) + gate WAIVED (waiver do AC 8, REQ-103).
+> - **ABERTO, não resolvido — o Risco #1b reabriu de carona** (gate `e3.6`/REQ-101, high): o
+>   gatilho do PRD §6 (físico < +2pp E dano > +5pp), que `e2.7` fechou como "NÃO" para os dois
+>   personagens, lê **"SIM" para os dois** em ×6.0 (golem físico +0,77pp em n=3000; vex −1,53pp,
+>   inversão de sinal confirmada em duas amostras). Re-adjudicação formal @pm/@architect pendente;
+>   **bloqueia o repreço de itens de D-09** (`e3.7` manteve os provisórios também por isso).
+> - **R-04 — dado zero, fallback confirmado por ausência:** `e3.7` mediu **zero rodadas de índice
+>   ≥ 5** em 25 rodadas humanas; "repete o último valor" permanece até existir amostra que exercite
+>   as rodadas 6/7.
+
 ### R-01 — O draft degenera com roster de 2 (bloqueia a story do draft)
 
 §3.2 tem as três saídas. Recomendo **B** (estrutura completa, composição fixa `[golem,vex]`,
