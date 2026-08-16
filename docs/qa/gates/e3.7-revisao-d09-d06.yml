@@ -1,0 +1,89 @@
+schema: 1
+story: 'e3.7'
+story_title: 'Revisão dos números de D-09 com telemetria; randomização de ordem de builds se D-06 virar meta (não bloqueia o portão)'
+gate: CONCERNS
+status_reason: >-
+  O desfecho "insuficiência declarada, provisórios mantidos" é LEGÍTIMO, não fuga de trabalho:
+  reprecificar agora VIOLARIA o gate de e3.6 (REQ-101 condiciona qualquer repreço à re-adjudicação
+  do Risco #1b), cada decisão de manter cita dado real reproduzido por verificação independente, e a
+  cláusula de escape usada é a que o AC 3 e a validação do @po já nomeavam como "a saída honesta".
+  Todos os 10 ACs MET; diff docs-only; hash idêntico conferido. CONCERNS em vez de PASS por um único
+  resíduo substantivo: D-09 fica aberto sem gatilho de re-visita rastreado fora de prosa
+  (E37-FUP-001), o mesmo padrão de rot que o gate de e3.6 flagou duas vezes.
+reviewer: 'Quinn (@qa) — verificação executada por agentes independentes (anti-self-review: o @dev desta story foi esta mesma sessão)'
+reviewed_revision: >-
+  commit:3532748 (HEAD). git show --stat confirma: 1 arquivo, só
+  docs/stories/e3.7.revisao-d09-d06.story.md — zero linhas de src/.
+
+verificacao_independente:
+  - id: 'npm run check + sim:check (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      check 0 erros; sim:check verde inteiro com golden hash IDÊNTICO (5 seeds e 5 variantes batem
+      a tabela de e3.6 sem desvio) — o resultado que o reforço do @po no AC 2 declarava esperado, e
+      um hash diferente aqui teria sido sintoma de escopo violado. Não foi.
+  - id: 'Re-derivação independente dos dados (AC 3, 5)'
+    verdict: PASS
+    evidence: >-
+      Todas as afirmações numéricas do Dev Agent Record re-derivadas do JSON bruto com scripts
+      próprios, sem ler a story antes: 372 eventos, 7 partidas, 25 rodadas, 23 compras (11 humanas —
+      100% combate: lamina ×6, luneta ×2, relicario ×2, couraca ×1; preço sempre 6; ouroDepois só
+      {3,4}; rodadas 2-4), zero rodadas de índice ≥5, trocaDeBuild 0, buildPadrao 1 (partida
+      734981348, jogador 0), corte ×6.0 = 27.7/26.5/25.1/67.0/71.1/58.4/71.8s com atingiu60s em 3,
+      controle ["humano","bot"] nas 25. Nenhuma discrepância. Agregador oficial reproduz P3.1 22.6s
+      (n=25) · P3.2 12.0% · P3.3 física 0% / combate 100%.
+  - id: 'Julgamento adversarial dos ACs 1-10'
+    verdict: 'MET nos 10 (AC 3 pela sua própria exceção declarada; AC 6 vacuamente)'
+    evidence: >-
+      Juiz independente instruído a tratar a insuficiência com ceticismo ("é fuga de trabalho?")
+      concluiu que não, por três provas: o gate predecessor proíbe repreçar antes da re-adjudicação
+      do Risco #1b; cada "manter" cita dado verificado (0 trocas, 0 rodadas ≥5, 3 compras no jogo
+      final, n=11); e a hipótese registrada (11/11 combate ↔ T-4/Risco #1b) é Artigo IV-conforme —
+      rotulada hipótese, números batem o registro, nada inventado. AC 9 conferido contra o gate de
+      e3.6: a decisão de R-05 existe, verbatim, com approved_by — implementar nada é a implementação
+      fiel da saída escolhida.
+
+top_issues:
+  - id: 'E37-FUP-001'
+    severity: medium
+    finding: >-
+      O passo 7 da fase — o único que fecharia os provisórios de D-09 — encerrou com insuficiência
+      declarada, e as condições de reabertura (re-adjudicação do Risco #1b exigida por e3.6/REQ-101;
+      amostra humana coletada inteiramente em ×6.0 com n definido a priori; R-04 devolvido ao @pm)
+      vivem só na prosa da story e nos top_issues dos gates. Sem item rastreado, D-09 fica
+      provisório para sempre por default.
+    suggested_action: >-
+      @pm/@sm criam "Revisão de D-09, rodada 2" como story/backlog item condicionado a (a)
+      re-adjudicação formal do Risco #1b (n≥3000) e (b) amostra de telemetria humana 100% ×6.0 com
+      n de compras definido a priori, citando R-04 e esta story. ENCAMINHADO: draft delegado ao @sm
+      nesta mesma rodada do pipeline.
+  - id: 'E37-EVD-002'
+    severity: low
+    finding: >-
+      A declaração de insuficiência tem uma sexta razão que os dados sustentam e o registro não
+      lista explicitamente: jurosPorDezOuro e tetoDeJuros também nunca foram exercitados (ouroDepois
+      máximo 4, nunca ≥10 — verificado). Implícito em "zero sinal de poupança", não enumerado.
+    suggested_action: 'Registrado aqui como complemento do inventário; sem edição retroativa do Dev Agent Record.'
+  - id: 'E37-PRC-003'
+    severity: low
+    finding: >-
+      Checkbox de Pre-Commit (CodeRabbit) desmarcado sem registro de pulo, contra o precedente
+      e3.6/MNT-109 (o pulo se registra, não se silencia). Impacto nulo num diff docs-only.
+    suggested_action: 'Pulo registrado NESTE gate: CodeRabbit via WSL indisponível no ambiente; revisão independente cobriu o objetivo.'
+  - id: 'E37-DOC-004'
+    severity: low
+    finding: >-
+      Sobre-afirmação leve na razão 1: o README de evidência não "mapeia partida → escala" para
+      TODAS — 734981348 e 21386782 estão explicitamente "sem atribuição de escala" (e 734981348 é
+      justamente a do único buildPadrao). As conclusões permanecem válidas em qualquer leitura.
+    suggested_action: 'Nenhuma obrigatória; se a story for tocada, trocar por "mapeia ou circunscreve".'
+  - id: 'E37-DOC-005'
+    severity: low
+    finding: >-
+      Cosmético: "um draft distraído" atribui intenção que a telemetria não registra (a justificativa
+      carga-portante — 1 em 7, sem persistência — sustenta a decisão sozinha); e o Change Log ficou
+      fora de ordem cronológica (2.0.0 antes de 1.1.0).
+    suggested_action: 'Não bloqueante; corrigir se houver nova edição.'
+
+waiver: { active: false }
+updated: '2026-08-16T18:30:00Z'
