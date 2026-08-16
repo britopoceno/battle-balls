@@ -71,8 +71,10 @@ function rodar(seed: number, team: PickSetup[] = TIME): RoundResult {
  * `docs/architecture.md` §6 declara hash IDÊNTICO nos passos 1 a 7 — se algum deles
  * mexer nestes números, a refatoração mudou o jogo e a story falhou.
  *
- * A seed 11 é deliberada: exercita o caminho de empate (winner === -1), que é o que
- * a decisão D-02 (`docs/prd.md` §5) regulamenta.
+ * A seed 11 ERA deliberada para exercitar o caminho de empate (winner === -1, D-02,
+ * `docs/prd.md` §5) — o re-baseline de `e3.6` a tirou desse papel (hoje `winner: 1`).
+ * Quem cobre o empate agora é a seed 379, re-fixada por `debt.8` (ver a última linha
+ * da tabela e o bloco de achado abaixo).
  *
  * NÃO "atualize" esta tabela para fazer o teste passar. Se a execução não bate, o bug
  * está na execução. Mudança de baseline exige justificativa registrada no commit.
@@ -90,12 +92,10 @@ function rodar(seed: number, team: PickSetup[] = TIME): RoundResult {
  * parte do jogo. Ver Dev Agent Record de `e3.6` para a íntegra da bissecção e o veredito do @qa
  * sobre o desvio do AC 8.
  *
- * **Achado registrado, não corrigido aqui:** a seed 11 era deliberada para exercitar o caminho de
- * EMPATE (`winner === -1`, ver comentário acima). Neste re-baseline ela não empata mais
- * (`winner: 1`) — a cobertura do caminho de empate perdeu a seed que a garantia. Não é escopo
- * desta story achar uma seed substituta (T-1 pede re-gravar com justificativa, não re-desenhar a
- * tabela); fica para quem tocar `BASELINE` a seguir confirmar se algum caminho ainda exercita
- * `winner === -1`, ou se a Fase 3 perdeu essa rede sem perceber.
+ * **Achado registrado em `e3.6`, RESOLVIDO por `debt.8` (TEST-102 do gate de `e3.6`):** a seed 11
+ * era deliberada para exercitar o caminho de EMPATE (`winner === -1`) e deixou de empatar neste
+ * re-baseline (`winner: 1`), o que zerou a cobertura do ramo. A seed 379 abaixo re-fixa o caminho
+ * pelo motor real (`runRound` → `step` → `checkEnd`), achada por BUSCA, não escolhida (Artigo IV).
  */
 const BASELINE: { seed: number; hash: string; ticks: number; winner: number }[] = [
   { seed: 1, hash: '327b60f3', ticks: 4110, winner: 1 },
@@ -103,6 +103,13 @@ const BASELINE: { seed: number; hash: string; ticks: number; winner: number }[] 
   { seed: 3, hash: 'adfceac2', ticks: 4099, winner: 0 },
   { seed: 7, hash: 'cdd32326', ticks: 3972, winner: 1 },
   { seed: 11, hash: '5904fbe4', ticks: 4279, winner: 1 },
+  // debt.8 — cobertura de empate re-fixada. Origem (AC 6): varredura de 180 seeds (200-379,
+  // scanner descartável da Task 1, primeira que empatou) sob ESCALA_HP = 6.0, TIME padrão e
+  // dummyDriver congelado; dupla execução reproduziu hash/ticks/winner idênticos. É empate por
+  // DUPLO-KO em 3831 ticks (~63,9s) — os dois times morrem no mesmo tick após o encolhimento de
+  // morte súbita —, não pelo teto de 150s: cobre o mesmo `winner === -1` de `checkEnd` por um
+  // caminho mais barato de rodar. Se este valor divergir, o ramo de empate do motor mudou.
+  { seed: 379, hash: 'a2bb5327', ticks: 3831, winner: -1 },
 ]
 
 /**

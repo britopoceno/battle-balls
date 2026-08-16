@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+InReview
 
 ## Executor Assignment
 
@@ -164,29 +164,29 @@ atalho) e a fronteira "nada em `sim/`" precisa de disciplina, não só de inten�
 
 ## Tasks / Subtasks
 
-- [ ] Task 1 — Localizar seed(s) candidata(s) por busca (AC: 3, 4)
-  - [ ] Escrever um scanner (script standalone em `src/tools/`, ou execução ad-hoc reaproveitando `rodar(seed)` já existente em `determinism.ts`) que testa seeds fora das já reservadas (1/2/3/7/11, 101-105, 9001, 1-40) com o `TIME` padrão, até achar uma que retorne `winner === -1`
-  - [ ] Registrar, a partir da execução real, quantas seeds foram varridas até achar a primeira (não estimar)
-  - [ ] Confirmar reprodutibilidade: rodar a seed achada duas vezes e conferir hash/ticks idênticos entre as execuções (mesmo critério do bloco de autoconsistência)
+- [x] Task 1 — Localizar seed(s) candidata(s) por busca (AC: 3, 4)
+  - [x] Escrever um scanner (script standalone em `src/tools/`, ou execução ad-hoc reaproveitando `rodar(seed)` já existente em `determinism.ts`) que testa seeds fora das já reservadas (1/2/3/7/11, 101-105, 9001, 1-40) com o `TIME` padrão, até achar uma que retorne `winner === -1`
+  - [x] Registrar, a partir da execução real, quantas seeds foram varridas até achar a primeira (não estimar)
+  - [x] Confirmar reprodutibilidade: rodar a seed achada duas vezes e conferir hash/ticks idênticos entre as execuções (mesmo critério do bloco de autoconsistência)
 
-- [ ] Task 2 — Pinar a entrada golden (AC: 3, 5, 6)
-  - [ ] Adicionar a seed achada como 6ª linha de `BASELINE` com `{ seed, hash, ticks, winner: -1 }` (ou implementar a checagem dedicada, se essa for a rota escolhida no AC 4)
-  - [ ] Escrever o comentário de origem (busca, faixa, contagem) e corrigir o comentário existente sobre a seed 11 que hoje afirma algo que `e3.6` tornou falso
-  - [ ] Confirmar que o laço de comparação existente (`for (const esperado of BASELINE)`, `determinism.ts:166-178`) cobre a nova linha sem mudança de lógica — só de dado
+- [x] Task 2 — Pinar a entrada golden (AC: 3, 5, 6)
+  - [x] Adicionar a seed achada como 6ª linha de `BASELINE` com `{ seed, hash, ticks, winner: -1 }` (ou implementar a checagem dedicada, se essa for a rota escolhida no AC 4)
+  - [x] Escrever o comentário de origem (busca, faixa, contagem) e corrigir o comentário existente sobre a seed 11 que hoje afirma algo que `e3.6` tornou falso
+  - [x] Confirmar que o laço de comparação existente (`for (const esperado of BASELINE)`, `determinism.ts:166-178`) cobre a nova linha sem mudança de lógica — só de dado
 
-- [ ] Task 3 — Confirmar a fronteira `sim/`/`tuning.ts` intocada (AC: 5)
-  - [ ] `git diff --stat` restrito a `src/tools/` (e ao arquivo desta story)
-  - [ ] Confirmar `ESCALA_HP`/`ESCALA_DMG` em `src/chars/tuning.ts` inalterados (6.0 / 1.0)
+- [x] Task 3 — Confirmar a fronteira `sim/`/`tuning.ts` intocada (AC: 5)
+  - [x] `git diff --stat` restrito a `src/tools/` (e ao arquivo desta story)
+  - [x] Confirmar `ESCALA_HP`/`ESCALA_DMG` em `src/chars/tuning.ts` inalterados (6.0 / 1.0)
 
-- [ ] Task 4 — Avaliar o SHOULD do AC 7 (AC: 7)
-  - [ ] Decidir se vale implementar uma rede de "empates >= 1" sobre um conjunto com garantia por construção; registrar a decisão e o motivo, seja qual for
-  - [ ] Se implementado: confirmar que o conjunto escolhido inclui a seed do AC 3/4 (ou outro mecanismo que garanta >=1 empate sem depender de sorte)
-  - [ ] Se não implementado: registrar o motivo na Dev Agent Record, não deixar implícito
+- [x] Task 4 — Avaliar o SHOULD do AC 7 (AC: 7)
+  - [x] Decidir se vale implementar uma rede de "empates >= 1" sobre um conjunto com garantia por construção; registrar a decisão e o motivo, seja qual for
+  - [x] Se implementado: confirmar que o conjunto escolhido inclui a seed do AC 3/4 (ou outro mecanismo que garanta >=1 empate sem depender de sorte)
+  - [x] Se não implementado: registrar o motivo na Dev Agent Record, não deixar implícito
 
-- [ ] Task 5 — Verificação final (AC: 1, 2, 3, 5)
-  - [ ] `npm run check` — 0 erros
-  - [ ] `npm run sim:check` — as 10 entradas existentes idênticas às do AC 2, a nova entrada de empate batendo, resto do relatório verde (determinismo 40/40, build coverage, replay, bot dupla execução, bot replay, guarda BOT-001, catálogo, replay de partida Bo5, Pilar 3)
-  - [ ] Teste negativo manual (mesmo padrão de `debt.0`): corromper um dígito da nova entrada e confirmar que o script lança erro nomeando seed/campo/esperado/obtido; restaurar em seguida
+- [x] Task 5 — Verificação final (AC: 1, 2, 3, 5)
+  - [x] `npm run check` — 0 erros
+  - [x] `npm run sim:check` — as 10 entradas existentes idênticas às do AC 2, a nova entrada de empate batendo, resto do relatório verde (determinismo 40/40, build coverage, replay, bot dupla execução, bot replay, guarda BOT-001, catálogo, replay de partida Bo5, Pilar 3)
+  - [x] Teste negativo manual (mesmo padrão de `debt.0`): corromper um dígito da nova entrada e confirmar que o script lança erro nomeando seed/campo/esperado/obtido; restaurar em seguida
 
 ## Dev Notes
 
