@@ -1,0 +1,135 @@
+{
+  "versao": "bb.telemetria.v1",
+  "exportadoEm": "2026-08-04T03:43:43.371Z",
+  "eventos": [
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 1,
+      "anguloErro": 41.2146374915954,
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 1,
+      "anguloErro": 138.281324491767,
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 1,
+      "anguloErro": 69.67819237018526,
+      "partida": 262981154
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 0,
+      "duracaoMs": 11683.333333333334,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 1,
+      "anguloErro": 149.89185154341152,
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 1,
+      "anguloErro": 21.36595740719435,
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 1,
+      "anguloErro": 168.36471446977026,
+      "partida": 262981154
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 1,
+      "duracaoMs": 15316.666666666668,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 262981154
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 1,
+      "itemId": "chumbo",
+      "trilha": "fisica",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 262981154
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 0,
+      "itemId": "lamina",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 1,
+      "anguloErro": 22.304510659852095,
+      "partida": 262981154
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 1,
+      "anguloErro": 153.42510879777802,
+      "partida": 262981154
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 2,
+      "duracaoMs": 14383.333333333334,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 262981154
+    },
+    {
+      "t": "partidaFim",
+      "rodadas": 3,
+      "placar": [
+        0,
+        3
+      ],
+      "partida": 262981154
+    }
+  ]
+}

@@ -1,0 +1,1407 @@
+{
+  "versao": "bb.telemetria.v1",
+  "exportadoEm": "2026-08-05T05:46:47.708Z",
+  "eventos": [
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 14,
+      "anguloErro": 24.033869472945597,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 15,
+      "anguloErro": 5.125728006336704,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 16,
+      "anguloErro": 7.96368644050635,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 17,
+      "anguloErro": 110.11609627856765,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 18,
+      "anguloErro": 81.50030022676212,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 25,
+      "anguloErro": 17.044214600836415,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 26,
+      "anguloErro": 38.746569763397446,
+      "partida": 320638362
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 0,
+      "duracaoMs": 20350,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 30,
+      "anguloErro": 14.196124751049911,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 31,
+      "anguloErro": 35.615272752627774,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 32,
+      "anguloErro": 61.157107222487284,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 33,
+      "anguloErro": 168.73839707703115,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 34,
+      "anguloErro": 164.02756419517542,
+      "partida": 320638362
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 1,
+      "duracaoMs": 15333.333333333334,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 320638362
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 1,
+      "itemId": "borracha",
+      "trilha": "fisica",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 320638362
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 0,
+      "itemId": "luneta",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 44,
+      "anguloErro": 29.283695626946777,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 45,
+      "anguloErro": 12.164042068556364,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 46,
+      "anguloErro": 56.91071319903949,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 47,
+      "anguloErro": 47.852777984129816,
+      "partida": 320638362
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 2,
+      "duracaoMs": 12216.666666666668,
+      "vencedor": 0,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 320638362
+    },
+    {
+      "t": "compra",
+      "rodada": 3,
+      "jogador": 1,
+      "itemId": "relicario",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 320638362
+    },
+    {
+      "t": "compra",
+      "rodada": 3,
+      "jogador": 0,
+      "itemId": "relicario",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 0,
+      "ponteiro": 60,
+      "anguloErro": 111.50817773214618,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 61,
+      "anguloErro": 6.844683168426181,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 0,
+      "ponteiro": 62,
+      "anguloErro": 36.15817524644089,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 63,
+      "anguloErro": 11.70112643518575,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 64,
+      "anguloErro": 0.05321044273336948,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 65,
+      "anguloErro": 6.611567607130431,
+      "partida": 320638362
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 66,
+      "anguloErro": 21.516175453508858,
+      "partida": 320638362
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 3,
+      "duracaoMs": 14883.333333333334,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 320638362
+    },
+    {
+      "t": "partidaFim",
+      "rodadas": 4,
+      "placar": [
+        1,
+        3
+      ],
+      "partida": 320638362
+    },
+    {
+      "t": "buildPadrao",
+      "rodada": 0,
+      "jogador": 0,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 12,
+      "anguloErro": 70.5897502126819,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 14,
+      "anguloErro": 178.88292830228522,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 15,
+      "anguloErro": 18.376881192926128,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 16,
+      "anguloErro": 22.321358270671197,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 20,
+      "anguloErro": 67.705696568937,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 21,
+      "anguloErro": 67.6938064760332,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 23,
+      "anguloErro": 175.43221913298288,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 24,
+      "anguloErro": 0.46448113195326646,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 26,
+      "anguloErro": 0.0496042335413376,
+      "partida": 734981348
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 0,
+      "duracaoMs": 21300,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 28,
+      "anguloErro": 2.4936142804667742,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 29,
+      "anguloErro": 13.43771926246878,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 30,
+      "anguloErro": 84.19357079847146,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 31,
+      "anguloErro": 20.775559460066674,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 32,
+      "anguloErro": 2.0615641588060947,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 33,
+      "anguloErro": 5.279592521957043,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 35,
+      "anguloErro": 63.894354049304546,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 36,
+      "anguloErro": 113.90035641696366,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 37,
+      "anguloErro": 112.07844964760167,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 39,
+      "anguloErro": 87.23936607954485,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 40,
+      "anguloErro": 174.44126899576102,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 41,
+      "anguloErro": 11.499043954224167,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 42,
+      "anguloErro": 4.136298678387757,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 43,
+      "anguloErro": 140.73222587571797,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 44,
+      "anguloErro": 133.39285708992912,
+      "partida": 734981348
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 1,
+      "duracaoMs": 14050.000000000002,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 734981348
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 1,
+      "itemId": "lixa",
+      "trilha": "fisica",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 734981348
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 0,
+      "itemId": "lamina",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 50,
+      "anguloErro": 33.352123362752785,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 51,
+      "anguloErro": 15.3757447491049,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 52,
+      "anguloErro": 98.83361805308441,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 53,
+      "anguloErro": 78.70877262021413,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 54,
+      "anguloErro": 23.708681669631087,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 55,
+      "anguloErro": 41.52678566503758,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 59,
+      "anguloErro": 163.5756340355366,
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 60,
+      "anguloErro": 166.05700267435256,
+      "partida": 734981348
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 2,
+      "duracaoMs": 13783.333333333334,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 734981348
+    },
+    {
+      "t": "partidaFim",
+      "rodadas": 3,
+      "placar": [
+        0,
+        3
+      ],
+      "partida": 734981348
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 75,
+      "anguloErro": 5.720030757463948,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 76,
+      "anguloErro": 54.03920387405954,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 77,
+      "anguloErro": 6.785836224255242,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 79,
+      "anguloErro": 29.98046534483677,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 80,
+      "anguloErro": 4.771422920099685,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 82,
+      "anguloErro": 7.448665865128267,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 83,
+      "anguloErro": 67.60816225837728,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 84,
+      "anguloErro": 67.24246686962452,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 86,
+      "anguloErro": 161.8373099798936,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 88,
+      "anguloErro": 143.50274933562204,
+      "partida": 21386782
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 0,
+      "duracaoMs": 13516.666666666668,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 93,
+      "anguloErro": 23.709310376206734,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 94,
+      "anguloErro": 41.93875830867568,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 95,
+      "anguloErro": 15.340773624556855,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 96,
+      "anguloErro": 30.99027112541361,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 97,
+      "anguloErro": 43.77587614598243,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 98,
+      "anguloErro": 55.49803379744014,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 99,
+      "anguloErro": 62.34015074753256,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 100,
+      "anguloErro": 58.23722610651708,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 101,
+      "anguloErro": 3.6422045466262376,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 102,
+      "anguloErro": 8.180422262696622,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 104,
+      "anguloErro": 0.9783207723894746,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 105,
+      "anguloErro": 20.850448020307443,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 106,
+      "anguloErro": 32.5990034428977,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 107,
+      "anguloErro": 14.234579919517982,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 108,
+      "anguloErro": 72.84728101991477,
+      "partida": 21386782
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 1,
+      "duracaoMs": 14283.333333333334,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 21386782
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 1,
+      "itemId": "borracha",
+      "trilha": "fisica",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 21386782
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 12,
+      "ladoDaTela": "esq",
+      "mag": 0.9672160637371608,
+      "anguloErro": 10.978333057059766,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 13,
+      "ladoDaTela": "dir",
+      "mag": 0.7414337507012795,
+      "anguloErro": 8.47854768850654,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 14,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 16.363888336013222,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 15,
+      "ladoDaTela": "dir",
+      "mag": 0.6215733899914574,
+      "anguloErro": 62.71035921414001,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 16,
+      "ladoDaTela": "esq",
+      "mag": 0.05967838487716706,
+      "anguloErro": 154.22847144655387,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 17,
+      "ladoDaTela": "esq",
+      "mag": 0.7289063517098007,
+      "anguloErro": 1.058894564943343,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 18,
+      "ladoDaTela": "dir",
+      "mag": 0.8577732215075533,
+      "anguloErro": 119.00697242255018,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 19,
+      "ladoDaTela": "dir",
+      "mag": 0.023197996073442834,
+      "anguloErro": 105.55939093256552,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 1,
+      "ponteiro": 20,
+      "ladoDaTela": "dir",
+      "mag": 0.004743928174889346,
+      "anguloErro": 74.89753322670099,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 0,
+      "ballIndex": 0,
+      "ponteiro": 23,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 3.388050398926881,
+      "partida": 82669425
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 0,
+      "duracaoMs": 29200.000000000004,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 27,
+      "ladoDaTela": "esq",
+      "mag": 0.6941194890860566,
+      "anguloErro": 5.43784028474343,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 28,
+      "ladoDaTela": "dir",
+      "mag": 1,
+      "anguloErro": 39.181528463771215,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 29,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 28.451444281739583,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 30,
+      "ladoDaTela": "dir",
+      "mag": 0.8732582509740953,
+      "anguloErro": 52.54263005558527,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 31,
+      "ladoDaTela": "dir",
+      "mag": 0.3986944544217333,
+      "anguloErro": 21.730258747604548,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 0,
+      "ponteiro": 34,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 11.344262364786914,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 1,
+      "ballIndex": 1,
+      "ponteiro": 35,
+      "ladoDaTela": "dir",
+      "mag": 0.5459420533069224,
+      "anguloErro": 5.752637550019986,
+      "partida": 82669425
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 1,
+      "duracaoMs": 21333.333333333336,
+      "vencedor": 0,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 82669425
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 1,
+      "itemId": "lixa",
+      "trilha": "fisica",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 82669425
+    },
+    {
+      "t": "compra",
+      "rodada": 2,
+      "jogador": 0,
+      "itemId": "lamina",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 47,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 7.060921713193045,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 48,
+      "ladoDaTela": "dir",
+      "mag": 0.577460893119141,
+      "anguloErro": 1.3806668062772403,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 49,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 12.75234698456827,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 51,
+      "ladoDaTela": "dir",
+      "mag": 0.7110783764785937,
+      "anguloErro": 158.94274916079007,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 53,
+      "ladoDaTela": "dir",
+      "mag": 0.09350829627896737,
+      "anguloErro": 88.91524637691558,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 1,
+      "ponteiro": 54,
+      "ladoDaTela": "dir",
+      "mag": 0.06929394711918743,
+      "anguloErro": 53.31896159613524,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 55,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 10.831794740462712,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 57,
+      "ladoDaTela": "esq",
+      "mag": 0.006289971055647513,
+      "anguloErro": 162.20470273244499,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 59,
+      "ladoDaTela": "esq",
+      "mag": 0.9669771282163333,
+      "anguloErro": 27.15581966706116,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 2,
+      "ballIndex": 0,
+      "ponteiro": 60,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 33.23513734201868,
+      "partida": 82669425
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 2,
+      "duracaoMs": 27400.000000000004,
+      "vencedor": 1,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 82669425
+    },
+    {
+      "t": "compra",
+      "rodada": 3,
+      "jogador": 1,
+      "itemId": "luneta",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 82669425
+    },
+    {
+      "t": "compra",
+      "rodada": 3,
+      "jogador": 0,
+      "itemId": "couraca",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 3,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 0,
+      "ponteiro": 74,
+      "ladoDaTela": "esq",
+      "mag": 0.8427633319296078,
+      "anguloErro": 2.7341857580074205,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 75,
+      "ladoDaTela": "dir",
+      "mag": 1,
+      "anguloErro": 6.214266272943724,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 0,
+      "ponteiro": 76,
+      "ladoDaTela": "esq",
+      "mag": 0,
+      "anguloErro": 103.91758377834593,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 0,
+      "ponteiro": 77,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 13.96447810245564,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 78,
+      "ladoDaTela": "dir",
+      "mag": 0.5969972766071546,
+      "anguloErro": 9.923889929878143,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 1,
+      "ponteiro": 79,
+      "ladoDaTela": "dir",
+      "mag": 0,
+      "anguloErro": 158.6725606668669,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 3,
+      "ballIndex": 0,
+      "ponteiro": 80,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 1.4486428800501143,
+      "partida": 82669425
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 3,
+      "duracaoMs": 22883.333333333336,
+      "vencedor": 0,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 82669425
+    },
+    {
+      "t": "compra",
+      "rodada": 4,
+      "jogador": 1,
+      "itemId": "lamina",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 4,
+      "partida": 82669425
+    },
+    {
+      "t": "compra",
+      "rodada": 4,
+      "jogador": 0,
+      "itemId": "luneta",
+      "trilha": "combate",
+      "preco": 6,
+      "ouroDepois": 4,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 0,
+      "ponteiro": 95,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 6.27036223129841,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 1,
+      "ponteiro": 96,
+      "ladoDaTela": "dir",
+      "mag": 0.5163213742581112,
+      "anguloErro": 28.779963115865954,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 0,
+      "ponteiro": 97,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 5.523665204435951,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 1,
+      "ponteiro": 98,
+      "ladoDaTela": "dir",
+      "mag": 0.6023297184914997,
+      "anguloErro": 129.45355715037905,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 1,
+      "ponteiro": 100,
+      "ladoDaTela": "dir",
+      "mag": 0.04701351712691405,
+      "anguloErro": 101.71662892536419,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 0,
+      "ponteiro": 102,
+      "ladoDaTela": "esq",
+      "mag": 1,
+      "anguloErro": 4.873063694309718,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 1,
+      "ponteiro": 103,
+      "ladoDaTela": "dir",
+      "mag": 0.6487074340593052,
+      "anguloErro": 7.199439443536295,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 1,
+      "ponteiro": 105,
+      "ladoDaTela": "dir",
+      "mag": 0.05790636244190157,
+      "anguloErro": 32.42001659288306,
+      "partida": 82669425
+    },
+    {
+      "t": "cast",
+      "rodada": 4,
+      "ballIndex": 1,
+      "ponteiro": 106,
+      "ladoDaTela": "dir",
+      "mag": 0,
+      "anguloErro": 5.0804316570278125,
+      "partida": 82669425
+    },
+    {
+      "t": "rodadaFim",
+      "rodada": 4,
+      "duracaoMs": 21133.333333333336,
+      "vencedor": 0,
+      "atingiu60s": false,
+      "controle": [
+        "humano",
+        "bot"
+      ],
+      "partida": 82669425
+    },
+    {
+      "t": "partidaFim",
+      "rodadas": 5,
+      "placar": [
+        3,
+        2
+      ],
+      "partida": 82669425
+    }
+  ]
+}

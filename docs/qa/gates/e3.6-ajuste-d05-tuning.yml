@@ -1,0 +1,163 @@
+schema: 1
+story: 'e3.6'
+story_title: 'Ajuste de D-05 (`chars/tuning.ts`) — re-baseline registrado, único passo autorizado a mover o golden hash'
+gate: WAIVED
+status_reason: >-
+  Mecanicamente a story está inteira: reexecutei os quatro instrumentos do quality_gate de forma
+  independente e TODOS os números do Dev Agent Record reproduziram exatamente (`npm run check` 0
+  erros; `sim:check` verde inteiro contra a tabela NOVA; T-3 controle 51,00% dentro / mutante
+  94,97% fora; T-4 confirma a inversão do Vex e o gatilho SIM para os dois personagens). WAIVED —
+  não CONCERNS — porque o AC 8 (mediana humana em 25-35s, o alvo numérico de D-05) foi
+  conscientemente NÃO cumprido (mediana medida 58,4s em ×6.0) e substituído por decisão de produto
+  explícita do usuário, registrada verbatim no Dev Agent Record e no commit 13ee9d8 — que é
+  precisamente a definição de waiver da tabela de gates. Nada precisa de reimplementação; o que
+  resta é formalização (documentos que ainda afirmam o alvo antigo) e um risco reaberto de carona
+  (Risco #1b) que tem de chegar ao @pm/@architect antes de e3.7 mexer em preços.
+reviewer: 'Quinn (@qa) — quality_gate declarado na story'
+reviewed_revision: >-
+  commit:13ee9d8 (HEAD, árvore limpa exceto a evidência de telemetria então-untracked, agora
+  preservada em docs/evidence/telemetria/ por este gate). Range da story: 0ac1f7c..13ee9d8, quatro
+  commits, `git diff --stat` restrito a src/chars/tuning.ts, src/chars/index.ts,
+  src/tools/determinism.ts e o arquivo da story — AC 19 conferido por commit, não só no agregado.
+
+verificacao_independente:
+  - id: 'npm run check'
+    verdict: PASS
+    evidence: 'tsc --noEmit, exit 0, zero erros.'
+  - id: 'npm run sim:check (T-1, re-baseline)'
+    verdict: PASS
+    evidence: >-
+      Exit 0, tudo verde contra a tabela NOVA: golden hash 5 seeds batem, build coverage 5
+      variantes batem, autoconsistência, replay sem bot, bot dupla execução, bot replay, guarda
+      BOT-001, catálogo (8 itens), replay de partida Bo5, ponte itemBonus (hash move em 4 de 4 —
+      o instrumento continua sensível), invariante M-1, economia RF-23, compra/débito, segredo de
+      visão e Pilar 3 (golem sismico janela declarada ✓, vex nenhuma ✓). Espelho 2v2: 24-16-0 —
+      o EMPATE 0 (era ~3% em ×1.0) é o achado TEST-102 abaixo.
+  - id: 'T-3 (mutante vex:dmg:+0.30, n=3000)'
+    verdict: PASS
+    evidence: >-
+      Controle "nenhum" 51,00% ± 1,79 — dentro de 45-55%. Mutante 94,97% ± 1,79 (+43,97pp) —
+      claramente fora. O arnês de E2 continua detectando o mutante depois da alavanca. De carona:
+      9020 rodadas, mediana 67,0s, empates-por-teto 0,2%, morte súbita 77,2% — os números de R-05
+      do Dev Agent Record reproduzem.
+  - id: 'T-4 (--risco-1b)'
+    verdict: PASS (com achado maior — REQ-101)
+    evidence: >-
+      Reproduz o registro do @dev exatamente: golem físico +1,88pp / dano +17,63pp → gatilho SIM;
+      vex físico −0,62pp (NEGATIVO — a inversão vs +8,38pp de e2.7 confirma) / dano +35,12pp →
+      gatilho SIM. AC 10 pede "ver e reportar, não silenciar" quando a inversão acontece — foi
+      visto, medido duas vezes (n=800 e n=3000) e reportado; o AC está cumprido pela sua própria
+      cláusula de contingência. O resíduo institucional vira REQ-101.
+  - id: 'Evidência P3.1 (T-2) conferida na fonte, não no relato'
+    verdict: PASS
+    evidence: >-
+      Cruzei a tabela de bissecção do Dev Agent Record com os exports brutos do coletor de e3.5:
+      ×2.0 = partida 82669425 (29.2/21.3/27.4/22.9/21.1s, mediana 22,9s), ×3.0 = partida 12294565
+      (22.6/23.5/24.6/21.0s, mediana 23,0s), ×6.0 = partidas 992276418 + 670239056
+      (27.7/26.5/25.1 + 67.0/71.1/58.4/71.8s, mediana 58,4s, atingiu60s em 3 das 4) — verbatim,
+      rodada a rodada, todas com controle ["humano","bot"]. A linha do tempo dos exports intercala
+      exatamente com os commits da bissecção (ver docs/evidence/telemetria/README.md). DOC-104
+      (evidência fora do repositório) foi RESOLVIDO neste gate: os cinco exports estão preservados
+      em docs/evidence/telemetria/ com checksums conferidos.
+  - id: 'REQ-006 — identidade em ×1.0 (afirmação de commit antes irreproduzível)'
+    verdict: PASS
+    evidence: >-
+      Coloquei ESCALA_HP=1.0 temporariamente e rodei sim:check: os hashes COMPUTADOS são
+      bit-a-bit a tabela pré-e3.6 (96de1201/f66a7416/a8db9c28/cb77dbe0/6aede2d9, seed 11 com
+      winner −1; builds 19d30541/7e6aa71d/6c14e971/f1e405ff/1c1c71bb). A alavanca em 1.0 é
+      identidade perfeita e o re-baseline capturou SÓ o efeito da escala. De carona: espelho em
+      ×1.0 dá empate 7 de 40 vs 0 em ×6.0 — a perda de cobertura de empate é consequência da
+      escala, não de outra regressão. tuning.ts restaurado para 6.0 em seguida (git checkout).
+
+top_issues:
+  - id: 'REQ-101'
+    severity: high
+    finding: >-
+      O gatilho do indicador Risco #1b (PRD §6: físico < +2pp E dano > +5pp → "a trilha física
+      nasce morta"), que e2.7 fechou como NÃO para os dois personagens, agora lê SIM para OS DOIS
+      (golem +1,88/+17,63pp; vex −0,62/+35,12pp) — um veredito de portão da Fase 2 invalidado de
+      carona pela alavanca da Fase 3. Pacotes de dano valem +17,6/+35,1pp e e3.7 revisa preços em
+      cima exatamente desta economia. Hoje isso vive só no arquivo da story, sem dono rastreado.
+    suggested_action: >-
+      @pm/@architect precisam re-adjudicar o Risco #1b formalmente (com n≥3000 — o próprio arnês
+      avisa que ±3,46pp de IC em n=800 é grosso demais para um gatilho de ±2pp) ANTES de e3.7
+      mexer em preços de item, e registrar o resultado na trilha do PRD §6. Se e3.7 declarar
+      insuficiência e não repreçar (a saída esperada), a pré-condição não morde — mas a
+      re-adjudicação continua devida.
+  - id: 'TEST-102'
+    severity: medium
+    finding: >-
+      O caminho de empate da simulação (winner === -1, D-02) perdeu TODA a cobertura de regressão
+      fixada: a seed 11 do BASELINE era deliberada para exercitá-lo e agora grava winner 1; nenhuma
+      entrada de BASELINE/BUILD_BASELINE empata; o espelho 2v2 reporta empate 0 (7 em ×1.0); e o
+      teste "empate → 4/4" do match é sintético (registra o VALOR no redutor, não simula uma rodada
+      que termina −1). Sinalizado honestamente pelo @dev em determinism.ts, mas sem follow-up
+      criado — a mesma forma de rot de ARCH-E32-001/TEL-E35-003.
+    suggested_action: >-
+      Criar debt story: achar uma seed que empate sob ESCALA_HP=6.0 (ou fixture de timeout forçado
+      via MAX_ROUND_MS) para re-fixar winner === -1 no caminho real da sim, e considerar afirmar
+      empates >= 1 no espelho para a rede não sumir de novo em silêncio.
+  - id: 'REQ-103'
+    severity: medium
+    finding: >-
+      O waiver do AC 8 redefine D-05 de facto (duração-alvo deixou de ser 25-35s), mas
+      architecture-e3.md §9.2/§1.4 e o que mais cite D-05 continuam afirmando o alvo antigo — os
+      documentos agora descrevem um jogo que o produto decidiu não entregar.
+    suggested_action: >-
+      @pm/@architect emendam architecture-e3.md (e PRD, se D-05 aparecer lá) registrando o novo
+      D-05 de facto (ESCALA_HP=6.0; mediana humana medida 58,4s; morte súbita como gatilho normal
+      de clímax) citando a decisão do usuário — edição de registro, não re-decisão.
+  - id: 'REQ-105'
+    severity: low
+    finding: >-
+      R-05 foi RESOLVIDA pelo usuário (morte súbita aceita como parte do jogo), indo além do
+      "só reportar" do AC 17 — substância correta, autoridade correta, mas §14/R-05, §7.3 ("rede
+      que nunca morde") e §13.5 ainda descrevem sudden death como código morto aguardando decisão,
+      quando em ×6.0 ele dispara em 77-90% das rodadas simuladas (abrindo encolhimento de arena;
+      empate real por teto: 0,2%).
+    suggested_action: '@pm fecha R-05 na documentação com os números e a leitura corretos, citando a decisão.'
+  - id: 'DOC-106'
+    severity: low
+    finding: >-
+      T-1 pede os valores de ESCALA_HP/ESCALA_DMG na justificativa do commit; 13ee9d8 declara
+      ESCALA_HP=6.0 mas omite ESCALA_DMG. Registro canônico, sem reescrever história: o par que
+      produziu a tabela nova é ESCALA_HP = 6.0, ESCALA_DMG = 1.0 (conferido em tuning.ts@13ee9d8).
+    suggested_action: 'Nenhuma — este registro no gate completa o T-1.'
+  - id: 'REL-107'
+    severity: low
+    finding: >-
+      Os três commits intermediários da bissecção (0ac1f7c ×2.0, a4c2927 ×3.0, ddb6281 ×6.0) mudam
+      o jogo sem re-gravar baseline — sim:check falha neles, ferindo bisectabilidade e o espírito
+      do AC 18 durante a janela. Aceito para ESTA story (a bissecção precisava de builds publicados
+      para as sessões humanas).
+    suggested_action: >-
+      Padrão para futuras bissecções: branch com squash no re-baseline, ou marcador explícito
+      "sim:check esperado vermelho até o re-baseline" na mensagem de cada commit intermediário.
+  - id: 'MNT-108'
+    severity: low
+    finding: >-
+      aplicarEscala (chars/index.ts) é cópia de profundidade inconsistente: clona atk e
+      contactWindows mas compartilha abilities/passives/ult/on/move com os defs crus. Sem defeito
+      hoje (defs tratados como read-only, verificado por varredura), mas mutação futura vazaria em
+      silêncio.
+    suggested_action: 'Ao tocar o arquivo de novo: Object.freeze nos defs/entradas ou Readonly<CharDef>.'
+  - id: 'MNT-109'
+    severity: low
+    finding: >-
+      Checkbox de Pre-Commit (CodeRabbit) da story ficou desmarcado e nenhuma execução consta no
+      Dev Agent Record — o CodeRabbit deste projeto roda via WSL e não está disponível neste
+      ambiente; o gate registra o pulo em vez de deixá-lo silencioso.
+    suggested_action: 'Registrado; sem ação — a revisão independente deste gate cobriu o objetivo do passo.'
+
+waiver:
+  active: true
+  reason: >-
+    AC 8/T-2 (mediana humana em 25-35s, o alvo numérico de D-05) não cumprido pela letra — mediana
+    medida 58,4s em ESCALA_HP=6.0 — e substituído por decisão de produto explícita, prevista pela
+    própria story (§13.4: "é julgamento humano, e é por isso que D-05 é decisão de produto medida
+    nesta fase"). A mesma decisão resolve R-05 (morte súbita aceita como gatilho normal de clímax).
+  approved_by: >-
+    Usuário (autoridade de produto), decisão registrada verbatim no Dev Agent Record e no commit
+    13ee9d8: "Não tem problema algum o sudden-death, gostei da escala hpx6.0". O @dev corretamente
+    não se auto-aprovou; este gate formaliza o waiver que a decisão já continha.
+updated: '2026-08-16T14:45:00Z'
