@@ -330,9 +330,53 @@ descartável durante o desenvolvimento — não precisa virar parte permanente d
   script nomeia seed/campo/esperado/obtido e sai com erro; restaurar depois.
 - `git diff --stat` conferido para garantir que nada em `src/sim/` ou `src/chars/tuning.ts` foi tocado.
 
+## Dev Agent Record
+
+### File List
+
+**Modificados:** `src/tools/determinism.ts` (6ª linha de `BASELINE` + comentários corrigidos), este
+arquivo de story. **Nada em `src/sim/`, nada em `src/chars/tuning.ts`** (`git diff --stat`
+conferido). O scanner da Task 1 (`src/tools/scan-empate.ts`) existiu durante o desenvolvimento e
+foi descartado, como as Dev Notes previam — o processo dele está documentado no comentário da
+entrada nova.
+
+### A busca (Task 1, ACs 3/4)
+
+Scanner descartável varrendo seeds a partir de 200 (fora das reservadas 1-40, 1/2/3/7/11, 101-105,
+9001), `TIME` padrão + `dummyDriver` congelado, pelo caminho real `runRound` → `step` → `checkEnd`.
+**Resultado da execução real: 180 seeds varridas (200-379); a primeira que empatou foi a seed 379**
+— `hash a2bb5327`, `ticks 3831`, `winner -1`, dupla execução com hash/ticks/winner idênticos
+(mesmo critério do bloco de autoconsistência).
+
+**Achado de caráter:** o empate da seed 379 é por **duplo-KO no mesmo tick** (~63,9s, após o
+encolhimento de morte súbita), não pelo teto de 150s — o mais raro dos dois caminhos legítimos de
+`winner === -1` em `checkEnd`, e mais barato de rodar (3831 ticks vs 9000 do teto). A armadilha que
+o @po registrou na validação (`createWorld` inicializa `winner = -1`) não morde aqui: o pin de
+`hash` + `ticks` + dupla execução distingue o empate real de um default não sobrescrito, exatamente
+como o AC 3 desenhou.
+
+### AC 7 (SHOULD) — decisão: NÃO implementar asserção separada, e o motivo
+
+A linha pinada JÁ É a rede "≥ 1 empate garantido por construção": o laço do `BASELINE` afirma
+`winner === -1` da seed 379 em toda execução do `sim:check`, e qualquer mudança de motor que a faça
+deixar de empatar falha nomeando seed e campo. Uma contagem separada sobre seeds não controladas
+seria a aposta estatística que o próprio AC 7 proíbe (o espelho de 40 seeds reporta `empate 0` sob
+×6.0); uma contagem sobre um conjunto que inclui a 379 seria tautologia da linha que já existe.
+Registrado aqui, não deixado implícito.
+
+### Verificação executada (Task 5)
+
+| Prova | Resultado |
+|---|---|
+| `npm run check` | 0 erros |
+| `npm run sim:check` | verde inteiro — **"golden hash ✓ ok — 6 seeds batem o baseline"**, as 10 entradas pré-existentes idênticas dígito a dígito à tabela do AC 2, build coverage 5/5, determinismo 40/40, Pilar 3 ok. De carona: os blocos de replay e de dupla execução do bot agora também cobrem a seed 379 ("replay ✓ ok — 6 seeds", "bot dupla exec ✓ ok — 6 seeds") — a cobertura de empate entrou em TRÊS redes, não uma |
+| Teste negativo (padrão `debt.0`) | corrompido um dígito do hash da 379 → `✗ baseline seed 379: hash esperado a2bb5328, obtido a2bb5327` + `golden hash ✗ 1 desvio(s)` — nomeia seed, campo, esperado e obtido; restaurado em seguida (conferido por grep) |
+| `git diff --stat` | `src/tools/determinism.ts` + este arquivo — nada em `src/sim/`, nada em `chars/tuning.ts` (AC 5) |
+
 ## Change Log
 
 | Date | Version | Description | Author |
 |---|---|---|---|
+| 2026-08-16 | 2.0.0 | **Desenvolvimento completo — Status: Ready → InProgress → InReview.** Busca real (Task 1): 180 seeds varridas (200-379), primeira com `winner === -1` foi a **seed 379** (`a2bb5327`, 3831 ticks), dupla execução reproduz — empate por duplo-KO (~63,9s), não pelo teto. Pinada como 6ª linha de `BASELINE` com comentário de origem (faixa varrida + contagem, AC 6); comentários obsoletos da seed 11 corrigidos nos dois lugares. AC 7 (SHOULD) decidido como NÃO implementar asserção separada, com motivo registrado. `sim:check` verde com 6 seeds, 10 entradas antigas intactas dígito a dígito, teste negativo nomeando seed/campo, replay e bot dupla exec cobrindo a 379 de carona. Scanner descartado após uso. | @dev |
 | 2026-08-16 | 1.0 | Story criada a partir do achado `TEST-102` do gate `WAIVED` de `e3.6` (`docs/qa/gates/e3.6-ajuste-d05-tuning.yml`) e do comentário já existente em `src/tools/determinism.ts` sobre a seed 11. | River (@sm) |
 | 2026-08-16 | 1.1.0 | Validated GO (9/10) — Status: Draft → Ready. **Os 10 valores do AC 2 foram reconferidos campo a campo contra `src/tools/determinism.ts` no HEAD (não contra a prosa da story): as 5 linhas de `BASELINE` (`:101-105`) e as 5 de `BUILD_BASELINE` (`:136-140`) batem seed, hash, ticks e vencedor exatamente, incluindo os rótulos das variantes.** Todas as referências de linha citadas existem onde alegado: `world.ts:28` `SUDDEN_DEATH_MS = 60_000`, `world.ts:31` `const MAX_ROUND_MS = 150_000` (não exportado — ver ressalva abaixo), `world.ts:610-617` `checkEnd` (o bloco transcrito na Dev Notes é fiel linha a linha), `world.ts:25-26` `TICK_HZ`/`TICK_MS`, `partida.ts:779-793` `invarianteCompra` com o `ResultadoRodada` fabricado em `:786-793` (`vencedor: -1`, `ticks: 600`, `hash: 'bbbbbbbb'` — verbatim), `determinism.ts:74-76` (comentário "a seed 11 é deliberada"), `:82` (a exceção de `e3.6`), `:93-98` (o achado do @dev), `:143` (`SEEDS = 40`), `:166-178` (o laço de comparação, que é dirigido por dado e cobre uma 6ª linha sem mudança de lógica — Task 2 está certa). Lista de seeds reservadas do AC 4 correta e completa para o alcance da story: 1/2/3/7/11 (`BASELINE`), 101-105 (`BUILD_BASELINE`), 9001 (`SEED_GUARDA`, `:347`), 1-40 (espelho). **Artigo IV — nenhum AC inventa número:** `ESCALA_HP = 6.0`/`ESCALA_DMG = 1.0` conferidos em `tuning.ts:10-11`; os 9000 ticks do teto são derivação correta de `150_000 / (1000/60)`; o espelho "24 · 16 · empate 0" da sessão de draft bate com o gate de `e3.6` ("Espelho 2v2: 24-16-0"); "empate 7 em ×1.0" tem **duas** fontes independentes (gate `REQ-006` e PRD §5/D-02, "7 de 40 rodadas (17,5%) — todos duplo-KO"); a citação de `TEST-102` e do `suggested_action` é verbatim; e o "0,2% de empates-por-teto" está corretamente rotulado como contexto de plausibilidade do `heuristic` sob mutação, **não** como previsão para o `dummyDriver` — exatamente a disciplina que o Artigo IV pede. **Executabilidade do AC 3 conferida no código, e ela não era óbvia:** `runRound` tem teto próprio, `MAX_ROUND_TICKS = 60 * 180 = 10800` (`harness.ts:20,68`), acima dos 9000 ticks em que `checkEnd` declara empate — o caminho de empate por teto **é alcançável** através de `rodar()`, com 1800 ticks de folga. **Ressalva que o @dev precisa ver antes de implementar o AC 7:** `createWorld` inicializa `world.winner = -1` (`world.ts:76`), então `winner === -1` sozinho **não** discrimina empate real de rodada que saiu do laço sem `over` — o que fecha esse buraco é justamente o AC 3 exigir `hash` + `ticks` pinados junto do vencedor. Uma contagem de empates que teste só `winner === -1` (a forma do bloco do espelho, `:157-159`) herdaria o mesmo modo de falha silenciosa que a story existe para corrigir. **Should-Fix não bloqueante, registrado sem emendar o AC:** o exemplo da "alternativa aceitável" do AC 4 está invertido — "cenário HP baixo" **encurta** a rodada e afasta do teto de 150s; para bater o teto é preciso o contrário (HP alto ou dano baixo), e o caminho limpo existe sem tocar `sim/`, porque `createWorld(chars, setup)` e `runRound(chars, ...)` recebem o registro de personagens por parâmetro (`world.ts:62`, `harness.ts:61-66`) — dá para injetar um `CHARS` inflado de dentro de `tools/`. Somado a isso: `MAX_ROUND_MS` **não é exportado**, então a alternativa não pode referenciar a constante, e exportá-la violaria o AC 5, que a nomeia explicitamente como intocável. Nada disso bloqueia: o AC 4 delega o mecanismo ao @dev e a rota primária (varredura de seeds) é inequívoca. **Imprecisão de citação (única dedução real):** o AC 5 atribui a `architecture-e3.md` §9.2 a frase "só `e3.0` foi autorizada a tocar `world.ts`" — o mandato existe e é verdadeiro, mas mora em **§9.1** ("`sim/` permanece intocado por toda a fase — só o passo 0 (REL-001) encosta em `world.ts`"); §9.2 trata da autorização de mover o **hash**, que a story cita corretamente noutro ponto. Confirmado que **nenhum AC exige tocar `src/sim/` ou `src/chars/tuning.ts`**, e que o AC 7 acerta ao proibir a asserção ingênua sobre o espelho (ela quebraria o `sim:check` na hora, com `empate 0` hoje). Escopo IN/OUT explícito, dependência de `e3.6` correta, AC 8 corretamente fora de escopo. | @po (Pax) |
