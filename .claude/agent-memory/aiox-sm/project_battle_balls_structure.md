@@ -39,3 +39,21 @@ ACs are T-1 to T-4 from architecture §9.2, not "hash idêntico". Also found and
 second doc inconsistency in `architecture-e3.md`: §8.1 says `PRESET_SOLO` lives in the same file as
 `PRESET_ARNES` (`heuristic.ts`), but Anexo A's file map lists it under `bot/partida.ts` — registered as an
 open question for @architect in story `e3.3`, not decided unilaterally.
+
+**`debt.*` numbering continues past `debt.7` for QA-gate-spawned follow-ups, not just architecture-migration
+steps.** Created `debt.8` (2026-08-16) from `TEST-102`, a finding in the `e3.6` QA gate
+(`docs/qa/gates/e3.6-ajuste-d05-tuning.yml`, gate WAIVED): the `e3.6` re-baseline (`ESCALA_HP` 1.0→6.0) made
+seed 11 of `determinism.ts`'s `BASELINE` table stop exercising `winner === -1` (tie path), and the 40-seed
+mirror block went from 7/40 ties to 0/40. `debt.8` mandates finding a NEW tie-seed by scanning under the
+current tuning (not re-tuning, not touching `sim/`) and pinning it as a 6th `BASELINE` entry — same `debt.N`
+slug convention as the original migration epic, but this one has no corresponding architecture.md step; it's
+just "next debt number, spawned by a gate finding."
+
+**`debt.9`** (2026-08-16), from `E37-FUP-001` (`e3.7` gate, CONCERNS): "Revisão de D-09, rodada 2" —
+re-pricing `src/shop/catalogo.ts`/`ECONOMIA_PROVISORIA` (`src/match/economia.ts`), explicitly BLOCKED on two
+preconditions neither satisfied at creation time: (a) formal Risco #1b re-adjudication by @pm/@architect at
+n≥3000 (still `ABERTO` per `architecture-e3.md` §14 errata and `e3.6`/`REQ-101`), (b) a fresh human-telemetry
+sample collected 100% at `ESCALA_HP=6.0` with a self-justified a-priori floor of n≥30 purchases (real ×6.0
+evidence today: 2 matches, 3 purchases — `e3.7` failed at n=11 mixing 4 game scales). Also folds in
+`E37-EVD-002` (jurosPorDezOuro/tetoDeJuros never exercised) as a new AC. Same pattern as `debt.8`: gate
+finding → next `debt.N`, no architecture.md step behind it.

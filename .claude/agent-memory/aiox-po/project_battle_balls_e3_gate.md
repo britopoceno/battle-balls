@@ -11,10 +11,23 @@ Validated 2026-07-29: 8 stories `e3.0`-`e3.7`, all GO, all `Ready`.
 **The golden-hash rule flips, but only once.** Steps 0-5 and 7 (`e3.0`-`e3.5`, `e3.7`) still require
 `golden hash idêntico` on seeds 1/2/3/7/11. **`e3.6` (D-05 HP/damage tuning) is the single authorized
 exception** and its acceptance criteria are T-1..T-4 of `architecture-e3.md` §9.2, *not* "hash
-identical": re-record `BASELINE` (`determinism.ts:78-84`, 5 seeds) **and** `BUILD_BASELINE`
-(`determinism.ts:100`+, 5 variants) in the same commit with the `ESCALA_*` value written into the commit
-justification; median 25-35s measured with a human playing (P3.1, not `sim:check`); the E2 harness must
-still detect the mutant (`--mutacao=vex:dmg:+0.30 --n=3000`); `--risco-1b` deltas must not flip sign.
+identical": re-record `BASELINE` (5 seeds) **and** `BUILD_BASELINE` (5 variants) in the same commit with
+the `ESCALA_*` value written into the commit justification; median 25-35s measured with a human playing
+(P3.1, not `sim:check`); the E2 harness must still detect the mutant (`--mutacao=vex:dmg:+0.30 --n=3000`);
+`--risco-1b` deltas must not flip sign.
+
+**Status as of 2026-08-16: `e3.6` shipped and is Done, gate WAIVED.** `ESCALA_HP = 6.0` by explicit
+product decision of the user (median measured 58,4s — AC 8's 25-35s target consciously *not* met and
+waived, not failed). Both tables were re-recorded. Two consequences for validation:
+- **R-05 (sudden death) is RESOLVED, not pending P3.2** — the user accepted it as a normal part of the
+  game in the same breath. A story still treating it as "dead code awaiting a decision" is stale.
+- **The tie path (`winner === -1`, D-02) lost all pinned coverage** as a side effect of the scale
+  (mirror block went from 7 ties in 40 seeds at ×1.0 to 0 at ×6.0). That is gate finding `TEST-102`, and
+  `debt.8` is its follow-up. Note the distinction when validating: `debt.8` **adds a 6th row** to
+  `BASELINE`; it does not move the existing 10 values, so it does not breach the "`e3.6` only" rule.
+
+Do not cite line numbers for `BASELINE`/`BUILD_BASELINE` from memory — the comment blocks above them
+grew during `e3.6` and the tables have already shifted once. Read `determinism.ts` and quote it fresh.
 
 **The user's resolutions in §14 (2026-07-29) are decided, not open.** Do not let a story re-open them
 or make them conditional on further @pm confirmation:
@@ -26,7 +39,8 @@ or make them conditional on further @pm confirmation:
 - **R-07 → in scope**: "RF-36 entra de carona no substrato de §10" is affirmative. The `cast` event
   belongs to `e3.5`. A story that defers it to @pm has misread the resolution — RF-36 was already
   approved in PRD §6 for Phase 1 and never instrumented.
-- R-04 (round 6/7 income) stays provisional-and-marked; R-05 (sudden death) waits for P3.2.
+- R-04 (round 6/7 income) stays provisional-and-marked. (R-05 was resolved by the user in `e3.6` — see
+  the status note above; it is no longer waiting for P3.2.)
 
 **Why this matters:** D-05 and D-09 numbers are deliberately *not* in any document. Any story that
 states a final HP scale, price, or income number is inventing (Article IV). Stories must deliver the
