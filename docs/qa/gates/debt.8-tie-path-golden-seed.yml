@@ -1,0 +1,68 @@
+schema: 1
+story: 'debt.8'
+story_title: 'Seed de empate pinada em BASELINE — restaura a cobertura de winner === -1 (TEST-102)'
+gate: PASS
+status_reason: >-
+  Os 8 ACs cumpridos e as afirmações carga-portantes sobreviveram a escrutínio adversarial
+  independente: a varredura foi reproduzida do zero por um segundo scanner (0 empates em 200-378,
+  primeiro na 379 com hash/ticks idênticos em dupla execução), e a classificação "empate por
+  duplo-KO" não é asserção — é forçada logicamente pelos números pinados + o código de checkEnd
+  (ticks 3831 < 10800 descarta o default winner=-1 de createWorld, que sairia com ticks=10800).
+  As 10 entradas golden pré-existentes intactas dígito a dígito; escopo cirúrgico.
+reviewer: 'Quinn (@qa) — verificação e julgamento por agentes independentes (anti-self-review: o @dev desta story foi esta mesma sessão)'
+reviewed_revision: 'commit:ff6ea69 (código em 07a7e47: src/tools/determinism.ts + story; ff6ea69: Dev Agent Record da story)'
+
+verificacao_independente:
+  - id: 'Reprodução da varredura (ACs 3, 4)'
+    verdict: PASS
+    evidence: >-
+      Scanner próprio do agente verificador (escrito do zero a partir de determinism.ts, arquivo
+      temporário deletado depois, árvore limpa conferida): seeds 200-378 sem empate, primeiro
+      empate na seed 379 — hash a2bb5327, ticks 3831, winner -1, dupla execução idêntica. Bate a
+      alegação do Dev Agent Record número por número.
+  - id: 'npm run check + sim:check (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      check 0 erros; sim:check verde inteiro — "golden hash ✓ ok — 6 seeds batem o baseline",
+      6ª linha exatamente { seed: 379, hash: a2bb5327, ticks: 3831, winner: -1 }, as 10 entradas
+      pré-existentes comparadas campo a campo contra as tabelas do AC 2 — idênticas.
+  - id: 'Escopo (AC 5) e comentários (AC 6)'
+    verdict: PASS
+    evidence: >-
+      git show --stat dos dois commits: só determinism.ts + o arquivo da story; nada em src/sim/
+      nem chars/tuning.ts. Os DOIS comentários obsoletos da seed 11 corrigidos com texto preciso
+      ("ERA deliberada", "hoje winner: 1"), e o comentário da entrada nova documenta faixa,
+      contagem (180, aritmeticamente consistente) e caráter do empate sem exagerar.
+  - id: 'Julgamento adversarial do AC 3 (a armadilha do @po)'
+    verdict: PASS
+    evidence: >-
+      Provado pelos números, não pela prosa: over=true tem UM único ponto de atribuição
+      (checkEnd, world.ts:614); ticks 3831 < MAX_ROUND_TICKS 10800 prova que checkEnd encerrou;
+      tempo ~63,85s < 150s prova o ramo duplo-KO. O default winner=-1 de createWorld não
+      consegue imitar isso (saída por default pinaria ticks=10800). Contrato de falha nomeia
+      seed/campo/esperado/obtido (laço data-driven, corroborado pelo teste negativo).
+
+top_issues:
+  - id: 'QA-D8-01'
+    severity: low
+    finding: >-
+      O raciocínio do AC 7 (linha pinada = garantia por construção) é sólido contra regressão de
+      MOTOR, mas não cobre o vetor histórico de rot que motivou TEST-102: um re-baseline futuro
+      (o padrão de e3.6) pode re-gravar a linha da 379 para um winner de não-empate em silêncio —
+      só os comentários protestariam, a mesma guarda mole que já falhou em prevenir (embora tenha
+      detectado) a perda da seed 11.
+    suggested_action: >-
+      Follow-up barato para a próxima story que tocar determinism.ts (nota de backlog, não retorno
+      ao @dev): uma asserção estrutural de uma linha — se BASELINE não contém nenhuma entrada com
+      winner === -1, lançar erro — torna a própria TABELA incapaz de perder a cobertura de empate
+      num re-baseline. Por construção, sem aposta estatística, custo zero.
+  - id: 'QA-D8-02'
+    severity: low
+    finding: >-
+      O bloco de achado corrigido em determinism.ts diz "RESOLVIDO por debt.8" num commit feito
+      enquanto a story ainda estava InReview — marginalmente prematuro na hora, verdadeiro a
+      partir do fechamento deste gate. Registrado só para o histórico.
+    suggested_action: 'Nenhuma.'
+
+waiver: { active: false }
+updated: '2026-08-16T19:05:00Z'
