@@ -1,0 +1,2010 @@
+
+> battle-balls@0.0.0 balance
+> node src/tools/balance.ts --risco-1b --n=3000 --seed=1 --json
+
+
+arnês de balanceamento · bot heuristic-1 · preset arnes · plano espelho-ab · seed base 1 · n alvo 3000 (piso)
+
+auditoria de roster — aim × contactWindows (§6.3 · MNT-001)
+  golem  sismico       ativa 0  dash speed 900 ms 450                140–280  450ms dmg 14 kb 520 re-hit 250ms          ✓
+  golem  tremor        ativa 1  burst radius 110 delayMs 0            70–230  —                                         ✓
+  golem  muralha       ult      utilidade                             70–240  —                                         ✓
+  vex    lamina        ativa 0  raio radius 9 speed 620 ms 950       200–200  —                                         ✓
+  vex    deslize       ativa 1  reposicao speed 1000                 190–320  —                                         ✓
+  vex    convergencia  ult      burst radius 190 delayMs 1300         80–300  —                                         ✓
+  ✓ ok — 6 slots declarados, aim e contactWindows pareados
+
+matriz de composições (§4.1) — troca de lado obrigatória (§4.2)
+  (vazia — nenhuma célula de matriz neste plano; ver a nota do gerador e §4.1)
+
+espelhos — diagnóstico de viés de lado (§4.2) · NÃO se espera 50%
+confronto                      n_dec  n_seeds  winrate      IC   leitura
+[golem,vex] vs [golem,vex]      3000     3010   48.20%  ± 1.79   diagnóstico de lado (winrate = time 0)
+
+  … risco #1b: golem · pacote nenhum
+  … risco #1b: golem · pacote fisico
+  … risco #1b: golem · pacote dano
+  … risco #1b: vex · pacote nenhum
+  … risco #1b: vex · pacote fisico
+  … risco #1b: vex · pacote dano
+protocolo A/B — composição [golem,vex] · linha-base espelhada (§5.3)
+pacote           alvo     n_dec n_seeds  winrate      IC     delta   veredito
+nenhum           golem     3000    3010   51.00%  ± 1.79         —   ✓ dentro       (#1b — controle de golem (§5.4))
+fisico           golem     3000    3004   51.77%  ± 1.79   +0.77pp   ✓ dentro       (#1b — físico em golem (§5.4))
+dano             golem     3000    3002   69.47%  ± 1.79  +18.47pp   ✗ fora         (#1b — dano em golem (§5.4))
+nenhum           vex       3000    3010   51.00%  ± 1.79         —   ✓ dentro       (#1b — controle de vex (§5.4))
+fisico           vex       3000    3003   49.47%  ± 1.79   -1.53pp   ✓ dentro       (#1b — físico em vex (§5.4))
+dano             vex       3000    3000   86.13%  ± 1.79  +35.13pp   ✗ fora         (#1b — dano em vex (§5.4))
+                 winrate = vitórias do LADO MODIFICADO / decididas · metade das seeds com o pacote no time 0, metade no time 1 (§5.3)
+
+risco #1b (delta por personagem)
+  golem   físico +0.77pp · dano +18.47pp   → gatilho (fis<+2 e dano>+5): SIM
+  vex     físico -1.53pp · dano +35.13pp   → gatilho: SIM
+                 delta = winrate(pacote) − winrate(controle) do MESMO personagem, mesma seed base (§5.4)
+                 o gatilho é avaliado POR PERSONAGEM. Nenhuma agregação entre personagens é calculada aqui —
+                 §9/R-04 (resolução do usuário, 2026-07-28): a regra de agregação global é decisão da Fase 5,
+                 com o bot heurístico e roster maior. Os deltas invertem entre personagens, e uma média dos dois
+                 não descreveria nenhum deles.
+                 ⚠ os limiares (+2pp / +5pp) são finos perto do IC de cada winrate (±3.46pp a n=800, §4.4):
+                   um gatilho lido no piso de RF-48 é leitura de ruído. Suba --n antes de decidir por ele.
+
+rodadas          21039 · mediana 68.8s · min 44.5s · max 103.6s
+morte súbita     89.7% das rodadas atingiram 60s   (risco #6)
+empates          0.2% — 39 de 21039 rodadas   (D-02)
+                 por confronto: 0.3% ([golem,vex] vs [golem,vex] espelho) · 0.3% (A/B nenhum) · 0.1% (A/B fisico) · 0.1% (A/B dano) · …
+utilização       golem  7.31 ativas/rodada · 6.84 ults/rodada · 0.0% sem ult · 0.0% sem ativa
+                        1º cast (mediana): ativa 4.5s · ult 12.7s   (BOT-003: kit adiado ≠ kit morto)
+                 vex    4.34 ativas/rodada · 7.54 ults/rodada · 0.0% sem ult · 0.6% sem ativa
+                        1º cast (mediana): ativa 13.8s · ult 13.0s   (BOT-003: kit adiado ≠ kit morto)
+                 (a utilização agrega as rodadas do plano E do protocolo A/B, inclusive as mutadas — a taxa de empate por confronto acima separa as duas fontes)
+contadores de observação — clamp (architecture.md §7.3) e margem de tunelamento (§7.4)
+                 recomendação de arquitetura registrada · NÃO é requisito de RF e não bloqueia P2.1-P2.5
+  contexto                            recomputeStats  clamps que morderam           tunelamento (bola×tick)
+  [golem,vex] vs [golem,vex] espelho        48131820  nenhum, de 46 contadores      18 de 48111584
+      ⚠ tunelamento: 18 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+  A/B nenhum → golem                        48131820  nenhum, de 46 contadores      18 de 48111584
+      ⚠ tunelamento: 18 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+  A/B fisico → golem                        47549018  nenhum, de 46 contadores      10 de 47528790
+      ⚠ tunelamento: 10 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+  A/B dano → golem                          46548595  nenhum, de 46 contadores      6 de 46528838
+      ⚠ tunelamento: 6 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+  A/B nenhum → vex                          48131820  nenhum, de 46 contadores      18 de 48111584
+      ⚠ tunelamento: 18 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+  A/B fisico → vex                          48278076  nenhum, de 46 contadores      9 de 48258010
+      ⚠ tunelamento: 9 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+  A/B dano → vex                            43487839  nenhum, de 46 contadores      9 de 43468652
+      ⚠ tunelamento: 9 observação(ões) passaram da margem — a colisão bola-bola é discreta (sem CCD) e um par nessa faixa pode se atravessar sem detecção (§7.4)
+                 leitura (§7.3): clamp que nunca morde é rede de segurança barata e fica; que morde às vezes
+                 está funcionando como projetado; que morde SEMPRE virou regra de jogo por acidente, e volta ao
+                 usuário como decisão de produto em vez de constante escondida em sim/stats.ts.
+                 leitura (§7.4): registro = hypot(vx,vy)·dt > 0.5×(2×menor soma de raios do mundo), por bola e por
+                 tick. Zero é o esperado hoje (o pior caso do roster tem 45% de folga); o número existe para que o
+                 vetor de crescimento — impulso de cast sem teto — apareça como medida, e não como suposição.
+
+autotestes       veredito de 3 estados ✓ 7/7 casos · IC n=800 ±3.46pp · IC n=10000 ±0.98pp
+                 pares ✓ 210/378 (roster sintético de 8) · troca de lado ✓ 7 ensaios (viés puro cancela, composição não, empate é nulo, espelho não cancela, IC sobre decididas, teto de seeds)
+                 instrumentação §4.5 ✓ 3 rodadas sintéticas (4 contadores) · pacotes ✓ sinal de drag + ΣMIN/ΣMAX · --mutacao ✓ 13 casos (NaN, Infinity, 1e400, 0x10, vazio)
+                 protocolo A/B ✓ um personagem de um lado, outro lado intocado, não vira espelho · clamp ✓ 5 ensaios + 6 pacotes×roster
+                 risco #1b ✓ controle primeiro mesmo com NOMES_PACOTE invertido (QA-E26-003) · gatilho ✓ 8 casos (as duas bordas, +2pp e +5pp)
+                 contadores §7.3/§7.4 ✓ 15 ensaios (mordida != chamada, borda estrita, Σ e ABS separados, reset zera,
+                 desligado não conta, menor SOMA de raios, bola morta fora do denominador)
+
+{
+  "botVersion": "heuristic-1",
+  "preset": "arnes",
+  "plano": "espelho-ab",
+  "notaDoGerador": null,
+  "seedBase": 1,
+  "nAlvo": 3000,
+  "repetePersonagem": false,
+  "auditoriaRoster": {
+    "slots": 6,
+    "violacoes": []
+  },
+  "matriz": [],
+  "espelhos": [
+    {
+      "confronto": "[golem,vex] vs [golem,vex]",
+      "espelho": true,
+      "nDec": 3000,
+      "nSeeds": 3010,
+      "vitorias": 1446,
+      "winrate": 0.482,
+      "icPp": 1.7892270211835426,
+      "veredito": "diagnostico-de-lado",
+      "truncado": false,
+      "leitura": "vies-de-lado-time-0"
+    }
+  ],
+  "protocoloAb": [
+    {
+      "pacote": "nenhum",
+      "alvo": "golem",
+      "controle": true,
+      "leitura": "winrate-do-lado-modificado",
+      "nDec": 3000,
+      "nSeeds": 3010,
+      "vitorias": 1530,
+      "winrate": 0.51,
+      "icPp": 1.7892270211835426,
+      "deltaPp": null,
+      "veredito": "dentro",
+      "truncado": false,
+      "nota": "#1b — controle de golem (§5.4)",
+      "clamp": []
+    },
+    {
+      "pacote": "fisico",
+      "alvo": "golem",
+      "controle": false,
+      "leitura": "winrate-do-lado-modificado",
+      "nDec": 3000,
+      "nSeeds": 3004,
+      "vitorias": 1553,
+      "winrate": 0.5176666666666667,
+      "icPp": 1.7892270211835426,
+      "deltaPp": 0.77,
+      "veredito": "dentro",
+      "truncado": false,
+      "nota": "#1b — físico em golem (§5.4)",
+      "clamp": []
+    },
+    {
+      "pacote": "dano",
+      "alvo": "golem",
+      "controle": false,
+      "leitura": "winrate-do-lado-modificado",
+      "nDec": 3000,
+      "nSeeds": 3002,
+      "vitorias": 2084,
+      "winrate": 0.6946666666666667,
+      "icPp": 1.7892270211835426,
+      "deltaPp": 18.47,
+      "veredito": "fora",
+      "truncado": false,
+      "nota": "#1b — dano em golem (§5.4)",
+      "clamp": []
+    },
+    {
+      "pacote": "nenhum",
+      "alvo": "vex",
+      "controle": true,
+      "leitura": "winrate-do-lado-modificado",
+      "nDec": 3000,
+      "nSeeds": 3010,
+      "vitorias": 1530,
+      "winrate": 0.51,
+      "icPp": 1.7892270211835426,
+      "deltaPp": null,
+      "veredito": "dentro",
+      "truncado": false,
+      "nota": "#1b — controle de vex (§5.4)",
+      "clamp": []
+    },
+    {
+      "pacote": "fisico",
+      "alvo": "vex",
+      "controle": false,
+      "leitura": "winrate-do-lado-modificado",
+      "nDec": 3000,
+      "nSeeds": 3003,
+      "vitorias": 1484,
+      "winrate": 0.49466666666666664,
+      "icPp": 1.7892270211835426,
+      "deltaPp": -1.53,
+      "veredito": "dentro",
+      "truncado": false,
+      "nota": "#1b — físico em vex (§5.4)",
+      "clamp": []
+    },
+    {
+      "pacote": "dano",
+      "alvo": "vex",
+      "controle": false,
+      "leitura": "winrate-do-lado-modificado",
+      "nDec": 3000,
+      "nSeeds": 3000,
+      "vitorias": 2584,
+      "winrate": 0.8613333333333333,
+      "icPp": 1.7892270211835426,
+      "deltaPp": 35.13,
+      "veredito": "fora",
+      "truncado": false,
+      "nota": "#1b — dano em vex (§5.4)",
+      "clamp": []
+    }
+  ],
+  "risco1b": {
+    "leitura": "delta-por-personagem",
+    "limiaresDoGatilho": {
+      "fisicoMenorQuePp": 2,
+      "danoMaiorQuePp": 5
+    },
+    "nota": "gatilho avaliado POR PERSONAGEM. Nenhuma agregação entre personagens é calculada — §9/R-04 (resolução do usuário, 2026-07-28): a regra de agregação global é decisão da Fase 5.",
+    "personagens": [
+      {
+        "charId": "golem",
+        "controle": {
+          "winrate": 0.51,
+          "nDec": 3000,
+          "truncado": false
+        },
+        "deltas": [
+          {
+            "pacote": "fisico",
+            "deltaPp": 0.77,
+            "winrate": 0.5176666666666667,
+            "nDec": 3000,
+            "icPp": 1.7892270211835426,
+            "truncado": false
+          },
+          {
+            "pacote": "dano",
+            "deltaPp": 18.47,
+            "winrate": 0.6946666666666667,
+            "nDec": 3000,
+            "icPp": 1.7892270211835426,
+            "truncado": false
+          }
+        ],
+        "gatilho": true,
+        "gatilhoNaoAvaliavel": null
+      },
+      {
+        "charId": "vex",
+        "controle": {
+          "winrate": 0.51,
+          "nDec": 3000,
+          "truncado": false
+        },
+        "deltas": [
+          {
+            "pacote": "fisico",
+            "deltaPp": -1.53,
+            "winrate": 0.49466666666666664,
+            "nDec": 3000,
+            "icPp": 1.7892270211835426,
+            "truncado": false
+          },
+          {
+            "pacote": "dano",
+            "deltaPp": 35.13,
+            "winrate": 0.8613333333333333,
+            "nDec": 3000,
+            "icPp": 1.7892270211835426,
+            "truncado": false
+          }
+        ],
+        "gatilho": true,
+        "gatilhoNaoAvaliavel": null
+      }
+    ]
+  },
+  "contadores": {
+    "fonte": "architecture.md §7.3 (clamp) e §7.4 (margem de tunelamento)",
+    "natureza": "recomendacao-de-arquitetura-nao-requisito-de-rf",
+    "contextos": [
+      {
+        "contexto": "[golem,vex] vs [golem,vex] espelho",
+        "recomputeStats": 48131820,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 18,
+          "amostras": 48111584,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      },
+      {
+        "contexto": "A/B nenhum → golem",
+        "recomputeStats": 48131820,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 18,
+          "amostras": 48111584,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      },
+      {
+        "contexto": "A/B fisico → golem",
+        "recomputeStats": 47549018,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 10,
+          "amostras": 47528790,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      },
+      {
+        "contexto": "A/B dano → golem",
+        "recomputeStats": 46548595,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 6,
+          "amostras": 46528838,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      },
+      {
+        "contexto": "A/B nenhum → vex",
+        "recomputeStats": 48131820,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 18,
+          "amostras": 48111584,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      },
+      {
+        "contexto": "A/B fisico → vex",
+        "recomputeStats": 48278076,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 9,
+          "amostras": 48258010,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      },
+      {
+        "contexto": "A/B dano → vex",
+        "recomputeStats": 43487839,
+        "clamp": [
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmg",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "atkSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "cdSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "range",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ΣMAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxHp",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "mass",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MIN",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "radius",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "maxSpeed",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "steer",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "drag",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restBall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "restWall",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "dmgTaken",
+            "mordidas": 0
+          },
+          {
+            "tabela": "ABS_MAX",
+            "campo": "knockbackTaken",
+            "mordidas": 0
+          }
+        ],
+        "tunelamento": {
+          "registros": 9,
+          "amostras": 43468652,
+          "condicao": "hypot(vx,vy)*dt > 0.5*(2*menorSomaDeRaios)"
+        }
+      }
+    ]
+  },
+  "instrumentacao": {
+    "rodadas": 21039,
+    "empates": 39,
+    "taxaEmpate": 0.0018537002709254242,
+    "morteSubita": 18876,
+    "taxaMorteSubita": 0.8971909311279053,
+    "duracaoTicks": {
+      "mediana": 4131,
+      "min": 2667,
+      "max": 6214
+    },
+    "utilizacao": [
+      {
+        "charId": "golem",
+        "bolasRodada": 42078,
+        "ativasPorRodada": 7.3147963306240795,
+        "ultsPorRodada": 6.841817576881031,
+        "fracSemUlt": 0,
+        "fracSemAtiva": 0,
+        "primeiraAtivaTickMediano": 273,
+        "primeiraUltTickMediano": 764
+      },
+      {
+        "charId": "vex",
+        "bolasRodada": 42078,
+        "ativasPorRodada": 4.343885165644755,
+        "ultsPorRodada": 7.535196539759494,
+        "fracSemUlt": 0,
+        "fracSemAtiva": 0.0058225200817529355,
+        "primeiraAtivaTickMediano": 828,
+        "primeiraUltTickMediano": 779
+      }
+    ]
+  }
+}

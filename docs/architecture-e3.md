@@ -1261,14 +1261,74 @@ primeiros bloqueiam stories específicas; os três últimos podem ser decididos 
 >   partidas). Onde este documento diz "25-35s", leia-se o alvo histórico do plano, não o jogo
 >   entregue. Evidência bruta: `docs/evidence/telemetria/`; registro: story `e3.6` (Dev Agent
 >   Record) + gate WAIVED (waiver do AC 8, REQ-103).
-> - **ABERTO, não resolvido — o Risco #1b reabriu de carona** (gate `e3.6`/REQ-101, high): o
->   gatilho do PRD §6 (físico < +2pp E dano > +5pp), que `e2.7` fechou como "NÃO" para os dois
->   personagens, lê **"SIM" para os dois** em ×6.0 (golem físico +0,77pp em n=3000; vex −1,53pp,
->   inversão de sinal confirmada em duas amostras). Re-adjudicação formal @pm/@architect pendente;
->   **bloqueia o repreço de itens de D-09** (`e3.7` manteve os provisórios também por isso).
+> - **Risco #1b — reabriu de carona nesta resolução; RE-ADJUDICADO em 2026-08-18** (gate
+>   `e3.6`/REQ-101, high). Registro histórico: nesta data o item estava ABERTO — o gatilho do PRD
+>   §6 (físico < +2pp E dano > +5pp), que `e2.7` tinha lido como "NÃO", lia **"SIM" para os dois**
+>   em ×6.0 (golem físico +0,77pp em n=3000; vex −1,53pp) — e **bloqueava o repreço de itens de
+>   D-09** (`e3.7` manteve os provisórios também por isso). A re-adjudicação formal @pm/@architect
+>   está no bloco próprio logo abaixo (**não** é resolução do usuário).
 > - **R-04 — dado zero, fallback confirmado por ausência:** `e3.7` mediu **zero rodadas de índice
 >   ≥ 5** em 25 rodadas humanas; "repete o último valor" permanece até existir amostra que exercite
 >   as rodadas 6/7.
+
+> **Re-adjudicação @pm/@architect (2026-08-18, mandato REQ-101 do gate `e3.6` — não é resolução do
+> usuário; o usuário pode ratificar ou vetar qualquer parte deste bloco):**
+>
+> - **Risco #1b — RE-ADJUDICADO: o gatilho lê SIM para os dois personagens sob ×6.0.**
+>   Protocolo: o que o QA recomendou formalmente no gate `e2.7` — **n=3000 decididas por célula,
+>   4 bases de seed (1, 1001, 2001, 3001), média ENTRE BASES por personagem**. Essa média agrega
+>   **repetições do mesmo personagem**; ela não é, e não antecipa, a agregação **entre** personagens
+>   que o R-04 de `architecture-e2.md` §9 mantém adiada para a Fase 5 (não confundir com o R-04 de
+>   renda deste documento) — o veredito abaixo é por personagem.
+>   - **Medido** (IC ±1,79pp por célula, commit base `44311f6`): médias entre bases de **golem
+>     +1,325pp físico / +18,79pp dano** (sd 0,776; amplitude 1,667) e **vex +0,025pp físico /
+>     +36,18pp dano** (sd 1,081; amplitude 2,500). Por base (1 / 1001 / 2001 / 3001): golem físico
+>     +0,77 / +1,47 / +0,70 / +2,37 e dano +18,47 / +17,57 / +20,00 / +19,13; vex físico −1,53 /
+>     +0,30 / +0,37 / +0,97 e dano +35,13 / +35,47 / +37,17 / +36,97. **Veredito na média: golem
+>     SIM** (1,325 < 2 **e** 18,79 > 5) e **vex SIM** (0,025 < 2 **e** 36,18 > 5). Por base isolada,
+>     vex dá SIM em 4 de 4 e golem em 3 de 4 — o único NÃO é a base 3001, físico +2,37. Tabela
+>     completa em `docs/evidence/risco-1b-readjudicacao/README.md`.
+>   - **O que ×6.0 fez com o pacote físico: colapsou.** O vex saía de **+8,38pp** de físico na
+>     referência de `e2.7` (n=800, base 1, ×1.0) e chega a **+0,025pp** de média; o golem, de +2,62
+>     para +1,325. No mesmo movimento o pacote de dano subiu de valor: golem +10,63 → +18,79 (+77%);
+>     vex +17,63 → +36,18 (×2,05). A "inversão de sinal" do vex que o gate registrou (−1,53pp na
+>     base 1) **era ruído em torno de zero**: as quatro bases vão de −1,53 a +0,97 — todas a menos
+>     de um IC de célula (±1,79pp) de zero, compatível com um valor verdadeiro ≈0.
+>   - **`e2.7` fica registrado como leitura nunca-decisória, não como veredito que inverteu.** Aquele
+>     NÃO/NÃO foi lido a n=800, e o próprio gate de `e2.7` escreveu que quem ler "gatilho: NÃO" a
+>     n=800 e concluir que a trilha física está viva "estará lendo uma moeda" — foi por isso que ele
+>     recomendou n≥3000 e ≥3 bases, que é exatamente o protocolo executado aqui.
+>   - **Divergência numérica story `e3.6` × gate `e3.6` — explicada, sem editar o gate e sem erro no
+>     gate.** O gate/REQ-101 cita golem +1,88/+17,63 e vex −0,62/+35,12: é a leitura **n=800
+>     completa** (seed base 1) da re-execução independente do QA, reproduzida **byte a byte** em
+>     2026-08-18 (`npm run balance -- --risco-1b`, saída anexada em
+>     `docs/evidence/risco-1b-readjudicacao/risco1b-n800-base1.out`). O story publicou só o físico
+>     dessa coluna; a coincidência do +17,63 (dano do golem a n=800) com o dano do vex pré-alavanca
+>     de `e2.7` é coincidência numérica (deltas a n=800 têm granularidade de 0,125pp), não cópia. A
+>     divergência reduz-se a **n=800 × n=3000** — ambas as leituras dão SIM/SIM sob ×6.0 —; o
+>     **conjunto canônico é a tabela n=3000 do story `e3.6`**, porque o próprio arnês avisa na saída
+>     n=800 que "um gatilho lido no piso de RF-48 é leitura de ruído" (IC ±3,46pp). Nenhum gate YAML
+>     é alterado retroativamente; a re-execução de 2026-08-18 também reproduziu exatamente a tabela
+>     n=3000 do story (o arnês é determinístico).
+>   - **Consequência normativa.** A frase da tabela do PRD §6, "a trilha física nasce morta", passa a
+>     valer como **estado medido sob ×6.0**, não como previsão. A redação de §2/E2 acrescenta "e a
+>     Fase 3 precisa ser reprojetada antes de a loja existir": aquilo era **guarda pré-portão**,
+>     escrita quando a loja ainda não existia — e a loja existe hoje. A consequência operativa,
+>     portanto, é **corrigir a trilha física**, não reprojetar a fase — leitura desta re-adjudicação,
+>     sujeita a ratificação ou veto do usuário como o resto deste bloco. **A decisão de COMO corrigir
+>     (baixar preço, subir magnitude, redistribuir itens) NÃO é tomada aqui**: é do **@pm** quando
+>     `debt.9` executar (AC 9), informada por esta evidência somada à amostra ×6.0 ainda pendente.
+>   - **Desbloqueio.** Satisfaz a **pré-condição (a)** de `debt.9` (re-adjudicação formal concluída e
+>     registrada). A **pré-condição (b)** — amostra de telemetria humana 100% ×6.0 com n≥30 compras —
+>     **segue pendente**, depende do usuário jogar (hoje existem 3 compras ×6.0); enquanto ela não
+>     fechar, os preços de D-09 seguem provisórios.
+>   - **Corroboração direcional (não substitui a bateria):** a telemetria oficial registra **11 de 11
+>     compras humanas na trilha combate, 0 na física**. É instrumento diferente — telemetria mede
+>     escolha, o arnês mede desempenho —, aponta no mesmo sentido e não conta como amostra de (b).
+>
+>   Evidência bruta: `docs/evidence/risco-1b-readjudicacao/` (4 saídas `--json` de n=3000, a saída
+>   n=800 de verificação, `agrega-risco1b.mjs`, `risco1b-agregado.json`); registro: re-adjudicação
+>   @pm/@architect 2026-08-18 (mandato REQ-101, gate `e3.6`).
 
 ### R-01 — O draft degenera com roster de 2 (bloqueia a story do draft)
 

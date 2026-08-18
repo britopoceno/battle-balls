@@ -594,6 +594,88 @@ Os demais vieram do brief §4.
 > de rodadas** com o bot heurístico — segue sem se materializar; decisão "código morto vs
 > números errados" cabe à Fase 3 (D-05), após o ajuste de HP/dano com humano no controle.
 
+### 6.1 — Re-adjudicação do Risco #1b sob `ESCALA_HP = 6.0` *(2026-08-18)*
+
+> **Nota anexa, escrita pela re-adjudicação formal @pm/@architect sob mandato do achado
+> `REQ-101` (severity high) do gate `e3.6`.** A tabela acima **não foi reescrita**: ela é o
+> registro do que o usuário aprovou em 2026-07-28. O que muda aqui não é o indicador #1b — é a
+> **leitura** dele sobre o jogo que a Fase 3 entregou. Esta nota **não** é resolução do usuário;
+> o usuário pode ratificar ou vetar qualquer parte dela.
+
+**Protocolo** (o que o QA recomendou formalmente no gate `e2.7`): n ≥ 3000 lutas decididas por
+célula, ≥ 3 bases de seed, **média entre bases, por personagem**.
+
+**Medição (2026-08-18):** `npm run balance -- --risco-1b --n=3000 --seed={base} --json`, 4 bases
+(1, 1001, 2001, 3001), sobre o commit `44311f6` com working tree limpo e `npm run check` verde.
+IC por célula: **±1,79pp**. "Físico" e "dano" são os deltas de winrate dos pacotes nomeados do
+arnês — `fisico {mass:+0.20, drag:+0.20}` e `dano {dmg:+0.20}` — contra o controle na mesma seed
+base. *(A tabela acima escreve "−20% drag"; o arnês aplica `drag: +0.20`. Não é divergência
+aberta: `drag` no motor é a fração de velocidade **retida**, a tradução literal do PRD
+significaria mais atrito e inverteria o efeito medido — `src/tools/packages.ts` define os pacotes
+por NOME exatamente para blindar esse sinal, com a medição de `architecture-e2.md` §5.2
+documentada no próprio arquivo.)*
+
+| Personagem | Físico (média entre bases) | Dano (média entre bases) | Gatilho na média | Por base |
+|---|---|---|---|---|
+| golem | **+1,325pp** (sd 0,78 · amplitude 1,67) | **+18,79pp** | **SIM** — 1,325 < 2 **e** 18,79 > 5 | SIM em 3 de 4 (NÃO só na base 3001, físico +2,37) |
+| vex | **+0,025pp** (sd 1,08 · amplitude 2,50) | **+36,18pp** | **SIM** — 0,025 < 2 **e** 36,18 > 5 | SIM em 4 de 4 |
+
+**Veredito: gatilho SIM para os dois personagens sob `ESCALA_HP = 6.0` / `ESCALA_DMG = 1.0`.**
+
+**Escopo do veredito.** A média entre bases agrega **repetições do mesmo personagem** (4 bases de
+seed do mesmo protocolo) — **não** agrega personagens entre si. O veredito é **por personagem**, e
+o **R-04 de `architecture-e2.md` §9** (agregação entre personagens) segue adiado para a Fase 5,
+sem antecipação aqui.
+
+**O que isto supera.** `e2.7` leu NÃO/NÃO a n=800 sob ×1.0, mas essa foi uma **leitura
+nunca-decisória**: o próprio gate `e2.7` registrou que o NÃO do golem inverte na base 3001 a n=800
+e que "quem ler 'gatilho: NÃO' a n=800 e concluir que a trilha física está viva estará lendo uma
+moeda". Não é um veredito válido que se inverteu — é uma leitura sem força para decidir, agora
+substituída por esta.
+
+**O colapso do físico** (referência `e2.7`, n=800, base 1, ×1.0 → médias ×6.0): vex físico
+**+8,38pp → +0,025pp**; golem físico **+2,62 → +1,325**. E o dano subiu de valor: golem
+**+10,63 → +18,79** (+77%); vex **+17,63 → +36,18** (×2,05). Sob ×6.0, o pacote físico deixou de
+valer alguma coisa.
+
+**Consequência normativa.** A redação da tabela — "a trilha física nasce morta" — passa a valer
+como **estado medido do jogo entregue**. A redação de §2/E2 acrescenta "e a Fase 3 precisa ser
+reprojetada antes de a loja existir": aquilo era guarda **pré-portão** de uma loja que hoje **já
+existe**; a consequência operativa é a **correção da trilha física via `debt.9`/AC 9**, não uma
+reprojeção da Fase 3 *(leitura desta re-adjudicação, sujeita a ratificação ou veto do usuário)*.
+
+**Corroboração direcional (não substitui a bateria):** 11 de 11 compras humanas na trilha de
+combate, 0 na física (instrumento oficial `node src/tools/telemetria.ts`, export
+`battle-balls-telemetria-1785909682703.json`; `e3.7` Dev Agent Record). Telemetria mede **escolha**;
+o arnês mede **desempenho**.
+
+**O que esta nota NÃO decide.** **Como** reagir — baixar preço, subir magnitude, redistribuir itens
+da trilha física — **não é decidido aqui**. É decisão do **@pm quando `debt.9` executar (AC 9)**,
+informada por esta evidência mais a amostra de telemetria ×6.0; o usuário pode ratificar ou vetar.
+E `ESCALA_HP = 6.0` (**D-05**) é decisão de produto do usuário, **fixa**: esta re-adjudicação avalia
+o indicador **sob** ×6.0, não reabre a escala.
+
+**Estado do desbloqueio de `debt.9`:** pré-condição **(a)** — re-adjudicação formal concluída e
+registrada — **SATISFEITA** por esta nota. Pré-condição **(b)** — amostra de telemetria humana 100%
+×6.0 com **n ≥ 30** compras — **PENDENTE**, depende do usuário jogar; hoje existem 3 compras ×6.0.
+
+**Evidência bruta:** `docs/evidence/risco-1b-readjudicacao/` — `risco1b-n3000-base{1,1001,2001,3001}.out`,
+`risco1b-n800-base1.out` (verificação da divergência story × gate de `e3.6`), `agrega-risco1b.mjs`,
+`risco1b-agregado.json`. O arnês é determinístico: re-execução reproduz byte a byte; a agregação é
+`node agrega-risco1b.mjs <dir>`.
+
+**Conjunto canônico e nota sobre os números do gate `e3.6`.** O conjunto canônico é a **tabela
+n=3000 do story `e3.6`**, reconfirmada pela re-execução de 2026-08-18 do mesmo comando (base 1:
+golem +0,77/+18,47 SIM; vex −1,53/+35,13 SIM). Os números citados pelo gate `e3.6`/`REQ-101`
+(golem +1,88/+17,63; vex −0,62/+35,12) são a **leitura determinística a n=800** (seed base 1) da
+re-execução independente do QA — reproduzida byte a byte em 2026-08-18 com
+`npm run balance -- --risco-1b` no mesmo commit. **Não há erro no gate**: a coincidência numérica
+entre o +17,63 do dano do golem a n=800 e o dano do vex pré-alavanca de `e2.7` é só coincidência
+(granularidade de 0,125pp a n=800). A divergência story × gate reduz-se a **n=800 vs n=3000** — e o
+próprio arnês avisa que gatilho lido a n=800 (IC ±3,46pp) é leitura de ruído, razão pela qual o
+canônico é a tabela n=3000. **Nenhum gate YAML é editado retroativamente**: a divergência fica
+registrada e explicada na **errata de `docs/architecture-e3.md` §14**.
+
 ---
 
 ## 7. Rastreabilidade e limites deste documento

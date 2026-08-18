@@ -1,0 +1,235 @@
+{
+  "protocolo": "n=3000 decididas/célula, 4 bases (1,1001,2001,3001), média entre bases por personagem — gate e2.7 recomendação formal",
+  "limiares": {
+    "fisicoMenorQuePp": 2,
+    "danoMaiorQuePp": 5
+  },
+  "porBase": [
+    {
+      "base": 1,
+      "limiares": {
+        "fisicoMenorQuePp": 2,
+        "danoMaiorQuePp": 5
+      },
+      "chars": {
+        "golem": {
+          "controleWinrate": 0.51,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.5176666666666667,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.6946666666666667,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 0.766666666666671,
+          "danoDeltaPp": 18.466666666666665,
+          "deltaPpImpresso": {
+            "fisico": 0.77,
+            "dano": 18.47
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        },
+        "vex": {
+          "controleWinrate": 0.51,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.49466666666666664,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.8613333333333333,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": -1.5333333333333365,
+          "danoDeltaPp": 35.133333333333326,
+          "deltaPpImpresso": {
+            "fisico": -1.53,
+            "dano": 35.13
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        }
+      }
+    },
+    {
+      "base": 1001,
+      "limiares": {
+        "fisicoMenorQuePp": 2,
+        "danoMaiorQuePp": 5
+      },
+      "chars": {
+        "golem": {
+          "controleWinrate": 0.509,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.5236666666666666,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.6846666666666666,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 1.4666666666666606,
+          "danoDeltaPp": 17.566666666666663,
+          "deltaPpImpresso": {
+            "fisico": 1.47,
+            "dano": 17.57
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        },
+        "vex": {
+          "controleWinrate": 0.509,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.512,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.8636666666666667,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 0.30000000000000027,
+          "danoDeltaPp": 35.46666666666667,
+          "deltaPpImpresso": {
+            "fisico": 0.3,
+            "dano": 35.47
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        }
+      }
+    },
+    {
+      "base": 2001,
+      "limiares": {
+        "fisicoMenorQuePp": 2,
+        "danoMaiorQuePp": 5
+      },
+      "chars": {
+        "golem": {
+          "controleWinrate": 0.49533333333333335,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.5023333333333333,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.6953333333333334,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 0.6999999999999951,
+          "danoDeltaPp": 20,
+          "deltaPpImpresso": {
+            "fisico": 0.7,
+            "dano": 20
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        },
+        "vex": {
+          "controleWinrate": 0.49533333333333335,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.499,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.867,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 0.36666666666666514,
+          "danoDeltaPp": 37.166666666666664,
+          "deltaPpImpresso": {
+            "fisico": 0.37,
+            "dano": 37.17
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        }
+      }
+    },
+    {
+      "base": 3001,
+      "limiares": {
+        "fisicoMenorQuePp": 2,
+        "danoMaiorQuePp": 5
+      },
+      "chars": {
+        "golem": {
+          "controleWinrate": 0.495,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.5186666666666667,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.6863333333333334,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 2.3666666666666725,
+          "danoDeltaPp": 19.133333333333336,
+          "deltaPpImpresso": {
+            "fisico": 2.37,
+            "dano": 19.13
+          },
+          "gatilhoImpresso": false,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        },
+        "vex": {
+          "controleWinrate": 0.495,
+          "controleNDec": 3000,
+          "fisicoWinrate": 0.5046666666666667,
+          "fisicoNDec": 3000,
+          "danoWinrate": 0.8646666666666667,
+          "danoNDec": 3000,
+          "fisicoDeltaPp": 0.9666666666666712,
+          "danoDeltaPp": 36.96666666666667,
+          "deltaPpImpresso": {
+            "fisico": 0.97,
+            "dano": 36.97
+          },
+          "gatilhoImpresso": true,
+          "icPp": 1.7892270211835426,
+          "truncado": false
+        }
+      }
+    }
+  ],
+  "media": {
+    "golem": {
+      "fisicoMediaPp": 1.3249999999999997,
+      "fisicoSdPp": 0.7762087348130037,
+      "fisicoAmplitudePp": 1.6666666666666774,
+      "danoMediaPp": 18.791666666666668,
+      "danoSdPp": 1.0300575316546754,
+      "gatilhoNaMedia": true,
+      "gatilhoPorBase": [
+        {
+          "base": 1,
+          "gatilho": true
+        },
+        {
+          "base": 1001,
+          "gatilho": true
+        },
+        {
+          "base": 2001,
+          "gatilho": true
+        },
+        {
+          "base": 3001,
+          "gatilho": false
+        }
+      ]
+    },
+    "vex": {
+      "fisicoMediaPp": 0.025000000000000022,
+      "fisicoSdPp": 1.081280105553909,
+      "fisicoAmplitudePp": 2.500000000000008,
+      "danoMediaPp": 36.18333333333333,
+      "danoSdPp": 1.0322575044801368,
+      "gatilhoNaMedia": true,
+      "gatilhoPorBase": [
+        {
+          "base": 1,
+          "gatilho": true
+        },
+        {
+          "base": 1001,
+          "gatilho": true
+        },
+        {
+          "base": 2001,
+          "gatilho": true
+        },
+        {
+          "base": 3001,
+          "gatilho": true
+        }
+      ]
+    }
+  }
+}
