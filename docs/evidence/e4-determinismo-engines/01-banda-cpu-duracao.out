@@ -1,0 +1,41 @@
+=== M5 — duração da rodada (bot heurístico, roster atual) ===
+  seed    1 · 4773 ticks · 79.55s · vencedor 0 · hash 18a15832
+  seed 1001 · 4699 ticks · 78.32s · vencedor 0 · hash 955ca0b6
+  seed 2001 · 4363 ticks · 72.72s · vencedor 0 · hash e70d1930
+  seed 3001 · 4082 ticks · 68.03s · vencedor 0 · hash 27090ec4
+  seed  379 · 5249 ticks · 87.48s · vencedor 0 · hash 7b926c33
+  média: 4633 ticks (77.22s)
+
+=== M1 — tamanho do snapshot (bytes por tick, média entre seeds) ===
+  World serializável inteiro : 5049 B  · deflate 1063 B
+  snapshot de render         : 263 B  · deflate isolado 160 B · deflate com contexto 34 B
+  pico do snapshot de render : 433 B
+
+  banda por CLIENTE (downstream), snapshot de render cru / deflate com contexto:
+    60 Hz : 126.3 kbit/s  /  16.4 kbit/s
+    30 Hz : 63.1 kbit/s  /  8.2 kbit/s
+    20 Hz : 42.1 kbit/s  /  5.5 kbit/s
+    15 Hz : 31.6 kbit/s  /  4.1 kbit/s
+  World inteiro a 60 Hz (o que NÃO se faz): 2423.7 kbit/s cru
+
+=== M2 — comandos (upstream) ===
+  comandos por rodada (2 bolas × 2 lados): 54.6
+  por lado, por segundo: 0.35 cmd/s
+  bytes por comando (tupla quantizada): 26.3 B
+  upstream de um jogador: 0.07 kbit/s
+
+=== M3 — CPU (Node v24.13.1) ===
+  com bot dos dois lados: 0.0057 ms/tick (200 rodadas, 839818 ticks)
+  sem bot (só motor)    : 0.0053 ms/tick (200 rodadas, 885990 ticks)
+  orçamento de um tick a 60 Hz: 16.667 ms
+  salas 1v1 (humano×humano, sem bot) por núcleo, a 100% : 3168
+  salas com bot (modo solo) por núcleo, a 100%          : 2939
+  a 25% de ocupação (margem de GC/IO): 792 salas sem bot
+  distribuição do tick (seed 379, com bot): mediana 0.0056 ms · p95 0.0061 ms · p99 0.0088 ms · máx 0.1815 ms
+
+=== M4 — hashes de referência do Node (para comparar com o Chrome) ===
+  seed    1 : hash 18a15832 · ticks 4773 · winner 0
+  seed 1001 : hash 955ca0b6 · ticks 4699 · winner 0
+  seed 2001 : hash e70d1930 · ticks 4363 · winner 0
+  seed 3001 : hash 27090ec4 · ticks 4082 · winner 0
+  seed  379 : hash 7b926c33 · ticks 5249 · winner 0

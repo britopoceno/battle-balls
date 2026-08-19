@@ -1,0 +1,109 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>probe-e4 — lado Chrome</title>
+<style>body{background:#111;color:#ddd;font:12px/1.45 monospace;padding:16px}h2{color:#7ee08a;font-size:13px;margin:18px 0 6px}</style>
+<h2>Como rodar</h2>
+<pre>
+  1. npm run dev -- --port 5177   (na raiz do projeto)
+  2. gerar os .out do lado Node:  node 04-estado-final-node.mjs > 04-estado-final-node.out
+  3. copiar este arquivo e o 04-estado-final-node.out para a RAIZ do projeto
+  4. abrir http://localhost:5177/probe-e4.html
+  5. apagar as duas cópias da raiz depois
+</pre>
+<h2>Resultado</h2>
+<pre id="out">rodando…</pre>
+<script type="module">
+  // Lado CHROME das medições da §1.5 de `docs/architecture-e4.md`.
+  // Não altera `src/`: só importa e mede. O corpo espelha os scripts Node deste diretório.
+  import { createWorld, step } from '/src/sim/world.ts'
+  import { CHARS } from '/src/chars/index.ts'
+  import { createBot, botCommands } from '/src/bot/heuristic.ts'
+  import { MAX_ROUND_TICKS } from '/src/tools/harness.ts'
+
+  const pick = (charId) => ({ charId, abilityIndex: 0, passiveIndex: 0 })
+  const setup = (seed) => ({ seed, teams: [[pick('golem'), pick('vex')], [pick('golem'), pick('vex')]] })
+  const saida = []
+
+  // ---------------------------------------------------------------- A: bateria Math.*
+  // Espelha `05-math-node.mjs`. Diferença de string = diferença de bit.
+  {
+    const dx = -0.45639696701269405
+    const dy = -0.889776268789865
+    saida.push(`atan2(${dy},${dx}) = ${Math.atan2(dy, dx)}`)
+    saida.push(`atan2(${dx},${dy}) = ${Math.atan2(dx, dy)}`)
+    saida.push(`hypot(${dx},${dy}) = ${Math.hypot(dx, dy)}`)
+    const mulberry32 = (a) => () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0
+      let t = Math.imul(a ^ (a >>> 15), 1 | a)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    const fnv = (s) => {
+      let h = 0x811c9dc5
+      for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
+      return h.toString(16).padStart(8, '0')
+    }
+    for (const [nome, f] of [
+      ['atan2', (a, b) => Math.atan2(a, b)],
+      ['hypot', (a, b) => Math.hypot(a, b)],
+      ['pow', (a, b) => Math.pow(Math.abs(a), b)],
+      ['sqrt', (a) => Math.sqrt(Math.abs(a))],
+      ['sin', (a) => Math.sin(a)],
+      ['cos', (a) => Math.cos(a)],
+    ]) {
+      const r = mulberry32(12345)
+      const partes = []
+      for (let i = 0; i < 20000; i++) partes.push(String(f((r() - 0.5) * 2000, (r() - 0.5) * 2000)))
+      saida.push(`VARREDURA ${nome} (n=20000) = ${fnv(partes.join('|'))}`)
+    }
+    saida.push(`UA ${navigator.userAgent}`)
+  }
+
+  // ---------------------------------------------------------------- B: delta de estado vs Node
+  // Espelha `04-estado-final-node.mjs` e compara campo a campo em precisão total.
+  {
+    const meu = new Map()
+    for (const seed of [1, 1001, 2001, 3001, 379]) {
+      const w = createWorld(CHARS, setup(seed))
+      const b0 = createBot(seed, 0), b1 = createBot(seed, 1)
+      const marcos = new Set([1000, 2000, 3000, 4000])
+      while (!w.over && w.tick < MAX_ROUND_TICKS) {
+        step(w, [...botCommands(w, b0), ...botCommands(w, b1)])
+        if (marcos.has(w.tick)) meu.set(`${seed} ${w.tick}`, w.balls.flatMap((b) => [b.x, b.y, b.vx, b.vy, b.hp]))
+      }
+      meu.set(`${seed} FIM`, w.balls.flatMap((b) => [b.x, b.y, b.vx, b.vy, b.hp]))
+      meu.set(`${seed} META`, [w.tick, w.winner])
+    }
+    saida.push('')
+    let txt = null
+    try {
+      txt = await (await fetch('/04-estado-final-node.out')).text()
+    } catch {
+      saida.push('04-estado-final-node.out não encontrado na raiz — só a bateria acima foi medida')
+    }
+    if (txt) {
+      for (const linha of txt.trim().split('\n')) {
+        const [corpo, cauda] = linha.split(' | ')
+        const campos = corpo.trim().split(/\s+/)
+        const chave = `${campos[0]} ${campos[1]}`
+        const nums = campos.slice(2).map(Number)
+        const meus = meu.get(chave)
+        if (!meus) { saida.push(`${chave}: SEM PAR`); continue }
+        let maxAbs = 0, maxRel = 0, iguais = 0
+        for (let i = 0; i < nums.length; i++) {
+          const d = Math.abs(nums[i] - meus[i])
+          if (d === 0) iguais++
+          if (d > maxAbs) maxAbs = d
+          const rel = nums[i] !== 0 ? d / Math.abs(nums[i]) : d
+          if (rel > maxRel) maxRel = rel
+        }
+        saida.push(
+          `${chave.padEnd(10)} campos=${nums.length} idênticos=${iguais} maxΔabs=${maxAbs.toExponential(3)} maxΔrel=${maxRel.toExponential(3)}` +
+          (cauda ? `  [node ${cauda} · chrome ticks ${meu.get(`${campos[0]} META`)[0]} winner ${meu.get(`${campos[0]} META`)[1]}]` : ''),
+        )
+      }
+    }
+  }
+
+  document.getElementById('out').textContent = saida.join('\n')
+</script>

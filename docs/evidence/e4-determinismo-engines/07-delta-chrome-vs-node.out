@@ -1,0 +1,25 @@
+1 1000     campos=20 idênticos=14 maxΔabs=2.274e-13 maxΔrel=1.353e-15
+1 2000     campos=20 idênticos=13 maxΔabs=2.099e-10 maxΔrel=1.393e-12
+1 3000     campos=20 idênticos=12 maxΔabs=7.014e-11 maxΔrel=5.386e-12
+1 4000     campos=20 idênticos=6 maxΔabs=1.316e-10 maxΔrel=1.671e-12
+1 FIM      campos=20 idênticos=4 maxΔabs=1.300e-10 maxΔrel=1.463e-12  [node ticks 4773 winner 0 · chrome ticks 4773 winner 0]
+1001 1000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+1001 2000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+1001 3000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+1001 4000  campos=20 idênticos=18 maxΔabs=5.684e-14 maxΔrel=2.679e-16
+1001 FIM   campos=20 idênticos=19 maxΔabs=5.684e-14 maxΔrel=2.521e-16  [node ticks 4699 winner 0 · chrome ticks 4699 winner 0]
+2001 1000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+2001 2000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+2001 3000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+2001 4000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+2001 FIM   campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0  [node ticks 4363 winner 0 · chrome ticks 4363 winner 0]
+3001 1000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+3001 2000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+3001 3000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+3001 4000  campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+3001 FIM   campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0  [node ticks 4082 winner 0 · chrome ticks 4082 winner 0]
+379 1000   campos=20 idênticos=20 maxΔabs=0.000e+0 maxΔrel=0.000e+0
+379 2000   campos=20 idênticos=15 maxΔabs=2.274e-13 maxΔrel=4.725e-16
+379 3000   campos=20 idênticos=6 maxΔabs=1.079e-11 maxΔrel=1.459e-13
+379 4000   campos=20 idênticos=5 maxΔabs=9.820e-10 maxΔrel=3.567e-11
+379 FIM    campos=20 idênticos=5 maxΔabs=1.582e-9 maxΔrel=7.399e-11  [node ticks 5249 winner 0 · chrome ticks 5249 winner 0]
