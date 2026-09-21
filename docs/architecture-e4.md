@@ -1439,6 +1439,71 @@ na `e4.9`, para não abrir a variante duas vezes); ou o `e4.7` fixa o buffer pel
 varredura. Qual delas é decisão de escopo do @po. Registro porque, depois que a `e4.9` fechar, o custo
 de um campo a mais é uma versão nova.
 
+**Adendo — a descida é permissiva de propósito** *(2026-09-21, E49-REQ-004, gate de `e4.9`, roteado pelo
+@po em `e4.9` v1.4.0)*. Decisão: **(a)**. `decodificarDoServidor` confere o que já confere (`t`, a
+aridade do `snap`, e no `{t:'sala'}` `versao`, `snapshotHz` e `assento`) e **não** fica estrito na
+próxima subida de `VERSAO_DO_FIO`.
+
+**Medição desta sessão** (Node 24.13.1, `codec.ts` em `6f2f56c`, sonda descartável que importa o codec
+real): num `{t:'sala'}` com os três campos certos, passam `extra: 'zz'` (preservado no retorno),
+`jogador: 7`, `jogador: "0"`, sem `jogador`, `estado: 'xx'` e sem `estado`. As seis outras variantes que
+não são `snap` passam **de corpo vazio**: `{"t":"visao"}`, `prazo`, `rodadaInicio`, `rodadaFim`, `erro` e
+`ping`. O achado descreve uma variante, mas a permissividade é da direção inteira. Um (b) só com
+`jogador`/`estado` seria uma ilha.
+
+Por que (a):
+
+1. **A regra fica onde a confiança muda.** `parseDoCliente` é estrito porque o que ele recebe entra no
+   `World` autoritativo dos dois jogadores (`NaN` na posição, `TypeError` no processo, `codec.ts:11-13`).
+   No cliente, uma mensagem malformada atinge só a aba de quem a recebe. Checar forma também não protege
+   o cliente de um servidor hostil, que manda mentira bem formada. O cliente não é fronteira de confiança
+   para o que vem do servidor. E "estrito" lá é **reconstruir e descartar** extras (`codec.ts:121-124`),
+   não recusá-los: nem a paridade pediria recusar campo a mais.
+2. **Um `sala` malformado viria de bug do nosso servidor, e bug de servidor se pega no produtor.** O
+   `tsc` já recusa `jogador: 7` e `estado: 'xx'` em quem produz, porque o tipo é literal. O bug plausível
+   é outro: `jogador` trocado entre os assentos. A checagem de domínio no decoder deixa esse passar,
+   porque os dois valores são válidos. Só a guarda do produtor o vê (delta abaixo).
+3. **Descompasso entre builds é da versão.** O que sobra é "esqueci de subir a versão", e conferir
+   `jogador`/`estado` cobre uma fatia pequena disso: um campo renomeado em `visao` ou em `rodadaFim`
+   passaria igual. Paridade de verdade pediria validar `VisaoPartida`, `EstaticoDaRodada` e
+   `ResultadoRodada` campo a campo, uma segunda cópia dos tipos de `match/` mantida à mão, contra bugs
+   nossos. Já um campo acrescentado sem subir a versão é o caso que o JSON com nomes absorve (§5.5): o
+   cliente velho não o lê.
+4. **Lançar tem custo.** Pelo `e4.5`/AC 3, todo lançamento do decode fecha a conexão sem reconectar.
+   Para os três campos conferidos, isso é o certo. Cada checagem nova é mais um jeito de encerrar a
+   sessão sem volta, e o bug que a dispara pode ser só cosmético.
+
+**Critério, para não reabrir campo a campo.** O decoder confere um campo da descida quando: (i) o campo
+é o próprio mecanismo de descompasso (`versao`); (ii) o valor chega ao fio sem passar pelo tipo de quem
+produz, por config ou override de operação sem rebuild, e o cliente faz conta com ele (`snapshotHz`,
+`e4.7`/AC 4); ou (iii) o erro apareceria longe da causa, porque o cliente guarda o valor e o devolve
+como credencial (`assento`, que só falharia no reassentamento). `jogador` e `estado` não cumprem
+nenhum dos três: saem da máquina de estados tipada da sala, e o erro aparece na hora, na tela. Todo
+campo novo de `DoServidor` passa por este critério na revisão da mudança de protocolo, que já é
+obrigatória (§11.6).
+
+**Consumo no cliente:** a mensagem decodificada é lida campo a campo, pelo nome, e nunca mesclada com
+`Object.assign` num estado de longa duração. Medido: um `"__proto__"` no fio sai como propriedade
+própria, e `Object.assign(alvo, msg)` troca o protótipo do alvo. Com o nosso servidor como emissor,
+isso é higiene, não ameaça.
+
+**Reabre se:** (1) o cliente passar a falar com servidor que não é o nosso build (relay, URL escolhida
+pelo usuário, servidor de terceiro), porque aí a descida vira fronteira; (2) um campo de `DoServidor`
+passar a cumprir (ii) ou (iii); (3) um incidente mostrar falha por mensagem malformada fora do caminho
+do decode. Em (2), quem nota é a revisão de protocolo (@architect). Em (1) e (3), quem abrir a story ou
+o incidente.
+
+**Deltas para o @po** (este documento não edita story):
+
+- **E49-REQ-004** fecha como decidido (a). Gates futuros não reabrem campo extra nem `jogador`/`estado`
+  na descida. Reabrem campo novo que cumpra o critério e não seja conferido.
+- **`e4.3`/AC 11 (e), recomendado, e o @po decide** (o @dev está em curso): a guarda confere também que
+  o `{t:'sala'}` de cada destinatário leva o `jogador` **daquele** assento. É o bug plausível do item 2.
+  Custa uma comparação no laço que o (e) já percorre, em `determinism.ts`, que o AC 15 já permite. Se não
+  entrar agora, fica sem dono: nenhuma story posterior abre essa guarda.
+- **`e4.5`:** nenhum AC muda. Para as Dev Notes: leitura por nome, sem mesclar (parágrafo acima).
+- **`e4.9`, `debt.12`:** nada muda.
+
 ---
 
 ## 12. Ressalvas e o que este documento devolve ao @pm / usuário
