@@ -54,10 +54,10 @@ const pct = (n: number, total: number): string =>
  * debt.10 / `E41-TEL-002` — a população de um evento: o (atraso de input, `ESCALA_HP`) GRAVADO nele
  * pelo coletor no instante do `registrar()`.
  *
- * O agregador lê o valor do ARQUIVO e nunca importa as constantes-fonte: `tools/ → net/` não existe
- * na tabela de camadas (`architecture-e4.md` §2.2), e o valor histórico certo é o que foi gravado, não
- * o que a constante vale hoje. Campo ausente ou não-numérico é DESCONHECIDO — nunca atraso 0 nem escala
- * 1.0 por omissão, mesmo molde do `mag` ausente (TEL-E35-001) mais abaixo.
+ * O agregador lê o valor do ARQUIVO e nunca importa as constantes-fonte, de propósito: o valor
+ * histórico certo é o que foi gravado, não o que a constante vale hoje. Campo ausente ou não-numérico
+ * é DESCONHECIDO — nunca atraso 0 nem escala 1.0 por omissão, mesmo molde do `mag` ausente
+ * (TEL-E35-001) mais abaixo.
  */
 function populacaoDe(e: EventoRegistrado): { rotulo: string; conhecida: boolean } {
   const atrasoOk = Number.isFinite(e.atrasoTicks)

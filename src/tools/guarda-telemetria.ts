@@ -1,5 +1,7 @@
 import { CHAVE, criarTelemetria, type ArquivoTelemetria, type EventoRegistrado, type EventoTelemetria } from '../client/telemetria.ts'
 import { agregar } from './telemetria.ts'
+import { ESCALA_HP } from '../chars/tuning.ts'
+import { ATRASO_ALVO_TICKS } from '../net/protocolo.ts'
 
 /**
  * GUARDA DA TELEMETRIA — story `debt.11`, achado `DEBT10-TST-001` do gate de `debt.10`.
@@ -19,6 +21,14 @@ import { agregar } from './telemetria.ts'
  * e `exportar()` entrega o arquivo, capturado no `Blob`. As duas direções são afirmadas sobre o
  * arquivo exportado: evento novo com carimbo finito (pega a M1) e evento antigo ainda sem carimbo
  * (pega a M1b). Uma só delas deixaria passar a outra mutação.
+ *
+ * **Valor do carimbo (`debt.13`, `DEBT11-TST-001`).** Além de existir, o carimbo dos eventos novos tem
+ * de ser o que o build aplica: `atrasoTicks === ATRASO_ALVO_TICKS` e `escalaHp === ESCALA_HP`, por `===`
+ * e sem tolerância, porque `registrar()` COPIA a constante e não calcula nada. É uma asserção separada
+ * da de presença (M1) e corre só sobre os novos carimbados, para "sem carimbo" e "carimbo com valor
+ * errado" nunca saírem na mesma mensagem. **Limite conhecido (AC 7 de `debt.13`):** enquanto as duas
+ * constantes valerem o mesmo número (6 e 6.0 hoje), um carimbo com os dois campos TROCADOS passa por
+ * esta checagem — por isso a linha `telemetria` do `sim:check` imprime os dois valores esperados.
  *
  * **Uma só definição de "sem carimbo" (R6):** `!Number.isFinite`, a mesma de `populacaoDe()` no
  * agregador. `DEBT10-COD-003` (alinhar `ler()`) não entra nesta story, então a guarda NÃO afirma nada
@@ -53,8 +63,15 @@ function rodadaFim(partida: number, rodada: number, duracaoMs: number, carimbo: 
 
 /**
  * O fixture misto, em código e não em `docs/` (R4): duas populações conhecidas com rodadas de humano
- * — (6, 6) com n=3 e (0, 6) com n=2 — mais 2 eventos sem carimbo (um sem os campos, um com `null`).
- * O `n` combinado é 7 e **nenhuma população tem 7**: é a propriedade que discrimina um agregador que
+ * — (6, 6) com n=3 e (0, 6) com n=2 — mais 4 eventos sem carimbo: um sem os campos e um com `null`
+ * (partida 33), e os dois de carimbo PARCIAL de `debt.13` (`DEBT11-TST-002`), cada um na sua partida,
+ * só `escalaHp` (44) e só `atrasoTicks` (55). `agregar()` agrupa por rótulo, escrito campo a campo, então
+ * são **5 populações, 3 delas desconhecidas** (por último): "atraso 6 · escala desconhecida" (n=1),
+ * "atraso desconhecido · escala ×6" (n=1) e "as duas desconhecidas" (n=2). Os dois sentidos do carimbo
+ * parcial são necessários: uma M2 só no atraso funde o 44 em (0, 6); uma só na escala cria (6, 1) e
+ * deixa o total em 5, e só a contagem de desconhecidas a pega. Partidas distintas de propósito: com uma
+ * partida em duas populações, `agregar()` emite mais um aviso e a linha `globais` muda.
+ * O `n` combinado é 9 e **nenhuma população tem 9**: é a propriedade que discrimina um agregador que
  * particiona de um que soma tudo (M3), e a mesma que o @qa usou no gate de `debt.10`.
  */
 const FIXTURE: readonly EventoRegistrado[] = [
@@ -65,8 +82,15 @@ const FIXTURE: readonly EventoRegistrado[] = [
   rodadaFim(22, 2, 20000, { atrasoTicks: 0, escalaHp: 6 }),
   rodadaFim(33, 1, 14000, {}),
   rodadaFim(33, 2, 15000, { atrasoTicks: null, escalaHp: null }),
+  rodadaFim(44, 1, 16000, { escalaHp: 6 }),
+  rodadaFim(55, 1, 17000, { atrasoTicks: 6 }),
 ]
-const POPULACOES_FIXTURE = 3
+/**
+ * Literais de propósito (debt.13, AC 5): derivá-los exigiria replicar a regra de rótulo de
+ * `populacaoDe()`, que é o código sob teste — mesmo princípio de "coletor real, não réplica" (R3).
+ */
+const POPULACOES_FIXTURE = 5
+const DESCONHECIDAS_FIXTURE = 3
 const N_COMBINADO_FIXTURE = FIXTURE.filter((e) => e.t === 'rodadaFim').length
 const SEM_CARIMBO_FIXTURE = FIXTURE.filter(semCarimbo).length
 
@@ -176,6 +200,7 @@ export function verificarTelemetria(): { linhas: string[]; problemas: string[] }
   let instalados = 0
   let exportados = 0
   let novosCarimbados = 0
+  let novosComValorEsperado = 0
   let antigosSemCarimbo = 0
   let blocosP31 = 0
   let populacoes = 0
@@ -218,7 +243,12 @@ export function verificarTelemetria(): { linhas: string[]; problemas: string[] }
       exportados = eventos.length
       const doExportAntigo = eventos.filter((e) => e.partida === PARTIDA_ANTIGA)
       const doExportNovo = eventos.filter((e) => e.partida === PARTIDA_NOVA)
-      novosCarimbados = doExportNovo.filter((e) => !semCarimbo(e)).length
+      const carimbadosNovos = doExportNovo.filter((e) => !semCarimbo(e))
+      const comValorErrado = carimbadosNovos.filter(
+        (e) => e.atrasoTicks !== ATRASO_ALVO_TICKS || e.escalaHp !== ESCALA_HP,
+      )
+      novosCarimbados = carimbadosNovos.length
+      novosComValorEsperado = carimbadosNovos.length - comValorErrado.length
       antigosSemCarimbo = doExportAntigo.filter(semCarimbo).length
       if (arquivo.versao !== CHAVE) {
         problemas.push(`  ✗ telemetria: export com versao ${JSON.stringify(arquivo.versao)} em vez de ${CHAVE}`)
@@ -232,6 +262,14 @@ export function verificarTelemetria(): { linhas: string[]; problemas: string[] }
       if (novosCarimbados !== doExportNovo.length) {
         problemas.push(
           `  ✗ telemetria: ${doExportNovo.length - novosCarimbados} evento(s) novo(s) sem atrasoTicks/escalaHp finitos no export — registrar() deixou de carimbar (M1)`,
+        )
+      }
+      // DEBT11-TST-001 (debt.13): o carimbo existe E é o do build — asserção própria, só sobre os
+      // carimbados, para que a M1 não dispare também esta mensagem (com "atraso=undefined")
+      if (comValorErrado.length > 0) {
+        const achados = [...new Set(comValorErrado.map((e) => `atraso=${e.atrasoTicks}, escala=${e.escalaHp}`))]
+        problemas.push(
+          `  ✗ telemetria: ${comValorErrado.length} evento(s) novo(s) com carimbo de VALOR errado no export — achado ${achados.join(' | ')}; esperado atraso=${ATRASO_ALVO_TICKS}, escala=${ESCALA_HP} — registrar() não grava as constantes-fonte (DEBT11-TST-001)`,
         )
       }
       // M1b: o carimbo foi para exportar() e reescreveu o acúmulo antigo com o valor de hoje
@@ -260,17 +298,23 @@ export function verificarTelemetria(): { linhas: string[]; problemas: string[] }
     if (!saida[0]?.startsWith('⚠')) {
       problemas.push('  ✗ telemetria: agregar() do fixture misto não abriu com o aviso de populações separadas')
     }
-    // M2: ausente virou atraso 0 / escala 1.0 e a população desconhecida sumiu
-    if (desconhecidas.length !== 1 || desconhecidas[0] !== indicesPopulacao[indicesPopulacao.length - 1]) {
+    // M2: ausente virou atraso 0 / escala 1.0 e uma população desconhecida sumiu. Exatamente
+    // DESCONHECIDAS_FIXTURE, nunca "pelo menos uma": a M2 só na escala deixa o total em 5 e só esta
+    // contagem a pega (debt.13, AC 5)
+    const ultimas = indicesPopulacao.slice(-DESCONHECIDAS_FIXTURE)
+    if (desconhecidas.length !== DESCONHECIDAS_FIXTURE || desconhecidas.some((i, k) => i !== ultimas[k])) {
       problemas.push(
-        `  ✗ telemetria: ${desconhecidas.length} população(ões) "desconhecida" no agregado — esperada 1, a última (M2: ausente lido como atraso 0 / escala 1.0)`,
+        `  ✗ telemetria: ${desconhecidas.length} população(ões) "desconhecida" no agregado — esperadas ${DESCONHECIDAS_FIXTURE}, as últimas (M2: ausente lido como atraso 0 / escala 1.0)`,
       )
     } else {
-      // R6: a população desconhecida tem exatamente os eventos que a definição única chama de sem carimbo
-      const cabecalho = saida[desconhecidas[0] + 1] ?? ''
-      if (!cabecalho.startsWith(`eventos ${SEM_CARIMBO_FIXTURE} ·`)) {
+      // R6: somadas, as populações desconhecidas têm exatamente os eventos que a definição única chama
+      // de sem carimbo
+      const cabecalhos = desconhecidas.map((i) => saida[i + 1] ?? '')
+      const contagens = cabecalhos.map((c) => /^eventos (\d+) ·/.exec(c)?.[1])
+      const soma = contagens.reduce((n, c) => n + Number(c), 0)
+      if (contagens.some((c) => c === undefined) || soma !== SEM_CARIMBO_FIXTURE) {
         problemas.push(
-          `  ✗ telemetria: a população desconhecida abre com "${cabecalho}" — esperado ${SEM_CARIMBO_FIXTURE} evento(s), os que !Number.isFinite chama de sem carimbo (R6)`,
+          `  ✗ telemetria: as populações desconhecidas abrem com ${cabecalhos.map((c) => `"${c}"`).join(', ')} — esperado ${SEM_CARIMBO_FIXTURE} evento(s) somados, os que !Number.isFinite chama de sem carimbo (R6)`,
         )
       }
     }
@@ -312,7 +356,7 @@ export function verificarTelemetria(): { linhas: string[]; problemas: string[] }
 
   const ok = problemas.length === 0
   linhas.push(
-    `telemetria     ${ok ? '✓ ok' : `✗ ${problemas.length} problema(s)`} — coletor real: ${novosCarimbados} evento(s) novo(s) carimbado(s), ${antigosSemCarimbo} antigo(s) sem carimbo no export (${exportados}) · agregar() do fixture: ${blocosP31} bloco(s) P3.1, ${populacoes} população(ões)${ok ? ', a desconhecida à parte, nenhum n combinado' : ''}`,
+    `telemetria     ${ok ? '✓ ok' : `✗ ${problemas.length} problema(s)`} — coletor real: ${novosCarimbados} evento(s) novo(s) carimbado(s), ${novosComValorEsperado} com o valor esperado (atraso=${ATRASO_ALVO_TICKS}, escala=${ESCALA_HP}), ${antigosSemCarimbo} antigo(s) sem carimbo no export (${exportados}) · agregar() do fixture: ${blocosP31} bloco(s) P3.1, ${populacoes} população(ões)${ok ? `, as ${DESCONHECIDAS_FIXTURE} desconhecidas à parte, nenhum n combinado` : ''}`,
   )
   linhas.push(
     `globais        ${divergentes === 0 ? '✓ ok' : `✗ ${divergentes} divergente(s)`} — ${trocas.length} pares (objeto, chave) trocados: ${comDescritor} com descritor próprio, ${trocas.length - comDescritor} ausentes${divergentes === 0 ? ', todos de volta ao descritor de antes' : ''} · ${avisos.length} console.warn capturado(s)`,
