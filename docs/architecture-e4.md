@@ -19,7 +19,8 @@
 > §6, §10, Anexos A e B). · 2026-09-21 (gate de `e4.3` — E43-ARC-001, **seta `server/ → tools/harness.ts`
 > declarada, só `hash`** na §2.2; E43-ARC-002 e E43-REQ-003, **§11.6.2: `EventoPartida` no fio, por
 > assento, com `VERSAO_DO_FIO` 2, e a pausa de R-02 à espera de R-02**; E43-DOC-006, nota da §2.2; §0,
-> §9, §11.6.1, §12/R-02, Anexos A e B).
+> §9, §11.6.1, §12/R-02, Anexos A e B). · 2026-09-21 (DEBT12-ARC-001, gate de `debt.12` — **errata de
+> `'shield'` na amostra do fio**, sem subir versão, na §11.6.1; ponteiro de §12/R-02 para `e4.4`/AC 14).
 
 ---
 
@@ -1378,6 +1379,38 @@ o codec real e não altera nada):
   **Este texto é conferência, não fonte.** `debt.12` gera a fixture a partir do codec no commit em que
   começa. Se o resultado divergir desta linha, o codec mudou desde `f8be842` sem mudança de protocolo
   registrada, e isso é achado, não ajuste.
+
+  > **Errata (2026-09-21, DEBT12-ARC-001, gate `docs/qa/gates/debt.12-guarda-do-fio-tabela-e-fixture-congelada.yml`,
+  > commit `34f6af5`): `'shield'` não é um `EffectKind`.** O tipo em `src/sim/types.ts` é `'slow' | 'dot' |
+  > 'amp' | 'vuln'`. O valor entrou na amostra da Decisão 1 sem ser conferido contra o tipo. A
+  > `debt.12` o manteve em `AMOSTRA_DO_FIO` (`src/tools/determinism.ts`) com uma asserção de tipo local e
+  > comentada, e o gate a julgou aceitável. **A correção é só este texto. `VERSAO_DO_FIO` não sobe.**
+  > - **O valor fica de propósito.** Não é um exemplo de vocabulário do jogo. É um literal que o fio transporta.
+  > - **Não afeta o layout.** `effects` é a posição 8 da tupla da bola, marcada [lit]. O codificador escreve
+  >   o `kind` como string e o decodificador o devolve sem conferir contra a lista (`codec.ts`, com o cast
+  >   `kind as EffectKind`). Aridade, ordem, quantização e as duas propriedades de discriminação (a) e (b)
+  >   acima não dependem de o valor pertencer ao tipo.
+  > - **Trocar o valor move os bytes congelados.** Com `'dot'`, por exemplo, o texto deixa de ter 287 B, e
+  >   pelo procedimento acima isso obriga a subir `VERSAO_DO_FIO` e acrescentar uma entrada. Seria subir a
+  >   versão sem mudança de protocolo, e a regra da Decisão 2 é "sobe se, e só se, o formato mudar". Editar
+  >   a entrada 1 no lugar é o carimbo que a lista só de acréscimo existe para denunciar.
+  > - **Daqui para a frente — escolha: `AMOSTRA_DO_FIO` mantém `'shield'` até a próxima mudança real do
+  >   layout do `snap`. Qualquer amostra nova usa valor válido do tipo.** Em concreto:
+  >   - **A entrada 2 da `e4.10` repete o mesmo texto de `snap`, com `'shield'`.** A §11.6.2 manda isso, e a
+  >     razão pesa mais que a limpeza: na v2 o que muda é só `variantes`, e um `snap` idêntico ao da v1 faz o
+  >     diff provar isso sozinho. Trocar o `kind` na mesma subida misturaria uma mudança cosmética da amostra
+  >     com a mudança de protocolo. O revisor deixaria de poder ler "`snap` igual = layout igual", e o gate
+  >     da `e4.10` teria de separar à mão o que é protocolo e o que é amostra.
+  >   - **Na primeira subida que mudar o texto do `snap` por razão de protocolo,** a amostra troca `'shield'`
+  >     por um `kind` válido (`'dot'`) no mesmo commit, e a asserção de `determinism.ts` sai. O texto já vai
+  >     mudar, então a troca não custa versão, e o diff dela é uma linha da amostra ao lado das posições de
+  >     layout que mudaram. A mensagem de commit cita as duas coisas.
+  >   - **Amostras novas** (a `evento` da `e4.10` na guarda `não-snap`, e qualquer outra) usam só valores que
+  >     o tipo aceita, sem asserção. Uma asserção numa amostra esconde o erro que o `tsc` pegaria, e é
+  >     assim que `'shield'` passou.
+  > - **Resíduo, que não é desta errata.** Se um dia o decodificador passar a conferir `effects[].kind`
+  >   contra a lista fechada, o ponto fixo da entrada 1 lança. Isso já é mudança de protocolo (muda o que o
+  >   decodificador aceita), e sobe versão com entrada nova, de qualquer forma.
 - **Onde mora:** inline em `src/tools/determinism.ts`, no bloco do codec, ao lado da guarda que já
   existe. É o mesmo padrão do `BASELINE` do golden hash, e é o único arquivo que `debt.12` pode tocar.
   Um JSON à parte acrescentaria arquivo ao escopo sem ganhar nada: a revisão continua sendo um diff.
@@ -1878,6 +1911,16 @@ arquitetura, e a quarta linha mostra que a escolha errada cria incentivo pervers
 > não reserva nada até esta decisão sair); **se uma rodada perdida por W.O. entra na telemetria como rodada
 > humana** (hoje entra, com `controle ['humano','humano']`); e a semântica por fase que o gate de `e4.3`
 > listou (E43-REQ-004). A forma no fio da resposta é do @architect, e sai numa subida de `VERSAO_DO_FIO`.
+
+> **Antes de decidir, leia a lista (2026-09-21):** `docs/stories/e4.4.servidor-ws.story.md`, **AC 14**
+> (v1.8.0). Ali está o checklist que a resposta de R-02 tem de cobrir item por item, confirmando ou
+> trocando cada um, e não só escolhendo o nome da opção: o W.O. **por passo** (rodada em curso, `buildPadrao`
+> em `builds`, `pronto` na `loja`); o `prazoMs` de **20 s**, não medido; a queda no **`draft` tratada como
+> "antes do início"**; o **relógio de 30 s de builds correndo durante a pausa**; dois ausentes encerram
+> sem resultado; o `snap` com `over:false` antes do `rodadaFim` de W.O.; **"bot assume" não é
+> representável** na configuração da sala; como o presente é avisado; se as **rodadas de W.O. contam na
+> telemetria de P3.1/P3.2** (M-7); e a janela de **M-6** (pausa de 20 s menor que o prazo de builds de
+> 30 s). Esta seção dá as opções. O AC 14 dá o que a decisão precisa responder.
 
 ### R-03 — `SNAPSHOT_HZ` sai de medição em aparelho, não daqui *(informativa)*
 
