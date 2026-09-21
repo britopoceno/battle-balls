@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+Ready for Review
 
 > **Ready, com pré-condição de início (v1.1).** @dev: esta story começa **depois do commit de
 > implementação de `e4.8`**, com `git status --short src/tools/determinism.ts` vazio. Ordem registrada pelo
@@ -270,7 +270,7 @@ em `determinism.ts`.
 
 ### Quality Gate Tasks
 
-- [ ] Pre-Commit (@dev): Rodar antes de marcar a story como completa
+- [x] Pre-Commit (@dev): Rodar antes de marcar a story como completa
 - [ ] Pre-PR (@github-devops): Rodar antes de criar pull request
 
 ### Self-Healing Configuration
@@ -303,67 +303,67 @@ em `determinism.ts`.
 
 ## Tasks / Subtasks
 
-- [ ] Task 0 — Pré-condição de sequência (AC: 12)
-  - [ ] Confirmar que o commit de implementação de `e4.8` existe (ou, na exceção do AC 12, o de `e4.3`);
+- [x] Task 0 — Pré-condição de sequência (AC: 12)
+  - [x] Confirmar que o commit de implementação de `e4.8` existe (ou, na exceção do AC 12, o de `e4.3`);
         registrar o hash usado como base e qual caso valeu no Dev Agent Record
-  - [ ] Confirmar que `git status --short src/tools/determinism.ts` sai vazio
+  - [x] Confirmar que `git status --short src/tools/determinism.ts` sai vazio
 
-- [ ] Task 1 — `src/tools/guarda-telemetria.ts` (AC: 3, 5, 6, 8)
-  - [ ] Criar o arquivo, exportando `verificarTelemetria(): { linhas: string[]; problemas: string[] }`, no
+- [x] Task 1 — `src/tools/guarda-telemetria.ts` (AC: 3, 5, 6, 8)
+  - [x] Criar o arquivo, exportando `verificarTelemetria(): { linhas: string[]; problemas: string[] }`, no
         molde de `verificarPartida` (`src/tools/partida.ts:880`)
-  - [ ] Montar o fixture misto sintético em código (mínimo: duas populações conhecidas + eventos sem
+  - [x] Montar o fixture misto sintético em código (mínimo: duas populações conhecidas + eventos sem
         carimbo, nenhuma com o `n` combinado)
-  - [ ] Instalar `localStorage`/`document`/`Blob` falsos, com o `localStorage` já contendo ao menos um evento
+  - [x] Instalar `localStorage`/`document`/`Blob` falsos, com o `localStorage` já contendo ao menos um evento
         sem carimbo sob `CHAVE`; exercitar `criarTelemetria()`/`registrar()` real, capturar o que
         `exportar()` entregaria e afirmar: eventos novos com carimbo finito, evento antigo sem carimbo (AC 5)
-  - [ ] Capturar **antes da primeira instalação** o descritor próprio de cada par (objeto, chave) trocado
+  - [x] Capturar **antes da primeira instalação** o descritor próprio de cada par (objeto, chave) trocado
         (`globalThis.localStorage`, `globalThis.document`, `URL.createObjectURL`, ...); no caso ausente,
         instalar com `configurable: true`
-  - [ ] Restaurar num `finally`: com descritor, `defineProperty` dele (nunca `delete`); ausente, `delete`
-  - [ ] Depois do `finally`, conferir o critério do AC 5 campo a campo (`value`/`get`/`set` por `Object.is`,
+  - [x] Restaurar num `finally`: com descritor, `defineProperty` dele (nunca `delete`); ausente, `delete`
+  - [x] Depois do `finally`, conferir o critério do AC 5 campo a campo (`value`/`get`/`set` por `Object.is`,
         atributos por igualdade, não `JSON.stringify`); divergência vira problema
-  - [ ] Garantir que o ramo "tinha descritor" roda no Node do projeto (troca de `URL.createObjectURL` ou
+  - [x] Garantir que o ramo "tinha descritor" roda no Node do projeto (troca de `URL.createObjectURL` ou
         objeto de sonda com propriedade pré-existente)
-  - [ ] Capturar `console.warn` durante a execução da guarda
-  - [ ] Chamar `agregar()` real sobre o fixture; afirmar por rótulo/cabeçalho (não por número formatado):
+  - [x] Capturar `console.warn` durante a execução da guarda
+  - [x] Chamar `agregar()` real sobre o fixture; afirmar por rótulo/cabeçalho (não por número formatado):
         quantidade de blocos, presença de população "desconhecida", ausência de bloco com `n` combinado
   - [ ] Se `DEBT10-COD-003` entrar (Task 2b): afirmar que a contagem do aviso de `ler()` bate com a
         população desconhecida
 
-- [ ] Task 2 — `src/tools/telemetria.ts` (AC: 4)
-  - [ ] Trocar a chamada incondicional de `main()` (linha 307) por `if (import.meta.main) main()`
-  - [ ] Registrar a versão do Node usada e confirmar que `import.meta.main` está disponível
+- [x] Task 2 — `src/tools/telemetria.ts` (AC: 4)
+  - [x] Trocar a chamada incondicional de `main()` (linha 307) por `if (import.meta.main) main()`
+  - [x] Registrar a versão do Node usada e confirmar que `import.meta.main` está disponível
   - [ ] Task 2b (opcional, `DEBT10-COD-003`, AC 8, 9): alinhar o critério de "sem carimbo" em
         `client/telemetria.ts:ler()` a `!Number.isFinite`; no texto do agregador, distinguir "sem carimbo"
         de "carimbo inválido" — registrar a decisão de incluir ou não no Dev Agent Record
 
-- [ ] Task 3 — `src/tools/determinism.ts` (AC: 3, 11)
-  - [ ] Importar `verificarTelemetria` de `./guarda-telemetria.ts`
-  - [ ] Chamar a função, imprimir a(s) linha(s) de seção no ponto fixo depois das seções existentes
-  - [ ] Acrescentar o bloco `throw` no padrão dos que já existem, disparando quando `problemas.length > 0`
+- [x] Task 3 — `src/tools/determinism.ts` (AC: 3, 11)
+  - [x] Importar `verificarTelemetria` de `./guarda-telemetria.ts`
+  - [x] Chamar a função, imprimir a(s) linha(s) de seção no ponto fixo depois das seções existentes
+  - [x] Acrescentar o bloco `throw` no padrão dos que já existem, disparando quando `problemas.length > 0`
 
-- [ ] Task 4 — Documentação (AC: 9, opcional junto com `DEBT10-COD-003`)
-  - [ ] Emendar a linha `b8e8a41` de `docs/evidence/telemetria/README.md` (janela vazia no build publicado)
-  - [ ] Acrescentar a hora à linha `debt.10` da mesma tabela
+- [x] Task 4 — Documentação (AC: 9, opcional junto com `DEBT10-COD-003`)
+  - [x] Emendar a linha `b8e8a41` de `docs/evidence/telemetria/README.md` (janela vazia no build publicado)
+  - [x] Acrescentar a hora à linha `debt.10` da mesma tabela
 
-- [ ] Task 5 — As 6 mutações, aplicadas e revertidas (AC: 7)
-  - [ ] M1 — sem carimbo em `registrar()`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] M1b — carimbo em `exportar()`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] M2 — `?? 0` / `?? 1` em `populacaoDe()`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] M3 — `agregar()` sem partição: aplicar, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] MR1 — restauração sempre com `delete`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] MR2 — caso ausente restaurado por atribuição (`= undefined` ou `defineProperty` com
+- [x] Task 5 — As 6 mutações, aplicadas e revertidas (AC: 7)
+  - [x] M1 — sem carimbo em `registrar()`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] M1b — carimbo em `exportar()`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] M2 — `?? 0` / `?? 1` em `populacaoDe()`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] M3 — `agregar()` sem partição: aplicar, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] MR1 — restauração sempre com `delete`: aplicar, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] MR2 — caso ausente restaurado por atribuição (`= undefined` ou `defineProperty` com
         `value: undefined`): aplicar, rodar `sim:check`, confirmar código != 0, reverter
 
-- [ ] Task 6 — Verificação (AC: 1, 2, 4, 10, 11, 12)
-  - [ ] `npm run check` — 0 erros
-  - [ ] `npm run sim:check` antes e depois da mudança — golden hash idêntico, `diff` só com inserção
-  - [ ] `git show --stat` do(s) commit(s) desta story, restrito à lista fechada do AC 10
-  - [ ] `grep -rn "from '\.\./client/" src/tools/` — as 2 linhas de `tools/telemetria.ts` sem mudança, mais
+- [x] Task 6 — Verificação (AC: 1, 2, 4, 10, 11, 12)
+  - [x] `npm run check` — 0 erros
+  - [x] `npm run sim:check` antes e depois da mudança — golden hash idêntico, `diff` só com inserção
+  - [x] `git show --stat` do(s) commit(s) desta story, restrito à lista fechada do AC 10
+  - [x] `grep -rn "from '\.\./client/" src/tools/` — as 2 linhas de `tools/telemetria.ts` sem mudança, mais
         1 ou 2 de `tools/guarda-telemetria.ts`, todas para `client/telemetria.ts`; `grep -rln` = os 2 arquivos (AC 11)
-  - [ ] Os 5 exports reais de `docs/evidence/telemetria/` rodados pelo CLI, antes × depois — byte a byte
+  - [x] Os 5 exports reais de `docs/evidence/telemetria/` rodados pelo CLI, antes × depois — byte a byte
         idênticos
-  - [ ] `node src/tools/telemetria.ts` sem argumento — ainda imprime `uso:` e sai com 1
+  - [x] `node src/tools/telemetria.ts` sem argumento — ainda imprime `uso:` e sai com 1
 
 ## Dev Notes
 
@@ -559,19 +559,154 @@ para as três linhas da tabela ficarem no mesmo formato.
 
 ### Agent Model Used
 
-_A preencher pelo @dev._
+Claude Opus 5 (1M context), como Dex (@dev), modo YOLO.
 
 ### Debug Log References
 
-_A preencher pelo @dev._
+**Task 0 (AC 12), caso normal:** o commit de implementação de `e4.8` é `910add8`, e `e4.8` está Done
+(gate `438740b`). Base usada: `438740b` (o sim:check e o CLI de "antes" foram medidos ali). O pai de `971686b` é `f8be842`, um commit do @po que entrou em paralelo e só toca `docs/stories/` (e4.3, e4.4, e4.6, e4.7 e e4.8), sem nenhum arquivo de `src/`. `git status --short src/tools/determinism.ts` saiu vazio antes do
+início. `e4.3` não tinha começado, então a exceção do AC 12 não se aplica.
+
+**Commit de implementação: `971686b`.** `git show --stat 971686b`:
+
+```
+ docs/evidence/telemetria/README.md |   4 +-
+ src/tools/determinism.ts           |  12 ++
+ src/tools/guarda-telemetria.ts     | 322 +++++++++++++++++++++++++++++++++++++
+ src/tools/telemetria.ts            |   2 +-
+ 4 files changed, 337 insertions(+), 3 deletions(-)
+```
+
+Os quatro arquivos estão na lista fechada do AC 10. `src/client/telemetria.ts` não entrou, porque
+`DEBT10-COD-003` ficou de fora. Esta story vai num commit de docs separado, porque o AC 10 não inclui o
+arquivo da story na lista fechada (mesmo corte de `e4.8`).
+
+**AC 1:** `npm run check` sai com 0. **`npm run build`** sai com 0 (`dist/assets/index-*.js` 53.27 kB),
+porque nenhum arquivo de `client/` importa a guarda nem `tools/telemetria.ts`. O `grep -rn` de
+`guarda-telemetria|tools/telemetria` em `src/client/` só casa comentários. **`npm run lint`:** o
+`package.json` não tem script `lint`, e o gate estático do projeto é `npm run check`.
+
+**AC 2 (R8):** `node src/tools/determinism.ts` rodado em `438740b` (antes) e na árvore de `971686b`
+(depois). Os dois saem com 0 e com stderr vazio (0 bytes). A linha `golden hash    ✓ ok — 6 seeds batem o
+baseline` é idêntica. `diff antes depois` dá só inserção, depois da última linha existente (`55a56,58`):
+
+```
+> telemetria     ✓ ok — coletor real: 2 evento(s) novo(s) carimbado(s), 1 antigo(s) sem carimbo no export (3) · agregar() do fixture: 3 bloco(s) P3.1, 3 população(ões), a desconhecida à parte, nenhum n combinado
+> globais        ✓ ok — 6 pares (objeto, chave) trocados: 4 com descritor próprio, 2 ausentes, todos de volta ao descritor de antes · 3 console.warn capturado(s)
+>
+```
+
+Nenhuma linha `[telemetria]` solta aparece na saída. Os 3 avisos (1 de `ler()` e 2 de `agregar()`) foram
+capturados.
+
+**AC 4 (R2), no Node v24.13.1:**
+- (a) `node --input-type=module -e "await import('./src/tools/telemetria.ts')…"` imprime
+  `importado, processo vivo; agregar é function` e sai com 0. O próprio `sim:check` importa o módulo pela
+  guarda e sai com 0.
+- (b) `node src/tools/telemetria.ts` sem argumento imprime `uso: node src/tools/telemetria.ts
+  <arquivo.json>` e sai com 1. stdout e stderr são byte a byte iguais aos de antes.
+- (c) Os 5 exports de `docs/evidence/telemetria/` (`…1785815023371`, `…1785816621271`, `…1785908807719`,
+  `…1785909111972`, `…1785909682703`) dão stdout **e** stderr byte a byte iguais antes e depois (`cmp`), e
+  todos saem com 0.
+- Forma usada: `if (import.meta.main) main()`. A comparação de `process.argv[1]` não foi usada, e por isso
+  a questão da caixa da letra de unidade não se aplica. Em Node sem `import.meta.main`, o CLI ficaria mudo.
+  O CI (`deploy-pages.yml`, Node 20) não roda o CLI.
+
+**AC 7, as 6 mutações.** Cada uma foi aplicada por substituição de texto (um script Node no scratchpad
+confere que o padrão casa exatamente 1 vez antes de gravar), seguida de `npm run sim:check`. Depois o
+arquivo voltou da cópia de segurança. A bateria rodou duas vezes, e a segunda foi sobre o código final:
+
+| Mutação | Aplicada como | `sim:check` | Problema acusado pela guarda |
+|---|---|---|---|
+| **M1** | `registrar()` grava `{ ...e, partida }` (sem carimbo) | **exit 1** | `2 evento(s) novo(s) sem atrasoTicks/escalaHp finitos no export — registrar() deixou de carimbar (M1)` |
+| **M1b** | a mesma M1 mais `exportar()` com `eventos: eventos.map((e) => ({ ...e, atrasoTicks: ATRASO_ALVO_TICKS, escalaHp: ESCALA_HP }))` | **exit 1** | `o evento antigo saiu carimbado no export — … (M1b)` |
+| **M2** | `populacaoDe()` começa com `e = { ...e, atrasoTicks: e.atrasoTicks ?? 0, escalaHp: e.escalaHp ?? 1 }` | **exit 1** | `0 população(ões) "desconhecida" no agregado — esperada 1, a última (M2 …)`; `agregar() não avisou sobre os eventos sem carimbo do fixture` |
+| **M3** | `agregar()` começa com `return agregarPopulacao(eventos)` | **exit 1** | `1 bloco(s) P3.1 e 0 rótulo(s) de população — esperado 3 de cada (M3: sem partição)`, mais 4 (sem aviso ⚠, sem desconhecida, `n combinado (7)`, sem aviso de sem carimbo) |
+| **MR1** | `restaurar()` começa com `return Reflect.deleteProperty(alvo, chave)` | **exit 1** | `console.warn`, `globalThis.Blob`, `URL.createObjectURL` e `URL.revokeObjectURL` `não voltou ao descritor de antes (tinha descritor próprio)` |
+| **MR2** (a) | caso ausente vira `defineProperty(alvo, chave, { value: undefined, writable, enumerable, configurable: true })` | **exit 1** | `globalThis.localStorage` e `globalThis.document` `não voltou ao descritor de antes (estava ausente)` |
+| **MR2** (b) | caso ausente vira `alvo[chave] = undefined` | **exit 1** | idem |
+
+Depois das reversões, `git status --short src/` mostrou só os 3 arquivos da story (`client/telemetria.ts`
+intacto), e `npm run sim:check` voltou a sair com 0.
+
+**AC 11:** `grep -rn "from '\.\./client/" src/tools/` devolve 3 linhas: `telemetria.ts:2` (→
+`client/input.ts`) e `:3` (→ `client/telemetria.ts`, `import type`), ambas sem mudança, e
+`guarda-telemetria.ts:1` (→ `client/telemetria.ts`, valores e tipos numa linha só). `grep -rln` devolve
+exatamente `src/tools/guarda-telemetria.ts` e `src/tools/telemetria.ts`.
 
 ### Completion Notes
 
-_A preencher pelo @dev._
+- **Coletor real (AC 5).** O `localStorage` falso começa com 1 `rodadaFim` sem carimbo sob `CHAVE`
+  (partida 900). A guarda chama `criarTelemetria()`, depois `registrar(901, [rodadaFim, cast])`, depois
+  `exportar()`. O conteúdo chega por um `Blob` falso, capturado no `URL.createObjectURL` falso. A guarda
+  afirma: novos com `atrasoTicks`/`escalaHp` finitos (M1), antigo ainda sem carimbo (M1b), `versao ===
+  CHAVE`, contagens 1 e 2, a sequência Blob → createObjectURL → click → revokeObjectURL da mesma URL, que
+  `ler()` avisou e que `persistir()` não falhou. Os eventos são identificados por `partida`, não por
+  índice.
+- **Restauração (AC 5, P1–P3).** São 6 pares (objeto, chave): `console.warn`, `globalThis.localStorage`,
+  `globalThis.document`, `globalThis.Blob`, `URL.createObjectURL` e `URL.revokeObjectURL`. Todos os
+  descritores são capturados antes da primeira instalação. O par ausente é criado com `configurable:
+  true`. O `finally` desfaz na ordem inversa, só o que chegou a ser instalado: com descritor, faz
+  `defineProperty(original)`; ausente, faz `Reflect.deleteProperty`, e um `false` vira problema. Depois
+  do `finally`, a guarda compara cada par campo a campo (presença de cada campo e `Object.is`). No Node
+  24.13.1, **4 pares caem no ramo "tinha descritor"** e 2 no ausente. Um canário acusa problema se nenhum
+  par tiver descritor próprio (P2).
+- **Fixture (AC 6).** Fica em código. A população (6, 6) tem n=3, a (0, 6) tem n=2, e há 2 eventos sem
+  carimbo (um sem os campos e um com `null`). O n combinado é 7 e nenhuma população tem 7. As asserções
+  sobre `agregar()` leem o cabeçalho `P3.1  mediana…` (3 blocos), os rótulos `população: ` (3), a
+  "desconhecida" (exatamente 1, a última), o aviso `⚠` na primeira linha e a ausência de `(n=7`. Também
+  conferem que o cabeçalho da população desconhecida começa com `eventos 2 ·`, a contagem que a definição
+  única dá, e que `agregar()` avisou sobre eventos sem carimbo.
+- **Definição única (AC 8, R6).** A guarda tem um só predicado, `semCarimbo = !Number.isFinite(atraso) ||
+  !Number.isFinite(escala)`, igual ao de `populacaoDe()`. Ele serve às asserções do coletor e à contagem
+  esperada do fixture.
+- **Nunca lança (AC 3).** Todo o corpo roda em `try/catch/finally`. Exceção do cenário, falha de
+  instalação e falha de restauração viram `problemas`.
+
+**Decisões autônomas:**
+- [AUTO-DECISION] Aplicar `DEBT10-COD-003`? → **Não** (motivo: é opcional, e sem ele
+  `src/client/telemetria.ts` fica fora do commit. Pelo R6, a guarda não afirma a contagem do aviso de
+  `ler()`, só que ele avisou). As duas caixas que dependem disso (Task 1, último item, e Task 2b) ficaram
+  desmarcadas de propósito.
+- [AUTO-DECISION] Aplicar `DEBT10-DOC-002` (AC 9)? → **Sim** (motivo: é opcional, mas o arquivo já está
+  na lista fechada e a mudança é pequena). A linha `debt.10` ganhou só a hora; o placeholder do hash ficou
+  como estava, porque o AC pede a hora e não o hash.
+- [AUTO-DECISION] Como capturar o conteúdo exportado, se `Blob.text()` é assíncrono e a guarda é
+  síncrona? → **Trocar também `globalThis.Blob`** por um falso que guarda as partes (motivo: mantém
+  `verificarTelemetria()` síncrona, no molde de `verificarPartida`, e acrescenta mais um par ao ramo
+  "tinha descritor").
+- [AUTO-DECISION] `console.warn` entra na lista de pares restaurados? → **Sim**, mesma regra dos outros
+  (motivo: é uma troca de propriedade de objeto nativo, e deixá-la fora do critério abriria a brecha de
+  P1).
+- [AUTO-DECISION] Onde entra a seção nova no `sim:check`? → **Depois do último `console.log('')`
+  existente** (depois do bloco `pilar 3`), e o `''` final vem dentro das `linhas` da guarda (motivo: o AC
+  3 dá a `determinism.ts` uma só linha de saída, e o `diff` fica só com inserção no fim). A chamada fica
+  logo depois de `verificarPartida()`, e o bloco `throw` fica por último, com o `for … console.log(p)`
+  antes do `throw`, no mesmo padrão do bloco de `verificarPartida`.
+- [AUTO-DECISION] MR2 tem duas formas no AC. → **Rodei as duas** (`defineProperty` com `value:
+  undefined` e `= undefined`), e as duas reprovam.
+
+**Self-critique (passos 5.5/6.5), registrado aqui pelo AC 10:** não há `any`. Não há import fora da seta
+declarada: a guarda importa só `../client/telemetria.ts` e `./telemetria.ts`, sem tipo de `match/`, porque
+o tipo vem de `EventoTelemetria`. A guarda não tem estado de topo além de constantes, e o fixture é
+`readonly`. A linha de status não afirma "desconhecida à parte, nenhum n combinado" nem "todos de volta
+ao descritor" quando a guarda falha: na primeira bateria de mutações ela afirmava, e foi corrigido antes
+do commit. Não adicionei script ao `package.json`.
+
+**Em aberto (fora do escopo):** CodeRabbit não está disponível nesta máquina (o gate WSL não roda aqui),
+e a cobertura foi `npm run check` + `npm run sim:check` + `npm run build` + a bateria de mutações. A
+emenda de `e4.7`/`debt.9` (pré-condição de coleta, AC 13) continua com o @po. `DEBT10-COD-003` continua
+aberto para uma story futura.
 
 ### File List
 
-_A preencher pelo @dev._
+| Arquivo | Ação | Commit |
+|---|---|---|
+| `src/tools/guarda-telemetria.ts` | criado: `verificarTelemetria()`, fixture misto e restauração de globais | `971686b` |
+| `src/tools/determinism.ts` | modificado: só import, chamada, linha de seção e bloco `throw` (+12) | `971686b` |
+| `src/tools/telemetria.ts` | modificado: `if (import.meta.main) main()` (1 linha) | `971686b` |
+| `docs/evidence/telemetria/README.md` | modificado: `DEBT10-DOC-002` (janela de `b8e8a41`; hora de `debt.10`) | `971686b` |
+| `docs/stories/debt.11.guarda-automatica-telemetria.story.md` | modificado: checkboxes, Dev Agent Record, Change Log, Status | commit de docs |
 
 ## QA Results
 
@@ -584,3 +719,4 @@ _A preencher pelo @qa._
 | 2026-09-21 | 1.0 | Story criada a partir do achado `DEBT10-TST-001` do gate `CONCERNS` de `debt.10` (`docs/qa/gates/debt.10-telemetria-marca-atraso-de-input.yml`, severidade medium), conforme roteamento do @po registrado no Change Log v1.4 de `docs/stories/debt.10.telemetria-marca-atraso-de-input.story.md`. Os Acceptance Criteria (R1–R10) transcrevem, com citação e sem paráfrase onde a fonte já era precisa, a decisão vinculante do @architect em `docs/architecture-e4.md` §2.2 (commit `6f8ee7c`), que também declara e fecha a seta de camada `tools/ → client/`. Escopo: `src/tools/guarda-telemetria.ts` (novo), `src/tools/determinism.ts` (só R1), `src/tools/telemetria.ts` (só R2, e opcionalmente `DEBT10-COD-003`), `src/client/telemetria.ts` (só se `DEBT10-COD-003` entrar) e `docs/evidence/telemetria/README.md` (`DEBT10-DOC-002`). **Sequenciamento (R9):** registrado como assunção de trabalho que a implementação começa depois do commit de `e4.8` (story do codec do fio, criada no mesmo dia), a confirmar pelo @po, já que `e4.3` e `e4.6` também disputam `src/tools/determinism.ts`. **Pergunta em aberto para o @po (R10):** se `e4.7` deve listar `debt.11` como pré-condição no seu próprio texto — não decidida por esta story, nem por `architecture-e4.md` §2.2. Status: Draft. | River (@sm) |
 | 2026-09-21 | 1.1 | **Validação @po: GO 10/10 (8/10 antes das correções: itens 3 "AC testáveis" e 5 "dependências" estavam parciais). Status: Draft → Ready.** **R1–R10 conferidos um a um contra `architecture-e4.md` §2.2 (`6f8ee7c`, linhas 341–476):** R1→AC 3, R2→AC 4, R3→AC 5, R4→AC 6, R5→AC 7, R6→AC 8, R7→AC 10, R8→AC 2, R9→AC 12, R10→AC 13, e a seta declarada→AC 11. As citações de Dev Notes batem com a fonte, com as elisões marcadas. **Fatos conferidos:** `tools/telemetria.ts` tem 307 linhas, com `main()` em `:289`, `process.exit(1)` sem `argv[2]` e `main()` incondicional em `:307`; `:2` importa valor de `client/input.ts` (`ARRASTO_MAX`, `LIMIAR_ARRASTO_PX`) e `:3` faz `import type` de `client/telemetria.ts`; `agregar` exportado em `:84`, `populacaoDe` com `Number.isFinite` em `:62-64` (o alvo da M2), `agregarPopulacao` em `:146` e o cabeçalho `'P3.1  mediana…'` em `:170`. `client/telemetria.ts` exporta `CHAVE` (`:35`) e `criarTelemetria` (`:145`). `localStorage` só aparece dentro de funções (`persistir` `:150`, `ler` `:191`), e `document` só em `baixar` (`:220`). O carimbo está em `registrar` (`:163`), `exportar` em `:167`, e `ler` usa `=== undefined` (`:202`, alvo de `DEBT10-COD-003`). `partida.ts:880` traz `verificarPartida(): { linhas; problemas }`. `determinism.ts` tem 985 linhas, com import em `:38`, chamada em `:859`, impressão em `:902` e bloco `throw` em `:960-963`. Node local é 24.13.1: `import.meta.main` foi medido em arquivos de scratchpad (`true` como entrada, `false` importado) e está declarado em `@types/node` 26.1.2 (`web-globals/importmeta.d.ts:9`). O CI (`deploy-pages.yml`) usa Node 20, mas só roda `vite build`, que não empacota `tools/`, e por isso o CLI mudo em Node antigo não chega ao CI. Mutações M1/M1b/M2/M3 conferidas contra o gate de `debt.10` (evidência "Mutações próprias"). Há 5 exports em `docs/evidence/telemetria/`, e as linhas `b8e8a41`/`debt.10` do README estão como AC 9 descreve. `3de1cfe` é de 2026-09-21 03:58:44 −03. **Correções no lugar:** **(1) AC 11 — contagem errada.** "Exatamente as 3 linhas" confundia os pares da tabela de §2.2 com linhas do grep. A própria §2.2 diz que o grep "deve devolver só os **dois arquivos**". Hoje o grep devolve 2 linhas de 1 arquivo. Depois de `debt.11`, devolve essas 2 linhas mais 1 ou 2 de `guarda-telemetria.ts`, conforme o @dev junte ou separe `import type`. Com a redação antiga, a forma com `import type` separado reprovaria um código correto. O critério agora é por arquivo e destino (`grep -rln` = os 2 arquivos, as 2 linhas pré-existentes sem mudança e todo destino novo em `client/telemetria.ts`). Corrigido no AC 11, em `quality_gate_tools`, na Task 6 e em Testing. **(2) AC 5 — "nunca `delete`" contra "voltar a `undefined`".** No Node 24.13.1, `localStorage` e `document` **não têm descritor próprio** em `globalThis` (medido). Sem `delete`, a restauração deixaria uma propriedade que não existia antes, e as duas exigências do AC eram incompatíveis. A regra agora segue o motivo que R3 declara: com descritor original, `defineProperty` e nunca `delete` (protege um `localStorage` nativo futuro); sem descritor, remove-se a propriedade que a própria guarda criou. Critério: descritor antes igual ao descritor depois, inclusive ausente. **@architect: interpretação de R3 registrada para ratificação, não bloqueante.** **(3) AC 5 + Task 1 — cenário do coletor explícito.** O AC 7 exige que a M1b reprove, mas nenhum AC obrigava pré-carregar um evento antigo sem carimbo nem afirmar que ele continua sem carimbo no export, que é o que pega a M1b ("velho ganhou carimbo", no gate). Agora é explícito, junto com a asserção do carimbo nos novos, que pega a M1. É a sugestão (b) do gate. **(4) "Depende de" e AC 12 (R9) — decisão do @po.** Os estados estavam desatualizados: `e4.3` e `e4.8` apareciam como Draft e as duas estão Ready desde `b76b6ff`. Fica registrada a ordem **`e4.8` → `debt.11` → `e4.3`**, idêntica à de `e4.8` v1.1.0 e `e4.3` v1.4.0 e sem contradizê-las. A exceção da regra de `e4.3` também entra: se `e4.3` começar antes, esta começa depois do commit dela. A pré-condição de início passa a ser `git status --short src/tools/determinism.ts` vazio, e a Task 0 foi alinhada. `e4.6` sai da lista de candidatas a base, porque depende de `e4.3`. **(5) AC 13 e "Depende de" (R10) — decisão do @po: sim.** `e4.7` deve listar `debt.11` como **pré-condição de coleta**, não de início: nenhuma partida cujo export entre na evidência do AC 8 de `e4.7` é jogada antes do commit de implementação desta story. `e4.7` **não foi editada** nesta validação, e a emenda fica roteada ao @po. **Registrado, fora desta story:** `debt.9` (Draft) tem o mesmo prazo pela pré-condição (b), e a mesma pré-condição de coleta vale para ela na próxima edição. **Não editado (Dev Notes são do @dev):** os bullets de "O que esta story explicitamente NÃO faz" sobre `e4.7` e sobre a base de sequência continuam verdadeiros, porque a decisão foi do @po e não da story, e foram superados pelos AC 12/13. `quality_gate: @qa` fora da lista do task genérico é convenção do projeto em todas as stories. | Pax (@po) |
 | 2026-09-21 | 1.2 | **AC 5 e AC 7 recebem as precisões P1–P3 da ratificação de R3 pelo @architect (`docs/architecture-e4.md` §2.2, bloco "Ratificação (2026-09-21…)", commit `d72325b`). Status: continua Ready.** A leitura de R3 registrada na v1.1 (com descritor, `defineProperty` e nunca `delete`; ausente, `delete` da propriedade criada; critério "descritor depois = antes, ausente conta como estado") foi ratificada. **AC 5:** o período "Critério verificável" foi trocado **verbatim** pelo texto do delta de §2.2: critério por par (objeto, chave), alcançando `URL.createObjectURL` (P1); comparação campo a campo, `value`/`get`/`set` por `Object.is` e atributos por igualdade, nunca `JSON.stringify` (P3); todos os descritores capturados antes da primeira instalação e propriedade ausente criada com `configurable: true` (P3); a guarda confere o critério ela mesma depois do `finally`; ramo "tinha descritor" exercitado pelo menos uma vez no Node do projeto (P2). A referência final do AC passa a citar a ratificação. **AC 7:** entram **MR1** (restauração sempre com `delete`) e **MR2** (caso ausente restaurado por atribuição, `= undefined` ou `defineProperty` com `value: undefined`), com a redação de P2, às M1/M1b/M2/M3, com o mesmo registro no Dev Agent Record; "as 4" vira "as 6". **Repetições alinhadas:** `quality_gate_tools` (6 mutações e um item novo para a restauração), CodeRabbit Focus Areas e a linha do @qa em Specialized Agents (a linha antiga "nunca por `delete`" contradizia o AC 5 desde a v1.1), Task 1 (captura prévia, `configurable: true`, conferência campo a campo, ramo exercitado), Task 5 (MR1, MR2) e Testing. **Fatos conferidos no Node 24.13.1 desta sessão:** `localStorage` e `document` sem descritor próprio em `globalThis`; `URL.createObjectURL` e `URL.revokeObjectURL` com descritor próprio do objeto `URL` (`value`, `writable`, `enumerable`, `configurable`, os três `true`); `baixar()` em `src/client/telemetria.ts:219-224` chama os dois. **Não editado:** Dev Notes (a citação de R3 continua a da fonte original; a ratificação vive em §2.2 e nos AC 5/7), a menção às "4 mutações" do gate em Story, "Depende de" e na citação do achado (referem-se ao gate de `debt.10`, e continuam verdadeiras). Nenhum outro AC muda, conforme o delta. **Readiness:** o delta fecha brechas sem mudar escopo de arquivo, sequência nem dependência; o @architect o declara não bloqueante. GO 10/10 mantido. | Pax (@po) |
+| 2026-09-21 | 1.3 | **Implementação @dev: Ready → InProgress → Ready for Review.** Commit de implementação `971686b` (base `438740b`, caso normal do AC 12, depois do commit de implementação de `e4.8`, `910add8`). Arquivos: `src/tools/guarda-telemetria.ts` (novo), `determinism.ts` (+12: import, chamada, linha de seção e `throw`), `tools/telemetria.ts` (`if (import.meta.main) main()`) e `docs/evidence/telemetria/README.md` (`DEBT10-DOC-002`). `DEBT10-COD-003` não entrou. check, sim:check e build saem com 0; o golden hash é idêntico; o diff do `sim:check` tem só 3 linhas inseridas no fim. As 6 mutações (M1, M1b, M2, M3, MR1 e as duas formas de MR2) saem com exit 1. As provas do AC 4 (a/b/c) foram registradas no Node v24.13.1. Detalhes no Dev Agent Record. | Dex (@dev) |
