@@ -321,7 +321,8 @@ client/  render, input, telas, rede      → todos
 > importar `net/protocolo.ts`, `net/snapshot.ts` e `net/projecao.ts` para hospedar a guarda de
 > ida-e-volta do fio (`e4.2`/AC 7 e AC 11). A seta é deliberada e coerente com a tabela: `tools/` já
 > ficava acima de todo módulo puro, e é o `sim:check` que prova `net/` sem subir servidor — o dividendo
-> que a própria §2.2 promete. `e4.3` a usa de novo (guardas da sala e do codec).
+> que a própria §2.2 promete. `e4.8` a usou de novo para as guardas do codec (`910add8`), e `e4.3` a usa
+> para a guarda da sala.
 >
 > **Sem ciclo — conferido no grafo de imports de arquivo, não só por leitura** (40 arquivos de `src/`,
 > busca em profundidade sobre `import`/`export ... from`). `net/` importa só `sim/types.ts`,
@@ -385,7 +386,7 @@ client/  render, input, telas, rede      → todos
 >   | `tools/guarda-telemetria.ts` (`debt.11`) | `client/telemetria.ts` (`criarTelemetria`, `CHAVE` e os tipos) | execução |
 >
 >   Qualquer outro arquivo de `tools/`, incluindo `determinism.ts`, `harness.ts`, `partida.ts` e os de
->   `e4.3`/`e4.6`, **não** importa `client/`. Um arquivo novo nesta lista é emenda desta seção, não
+>   `e4.3`/`e4.6`/`e4.8`, **não** importa `client/`. Um arquivo novo nesta lista é emenda desta seção, não
 >   decisão de story. A conferência é `grep -rn "from '\.\./client/" src/tools/`, que deve devolver só os
 >   dois arquivos acima.
 > - **Invariante de importabilidade.** Todo arquivo de `client/` alcançado por `tools/` (hoje
@@ -462,7 +463,8 @@ client/  render, input, telas, rede      → todos
 >   lugar. O argumento de neutralidade é de construção: a guarda não chama nada de `sim/` nem de `match/`, e
 >   os módulos novos no fecho não têm estado de topo que `sim/` leia. A prova continua sendo o `diff`.
 > - **(R9) Sequência.** `determinism.ts` é disputado por `e4.3` (Draft), `e4.6` (Ready) e pela story do
->   codec que o @sm está escrevendo. `debt.11` começa depois do commit de implementação da que estiver em
+>   codec que o @sm está escrevendo *(hoje `e4.8`, implementada em `910add8`; ordem registrada pelo @po:
+>   `e4.8` → `debt.11` → `e4.3`)*. `debt.11` começa depois do commit de implementação da que estiver em
 >   curso, e o escopo é conferido por `git show --stat <commit próprio>`, nunca pela árvore. As stories
 >   seguintes que fazem "`sim:check` antes × depois" passam a ver a seção da telemetria na saída. Como é
 >   inserção fixa, o `diff` delas continua vazio desde que o "antes" seja tirado depois de `debt.11`.
@@ -474,6 +476,53 @@ client/  render, input, telas, rede      → todos
 > nenhum arquivo de `client/` a importa (regra 2). O `localStorage` falso vive só no processo do
 > `sim:check`, e a restauração pelo descritor (R3) impede que a guarda escreva em armazenamento real numa
 > versão futura do Node. Nenhum dado de jogador é lido: o fixture é sintético (R4).
+
+> **Ratificação (2026-09-21, validação de `debt.11` v1.1, `3c6ab23`, AC 5) — a leitura de R3 pelo @po
+> fica, com três precisões.** O @po apontou uma contradição real no texto de R3: "restaurar pelo descritor,
+> nunca `delete`" e "voltar a ser o que eram" não cabem juntos para um global que a própria guarda cria.
+> A regra dele segue o motivo que R3 declara, e fica: **se a propriedade tinha descritor próprio antes,
+> restaura-se com `defineProperty` desse descritor, nunca `delete`; se não tinha, apaga-se a propriedade
+> que a guarda criou. Critério: o descritor próprio depois é igual ao de antes, e "ausente" conta como
+> estado.** O "não `delete`" de R3 vale para o primeiro caso, que é o que ela protege.
+>
+> **Medido nesta sessão (Node 24.13.1):** `localStorage` e `document` sem descritor próprio em `globalThis`
+> (e fora de `in`); `URL.createObjectURL` e `URL.revokeObjectURL` com descritor **próprio do objeto `URL`**,
+> `writable`/`configurable`/`enumerable`; `baixar()` (`client/telemetria.ts`) chama os dois;
+> `JSON.stringify` de um descritor com `value` função **omite o `value`**; e uma propriedade criada por
+> `defineProperty` sem `configurable: true` faz o `delete` lançar `TypeError` em módulo ES.
+>
+> - **(P1) O critério é por par (objeto, chave), não só por chave de `globalThis`.** O AC 5 já lista
+>   `URL.createObjectURL` entre os globais trocados, mas o critério diz "descritor próprio de
+>   `globalThis`", que não o alcança. Uma guarda que deixasse o `createObjectURL` falso no lugar passaria.
+> - **(P2) O ramo "tinha descritor" precisa rodar no Node do projeto, senão é código morto.** No 24.13.1,
+>   `localStorage` e `document` caem no ramo "ausente". Se a guarda não trocar nenhuma propriedade nativa,
+>   uma restauração que sempre faz `delete` passa verde hoje e apaga o `localStorage` nativo de um Node
+>   futuro, que é exatamente o caso de R3. Trocar `URL.createObjectURL` para capturar o `Blob` é o caminho
+>   natural e já exercita o ramo. Se o @dev capturar o conteúdo de outro jeito, a guarda exercita a
+>   restauração sobre um objeto de sonda com propriedade pré-existente. Duas mutações têm de reprovar o
+>   `sim:check`: **MR1**, a restauração sempre com `delete`; **MR2**, o caso ausente restaurado por
+>   atribuição (`= undefined` ou `defineProperty` com `value: undefined`) em vez de `delete`.
+> - **(P3) Comparação campo a campo.** `value`, `get` e `set` por `Object.is`, e `writable`, `enumerable`
+>   e `configurable` por igualdade, incluindo a presença de cada campo. Não por `JSON.stringify`, que omite
+>   `value` função e faria um `createObjectURL` falso comparar igual ao nativo. Os descritores são todos
+>   capturados **antes** da primeira instalação, e a propriedade criada no caso ausente é instalada com
+>   `configurable: true`. Sem isso, o `delete` do `finally` lança (é barulhento, mas derruba o `sim:check`
+>   pelo motivo errado).
+>
+> **Delta de AC para o @po (`debt.11`, AC 5)**. O @architect não edita story. Trocar o período
+> "**Critério verificável:** para cada chave instalada, o descritor próprio de `globalThis` depois da
+> guarda é igual ao de antes, inclusive quando ausente." por:
+> *"**Critério verificável:** para cada par (objeto, chave) trocado pela guarda (`globalThis.localStorage`,
+> `globalThis.document`, `URL.createObjectURL` e qualquer outro), o descritor próprio depois da guarda é
+> igual ao de antes, inclusive quando ausente. A comparação é campo a campo (`value`/`get`/`set` por
+> `Object.is`, os três atributos por igualdade), não por `JSON.stringify`. Todos os descritores são
+> capturados antes da primeira instalação, e a propriedade criada no caso ausente leva `configurable:
+> true`. A guarda confere o critério ela mesma, depois do `finally`, e a divergência vira problema. O ramo
+> 'tinha descritor' roda pelo menos uma vez no Node do projeto: pela troca de `URL.createObjectURL` ou por
+> um objeto de sonda com propriedade pré-existente."* E no AC 7 (bateria de mutações), acrescentar **MR1**
+> e **MR2**, como descritas em (P2), às M1/M1b/M2/M3, com o mesmo registro no Dev Agent Record. Nenhum
+> outro AC muda. Não bloqueia o início de `debt.11`, porque o texto atual já aponta a direção certa e o
+> delta só fecha as brechas.
 
 `net/` é **puro**: sem `ws`, sem DOM, sem `Date.now`, sem `Math.random`, sem I/O. Quem tem socket é
 `server/`; quem tem `WebSocket` do navegador é `client/rede.ts`. O motivo é o mesmo de sempre e
@@ -739,7 +788,8 @@ bundle conectado é a *chamada* a `step()`, não o módulo.
 >
 > Das três saídas que `e4.2` devolveu: **(a) e (b) juntas, não (c).** O limiar de ~600 B do AC 9 de
 > `e4.2` **se refere à codificação compacta** — é fato sobre como a §1.2 mediu, não afrouxamento — e
-> `e4.3` adota essa codificação para o `snap`. Esta é escolha técnica com argumento numérico, e por isso
+> `e4.8` adota essa codificação para o `snap` *(era `e4.3` até o corte do @po; ver a nota no início dos
+> deltas abaixo)*. Esta é escolha técnica com argumento numérico, e por isso
 > é minha, não item `R-NN`.
 
 **O que foi medido** (`docs/evidence/e4-codificacao-fio/`, código em `b1c0668`, as 5 rodadas da §1,
@@ -755,6 +805,18 @@ bundle conectado é a *chamada* a `step()`, não o módulo.
 
 Parcela de `events` (JSON literal, em A, B e D): 17,1 B de média, 381 B de pico — o pico é morte
 súbita, não vazamento. A 60 Hz a linha D dá 318,8 B e 69,2 B com contexto; a 20 Hz, 331,7 B e 79,3 B.
+
+> **Errata de medição (2026-09-21, `e4.8`, `910add8`).** Com o `codificarDoServidor` real, a linha D dá
+> **329,2 B de média e 700 B de pico** (conferido nesta sessão no `sim:check`), não 325,8 · 687. A diferença
+> de 3,4 B vem de dois atalhos do meu script (`01-codificacoes.ts`) que a própria tabela de quantização
+> abaixo não prevê: `seq: 0` fixo, quando o `seq` real cresce, e `effects[].kind` como índice numérico,
+> quando a tabela manda `kind` literal. Com esses dois atalhos, o codec de `e4.8` reproduz 325,8 B exatos
+> nos mesmos 11 585 quadros (Dev Agent Record de `e4.8`). **O número de referência passa a ser 329,2 B**,
+> que é o da forma especificada. Nada muda: o limiar continua 450 B (folga de 121 B), a decisão D contra C
+> e E não depende de 3 B, e a banda da linha D a 30 Hz vai de 78 para 79 kbit/s. As outras linhas e as
+> colunas de deflate foram medidas com os mesmos atalhos e não foram refeitas, por isso valem como
+> comparação entre si, não como valor absoluto. Os deltas já aplicados que citam 325,8 B ou 78 kbit/s
+> (nota do @po no AC 5 de `e4.8`, AC 4 de `e4.7`) não precisam de reemissão.
 
 Banda por cliente, **carga útil**, e custo de uma rodada de 77,2 s (§1.1) a 30 Hz:
 
@@ -792,12 +854,13 @@ número que o código não entrega. (a) é a correção do instrumento; a decis�
   `prazo`, `rodadaInicio`, `rodadaFim`, `erro`, `sala`, `ping` e todo `DoCliente` seguem com nomes; o
   envelope do próprio `snap` continua `{"t":"snap","seq":n,"s":[…]}`, identificável por `t` e `seq`; os
   `events` dentro dele seguem literais; e o decodificador é função pura exportada de `net/`, chamável do
-  console. O parser de entrada (`parseDoCliente`, `e4.3`/AC 16) **não muda** — `DoCliente` não é
-  posicional, e o `parseDoCliente(JSON.parse(JSON.stringify(msg)))` da guarda de `e4.3` segue valendo.
+  console. O parser de entrada (`parseDoCliente`, `e4.8`/AC 4) **não muda** — `DoCliente` não é
+  posicional, e o `parseDoCliente(JSON.parse(JSON.stringify(msg)))` do caminho feliz da Bo5 (`e4.3`/AC
+  16) segue valendo.
 - **Continua JSON.** Texto, `JSON.parse` dos dois lados, nenhuma dependência nova, nenhum formato
   binário. O ganho de E (eventos em tupla) sobre D é ~10 B/quadro e não paga a legibilidade perdida.
-- **Um arquivo a mais de responsabilidade**, e ele já existe: `net/codec.ts`, criado por `e4.3` para o
-  parser. Serializador e parser do fio moram juntos, puros, sob `sim:check`.
+- **Um arquivo a mais de responsabilidade**: `net/codec.ts`, criado por `e4.8` (`910add8`) com o
+  parser e o codec de saída. Serializador e parser do fio moram juntos, puros, sob `sim:check`.
 - **Descompasso de versão** entre cliente e servidor — §11.6.
 
 **Tabela de quantização do fio.** É **precisão de exibição**, na mesma linha de `EPS_POSICAO_PX` de
@@ -818,8 +881,8 @@ amostras bola×quadro das 5 rodadas, **o arredondamento ingênuo também vira 0 
 caiu a menos de 0,005 do limiar. Um teste que só conferisse a rodada real passaria com a implementação
 errada. Em 2 × 10⁶ casos sintéticos na fronteira, a regra da tabela vira 0 vezes; o arredondamento
 ingênuo vira 654 971 vezes na habilidade e 2 171 710 na ult; e o piso vira em **100%** dos casos quando
-o limiar não é múltiplo de `q` (`110.005`). Hoje os limiares são 110 e 130. Por isso a guarda de `e4.3`
-(delta abaixo) tem três partes: a rodada real, os casos sintéticos com um codec ingênuo que **tem de
+o limiar não é múltiplo de `q` (`110.005`). Hoje os limiares são 110 e 130. Por isso a guarda do codec
+(`e4.8`/AC 5, delta abaixo) tem três partes: a rodada real, os casos sintéticos com um codec ingênuo que **tem de
 falhar**, e uma tripwire no roster.
 
 **Orçamento, e o que ele passa a significar.** Na codificação posicional um campo da classe 3 **não tem
@@ -828,8 +891,8 @@ sendo o de chaves, sobre o `Snapshot` com nomes (guarda de `e4.2`), e o limiar d
 detector de vazamento para virar **alarme de regressão do codec**: **média ≤ 450 B/quadro** do
 `{t:'snap'}` codificado, na cadência de `SNAPSHOT_HZ` com o flush final. O número não é arbitrário: a
 30 Hz, 450 B dão 108 kbit/s de carga útil, que com ~17 kbit/s de transporte ficam em ~125 kbit/s — os
-126 kbit/s que a §1.2 declarou "cabe em qualquer 3G". Referência medida: 325,8 B de média, 687 B de
-pico. Pico não tem teto: ele é `events` na morte súbita, legítimo. O limite é **por quadro**, de
+126 kbit/s que a §1.2 declarou "cabe em qualquer 3G". Referência medida: 329,2 B de média, 700 B de
+pico, com o codec de `e4.8` (errata acima; era 325,8 · 687). Pico não tem teto: ele é `events` na morte súbita, legítimo. O limite é **por quadro**, de
 propósito: é o que o codec controla, e não muda quando `SNAPSHOT_HZ` muda. Banda por taxa é outra
 pergunta — de `e4.7`, com a tabela acima.
 
@@ -841,6 +904,14 @@ inicial desligado numa constante nomeada de `server/`, e registra por conexão a
 codificação desta seção não muda.
 
 **Deltas de AC para o @po aplicar** (o @architect não edita story; `e4.2` está em gate e **não muda**):
+
+> **Nota (2026-09-21) — o codec saiu de `e4.3`.** O @po cortou `e4.3` (v1.3.0, `1564ae4`), como a v1.2.0
+> previa, e o parser e o codec de saída foram **juntos** para `e4.8`, implementada em `910add8`. Mapa dos
+> deltas abaixo: o AC 16 antigo de `e4.3` (parser) é o **AC 4 de `e4.8`**; o AC 17 (codec de saída) é o
+> **AC 5 de `e4.8`**, com o texto abaixo sem alteração; o alcance da guarda do fio é o **AC 6 de
+> `e4.8`**. **`e4.3` continua dona da sala, do `snap` final (AC 10) e da guarda da Bo5 (AC 11)**, e o AC 16
+> dela (v1.4.0) ficou com a checagem `assento → jogador` e o caminho feliz da Bo5 pelo parser. Os rótulos
+> abaixo seguem esse mapa.
 
 - **`e4.2` — nenhum delta.** Para o gate: o AC 9 foi cumprido como escrito — mediu, investigou, não
   ajustou, devolveu. O limiar se refere à codificação compacta (§1.2, atualização) e a decisão está
@@ -855,7 +926,7 @@ codificação desta seção não muda.
   `events` de todos os `snap` da rodada é idêntica, em ordem, à sequência de `world.events` que a rodada
   produziu."* (Discrimina na rodada real: 4 das 5 rodadas da §1 terminam em tick ímpar — 4 773, 4 699,
   4 363 e 5 249 —, fora da cadência de 30 Hz. Sem o flush, o `roundEnd` some em 4 de 5.)
-- **`e4.3`, AC 17 (novo) — o codec de saída.** *"`src/net/codec.ts` exporta também
+- **`e4.8`, AC 5 (era `e4.3`, AC 17) — o codec de saída.** *"`src/net/codec.ts` exporta também
   `codificarDoServidor(msg: DoServidor): string` e `decodificarDoServidor(texto: string): DoServidor`,
   puros e só com `import type`. Toda variante vai como JSON com nomes, **exceto** o `s` do `{t:'snap'}`,
   que vai como tupla posicional com a quantização da tabela de `architecture-e4.md` §5.5; o envelope
@@ -872,10 +943,9 @@ codificação desta seção não muda.
   falhar**; (c) tripwire: todo `ult.threshold` do roster é múltiplo de 0,01; (d) toda variante que não é
   `snap` volta idêntica (`decodificar(codificar(m))` profundamente igual a `m`); (e) orçamento: média
   ≤ 450 B/quadro do `{t:'snap'}` codificado, com média, pico e parcela de `events` impressos."* —
-  Task 10 correspondente; `quality_gate_tools` ganha *"guarda nova: codec do fio (AC 17)"*. **AC 14, 15
-  e 16 não mudam** (`codec.ts` já está no escopo e continua só com `import type`; `DoCliente` não é
-  posicional). Se o @po cortar `e4.3` como a v1.2.0 prevê, parser e codec de saída vão **juntos** para a
-  story do codec: mesmo arquivo, nenhuma dependência da sala.
+  Aplicado em `e4.8` (AC 5, com a guarda em `quality_gate_tools`); o parser (`e4.8`/AC 4) não muda,
+  porque `DoCliente` não é posicional. Parser e codec de saída foram **juntos** para `e4.8`: mesmo
+  arquivo, nenhuma dependência da sala.
 - **`e4.4`, AC 15 (acréscimo)** — *"...e, na saída, todo `envio` é escrito como
   `codificarDoServidor(envio.msg)`, na ordem em que `ResultadoDoPasso.envios` o devolveu. `server/` não
   chama `JSON.stringify` sobre `DoServidor`."*
@@ -1040,7 +1110,7 @@ Na mesma forma da §11.2 de E3:
 
 | # | Passo | Verificação | Golden hash |
 |---|---|---|---|
-| 0 | `net/protocolo.ts`: tipos de mensagem, codec, `ATRASO_ALVO_TICKS`, `SNAPSHOT_HZ` | `npm run check` | **idêntico** |
+| 0 | `net/protocolo.ts`: tipos de mensagem, `ATRASO_ALVO_TICKS`, `SNAPSHOT_HZ`; `net/codec.ts` (`e4.8`) | `npm run check` | **idêntico** |
 | 1 | Ativar o atraso no modo local (`INPUT_DELAY_TICKS` 0 → 6, via a constante única) — **P4.1** | `sim:check` verde; jogar e sentir | **idêntico** (§4.2) |
 | 2 | `net/snapshot.ts` + `net/projecao.ts`: `World → Snapshot → forma de render`, ida e volta | teste de ida-e-volta: projetar o snapshot e desenhar dá a mesma tela | **idêntico** |
 | 3 | `net/sala.ts` pura + cobertura no `sim:check`: partida inteira em sala, sem socket | nova guarda no `sim:check`: sala headless reproduz o mesmo placar de `tools/partida.ts` | **idêntico** |
@@ -1201,7 +1271,7 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | Arquivo | Estado | Papel |
 |---|---|---|
 | `src/net/protocolo.ts` | **novo** (`e4.0`) | Tipos de mensagem, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro. *(O "codec" que esta linha citava foi para `codec.ts`.)* |
-| `src/net/codec.ts` | **novo** (`e4.3`) | `parseDoCliente` (entrada, `e4.3`/AC 16) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro, só `import type` |
+| `src/net/codec.ts` | **novo** (`e4.8`, `910add8`) | `parseDoCliente` (entrada, `e4.8`/AC 4) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro, só `import type` |
 | `src/net/snapshot.ts` | **novo** (`e4.2`) | `World → EstaticoDaRodada`, `ProdutorDeSnapshot` (acumula eventos; contrato da §5.6). Puro. Só campos da §5.1 |
 | `src/net/projecao.ts` | **novo** (`e4.2`) | `Snapshot + estático + CHARS → VisaoDoMundo`, a forma que `render.ts` passou a declarar. Puro |
 | `src/net/sala.ts` | **novo** | Máquina de estados da sala. Pura, relógio injetado (§3.2) |
@@ -1214,14 +1284,16 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | `src/shop/**`, `src/chars/**` | **intactos** | — |
 | `src/client/render.ts` | **muda só em anotações de tipo** (`e4.2`) | 10 linhas, nenhuma de corpo: `World`/`Ball` → `VisaoDoMundo`/`BolaVisivel` (§5.1, emenda) |
 | `src/client/telas.ts`, `input.ts`, `layout.ts` | **intactos** | §5.1 |
-| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), sala e codec (`e4.3`), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
+| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), codec (`e4.8`), sala (`e4.3`), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
 | `src/tools/guarda-telemetria.ts` | **novo** (`debt.11`) | Guarda headless do carimbo e da partição de telemetria, chamada pelo `sim:check`. Um dos dois únicos arquivos de `tools/` que importam `client/` (§2.2, lista fechada) |
 | `src/tools/telemetria.ts` | **muda só no ponto de entrada** (`debt.11`) | `main()` roda só como entrada do processo. Mantém a seta `tools/ → client/` de `e3.5`, agora declarada (§2.2) |
 | `src/tools/**` (resto) | **intacto** | Não importa `client/` |
 
 *Atualização (2026-09-21, `e4.2`): o Anexo acima foi escrito antes de haver código. As linhas de
 `codec.ts`, `render.ts` e `tools/` foram corrigidas pelo que `e4.2` entregou e pelo que `e4.3` já tem no
-escopo; a coluna "Estado" passou a citar a story dona.*
+escopo; a coluna "Estado" passou a citar a story dona. Atualização (2026-09-21, corte de `e4.3`): o
+codec foi para `e4.8` (§5.5, nota no início dos deltas), e as linhas de `codec.ts` e `determinism.ts`
+citam a story nova.*
 
 ---
 
@@ -1238,7 +1310,7 @@ escopo; a coluna "Estado" passou a citar a story dona.*
 | — | `npm run check` (`tsc --noEmit`) verde | comando | — |
 | — | `sim/` segue sem importar de `chars/`, `bot/`, `client/`, `match/`, `shop/`, `net/` | grep + revisão | §2.2 |
 | — | `net/` não importa `ws` nem toca DOM | grep + revisão | §2.3 |
-| — | Codec do fio: prontidão preservada, contrafactual ingênuo reprovado, média ≤ 450 B/quadro *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 17) | §5.5 |
+| — | Codec do fio: prontidão preservada, contrafactual ingênuo reprovado, média ≤ 450 B/quadro *(2026-09-21)* | guarda do `sim:check` (`e4.8`/AC 5) | §5.5 |
 | — | O `snap` final de cada rodada chega ao fio antes do `rodadaFim` *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 11) + duas abas (`e4.4`/AC 16) | §5.6 |
 | — | Telemetria que vira baseline de P4.4 separa (atraso, `ESCALA_HP`) e não mistura populações *(2026-09-21)* | guarda do `sim:check` (`debt.11`), pronta antes da coleta de `e4.7` | §2.2 (decisão `debt.10` → `debt.11`) |
 | — | Só `tools/telemetria.ts` e `tools/guarda-telemetria.ts` importam `client/`; nenhum arquivo de `client/` importa um dos dois *(2026-09-21)* | `grep -rn "from '\.\./client/" src/tools/` + revisão | §2.2 |
