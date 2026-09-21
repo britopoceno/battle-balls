@@ -1,0 +1,460 @@
+# Story debt.12: Guarda do fio dirigida por tabela, fronteira de piso não inteira e fixture congelada — achados `E48-TST-001`, `E48-TST-002`, `E48-ARC-003`
+
+## Status
+
+Draft
+
+## Executor Assignment
+
+```yaml
+executor: "@dev"
+quality_gate: "@qa"
+quality_gate_tools: ["npm run check", "npm run sim:check (golden hash idêntico ao baseline atual; diff da saída completa antes×depois SÓ COM INSERÇÃO)", "as 10 mutações do contrafactual (M4a, M4b, M4c, M12, M14, M15, M7, M9, over↔pad, pisoQ→q), cada uma aplicada numa cópia descartável do commit desta story e revertida — todas devem fazer sim:check sair com código diferente de 0", "git show --stat <commit(s) desta story> — restrito a src/tools/determinism.ts; NUNCA a árvore de trabalho compartilhada, porque determinism.ts é disputado por outras stories da ordem (e4.9, e4.3, e4.6)", "conferência de FIO_CONGELADO só de acréscimo: git show do commit de mudança de protocolo (se houver) mostra só linha(s) ACRESCENTADAS ao array — qualquer linha removida ou alterada dentro dele é carimbo e reprova"]
+```
+
+## Story
+
+**Como** desenvolvedor fechando os achados `E48-TST-001` (medium) e `E48-TST-002` (low) do gate de `e4.8`
+(`docs/qa/gates/e4.8-codec-do-fio.yml`), mais a parte 2 do achado `E48-ARC-003` (fixture dourada do fio,
+confirmada pelo @architect em `docs/architecture-e4.md` §11.6.1, Decisão 1),
+**eu quero** que a guarda do parser em `src/tools/determinism.ts` passe a ser dirigida por tabela — cada
+campo numérico e cada campo 0|1 do protocolo testado individualmente com os quatro valores adversariais do
+gate, e o descarte de `tick`/`extra` verificado em todas as variantes de `DoCliente` e de `decisao.d`, não
+só em `cast` —, que a varredura da fronteira de prontidão do codec inclua limiares de ult **não inteiros**,
+e que o texto de um `{t:'snap'}` fixo (`AMOSTRA_DO_FIO`) fique congelado numa lista só de acréscimo
+(`FIO_CONGELADO`),
+**para que** uma regressão no parser de entrada, no piso de ponto flutuante da fronteira de prontidão, ou
+uma mudança silenciosa no layout posicional do fio — a mesma classe de risco que a §11.6 já registrava como
+aceita "até haver deploy", e que a medição M-1 da §11.6.1 mostrou passar despercebida com a amostra antiga —
+passem a reprovar o `sim:check` automaticamente, em vez de depender de o `@qa` reconstruir o mesmo arnês
+adversarial a cada gate. É o mesmo padrão de alcance insuficiente já registrado em `E42-TST-003` e em
+`DEBT10-TST-001`/`DEBT11-TST-001` neste projeto: o mecanismo funciona, mas cobre a lista de casos do AC, não
+os campos e a propriedade vizinhos.
+
+## Depende de
+
+`e4.8` (`910add8`, Done, gate `docs/qa/gates/e4.8-codec-do-fio.yml`, `438740b`, CONCERNS) — criou
+`src/net/codec.ts` e a guarda do fio em `determinism.ts` (`guardaParser()`, `guardaCodec()`), e é dona do
+achado `E48-TST-001` (medium) e `E48-TST-002` (low) que esta story fecha.
+
+`docs/architecture-e4.md` §11.6.1 (commit `bed4603`, 2026-09-21) — **decisão vinculante do @architect** que
+confirma a fixture congelada (Decisão 1) com os valores exatos de `AMOSTRA_DO_FIO`, a forma de
+`FIO_CONGELADO`, os quatro itens que a guarda confere, e a ordem de `determinism.ts`:
+**`e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `e4.6`**.
+
+**Sequenciada, não dependente em conteúdo, de `e4.9` (Draft, em validação do @po em paralelo — não tocada
+por esta story) e de `e4.3` (Ready).** `debt.12` começa **depois do commit de implementação de `e4.3`**, que
+por sua vez começa depois de `e4.9`. Esta story não lê nem toca nenhum arquivo de `e4.9` ou de `e4.3` — a
+dependência é só de sequência de `git status --short src/tools/determinism.ts` vazio, pelo mesmo motivo já
+registrado em `debt.11` (AC 12) e `e4.8` (v1.1.0): a árvore é compartilhada por até quatro stories
+concorrentes, e `git diff --stat` absorveria guardas de outra story em voo.
+
+**Não depende de conteúdo de `codec.ts`**: esta story só abre `src/tools/determinism.ts`. Se um caso novo
+do AC 3 ou do AC 6 falhar contra o código de `codec.ts` de hoje, isso é **achado**, a story **para** e
+**escala** ao @po/@architect — não corrige `codec.ts` por conta própria (ver AC 7).
+
+**Roteamento do @po que criou esta story (citado, não resumido de memória, `e4.8` Change Log v1.4.0):**
+
+> **E48-TST-001 (medium), E48-TST-002 (low) e a fixture do fio de E48-ARC-003 → story debt nova, sugestão
+> `debt.12`, a criar pelo @sm.** Não foram para `debt.11`, que está em implementação e também edita
+> `determinism.ts`. Também não foram para `e4.3`, que é a maior story da fase e foi cortada exatamente
+> para não pôr a guarda do fio e a da sala sob um só gate. Uma story só abre o bloco do codec em
+> `determinism.ts:1046-1194` uma vez para os três.
+
+[Fonte: `docs/stories/e4.8.codec-do-fio.story.md`, Change Log v1.4.0, @po]
+
+**A spec de forma final (citada, não resumida), do Change Log v1.5.0 de `e4.8`, que substitui os itens (c),
+(d) e (g) da v1.4.0 acima — os itens (a), (b), (e) e (f) da v1.4.0 continuam valendo como estão lá e formam
+os AC 3, 4, 2 e 6 abaixo:**
+
+> **(a)** *E48-TST-001:* guarda do parser dirigida por tabela, com os casos que o gate lista. Para cada
+> campo numérico (`cast.dx`, `cast.dy`, `cast.mag`, `pong.id`): `NaN`, `1e999` via `JSON.parse`,
+> `-Infinity` e `"1"` dão `null`. Para cada campo 0/1 (`cast.ballIndex`, `d.jogador`, `d.slot`/
+> `abilityIndex`/`passiveIndex` de `build` e `trocaDeBuild`, `compra.slot`): `2`, `0.5`, `"0"` e `true` dão
+> `null`. Para cada uma das 4 variantes de `DoCliente` e das 6 de `decisao.d`: `{…válida, tick, extra}`
+> volta sem `tick` e sem `extra`, num objeto novo (`!== raw`, e `.d !== raw.d` em `decisao`).
+>
+> **(b)** *E48-TST-002:* a varredura da fronteira ganha limiares não inteiros, múltiplos de 0,01, cujo
+> produto por 100 cai abaixo do inteiro (110.07, 0.29, 87.04), com `ultCharge = thr` e `thr − 0,004`.
+>
+> **(c)** Fixture congelada do fio, CONFIRMADA pelo @architect (§11.6.1, Decisão 1). Congela o texto de
+> **um** `{t:'snap'}`, produzido por `codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO, seq: 4 })`.
+> **Não** usa o `snapshotSintetico`. [...] `AMOSTRA_DO_FIO` é uma função própria em `determinism.ts`, com
+> os valores exatos do bloco `ts` da §11.6.1. [...] **Onde mora:** inline em `src/tools/determinism.ts`,
+> no bloco do codec, ao lado da guarda que já existe. **Forma:** lista só de acréscimo,
+> `FIO_CONGELADO: readonly { versao: number; snap: string }[]`, que nasce com
+> `[{ versao: 1, snap: '<texto>' }]`. **A guarda, numa linha própria do `sim:check`, confere quatro
+> coisas:** (1) `codificarDoServidor(...) === última.snap`; (2) `última.versao === VERSAO_DO_FIO`, e
+> `FIO_CONGELADO.length === VERSAO_DO_FIO`; (3) ponto fixo, `codificarDoServidor(decodificarDoServidor(
+> última.snap)) === última.snap`; (4) canário da propriedade discriminante.
+>
+> **(d)** Contrafactual: as mutações do gate M4a, M4b, M4c, M12, M14, M15 e M7, **mais M9** (`hp ↔
+> ultCharge` nos dois lados), **`over ↔ pad`** nos dois lados e **`pisoQ → q`** no `ultCharge`. Cada uma,
+> aplicada numa cópia descartável, faz o `sim:check` sair com rc=1, e o resultado é registrado no Dev
+> Agent Record.
+>
+> **(g)** Sequência: começa depois do commit de implementação de `e4.3`, que já vem depois de `e4.9`. Por
+> isso `VERSAO_DO_FIO` já existe quando `debt.12` começa, e os quatro itens da guarda entram desde a
+> primeira linha. [...] A `debt.12` tem de ter commit de implementação antes da Task 1 de `e4.4`
+> (pré-condição em `e4.4`, AC 1 e Task 0). O escopo continua só `src/tools/determinism.ts`.
+
+[Fonte: `docs/stories/e4.8.codec-do-fio.story.md`, Change Log v1.5.0, @po]
+
+**O texto exato da amostra e do valor congelado (citado da §11.6.1, fonte, não ajuste):**
+
+```ts
+{ time: 1234.567, over: false, winner: 1, arena: { w: 960, h: 540, pad: 17.254 },
+  balls: [{ id: 7, x: 100.25, y: 200.5, facing: 0.75, hp: 432.126, alive: true, ultCharge: 55.559,
+            abilityReadyAt: 1234.567 + 183.341, effects: [{ kind: 'slow' }, { kind: 'shield' }] }],
+  projectiles: [{ id: 8, x: 10.5, y: 20.75, vx: 300.123, vy: -40.456, radius: 5.555, color: '#b98cff' }],
+  zones: [{ id: 9, kind: 'wall', x: 30.25, y: 40.5, angle: 1.234, halfLen: 60.126, radius: 9.994,
+            pull: 2.345, ownerColor: '#8a8' }],
+  events: [{ t: 'hit', x: 1.5, y: 2.5, amount: 3.14159, targetId: 7, crit: true }] }
+```
+
+Texto que ela produz em `f8be842` (287 B), **conferência, não fonte** — `debt.12` gera a fixture a partir
+do codec no próprio commit em que começa, e se o resultado divergir desta linha, o codec mudou sem mudança
+de protocolo registrada, o que é achado, não ajuste:
+
+```
+{"t":"snap","seq":4,"s":[1234.57,0,1,960,540,17.25,[[7,100.25,200.5,0.75,432.13,1,55.55,183.35,["slow","shield"]]],[[8,10.5,20.75,300.12,-40.46,5.56,"#b98cff"]],[[9,"wall",30.25,40.5,1.234,60.13,9.99,2.35,"#8a8"]],[{"t":"hit","x":1.5,"y":2.5,"amount":3.14159,"targetId":7,"crit":true}]]}
+```
+
+[Fonte: `docs/architecture-e4.md` §11.6.1, "Decisão 1 — fixture congelada do fio", linhas 1251–1276]
+
+## Acceptance Criteria
+
+1. `npm run check` verde.
+2. `npm run sim:check` verde, com **golden hash idêntico** ao baseline atual. O `diff` da saída completa
+   do `sim:check` antes × depois desta story é **só inserção**: a linha `parser` do bloco `codec do fio`
+   pode mudar de conteúdo (ela descreve a cobertura da guarda, não um valor de jogo), a linha `fronteira`
+   ganha os novos limiares no texto, e a fixture entra como linha(s) nova(s) de seção. Nenhuma linha do
+   golden hash, do build coverage, do replay, nem de qualquer seção anterior ao bloco do codec muda de
+   conteúdo ou troca de lugar.
+3. **Guarda do parser dirigida por tabela (`E48-TST-001`).** `guardaParser()`
+   (`src/tools/determinism.ts:978-1044`) deixa de ser uma lista fixa de casos e passa a testar, por
+   campo:
+   - **Campos numéricos** — `cast.dx`, `cast.dy`, `cast.mag`, `pong.id`: cada um, isoladamente, com `NaN`,
+     `1e999` (via `JSON.parse`, não o literal — o `codec.ts:1-3` só recebe `import type`, e `1e999`
+     literal já vira `Infinity` no parser do JS antes de chegar à guarda), `-Infinity` e `"1"`. Os quatro
+     têm de dar `null`. Hoje só `dx` é testado (linhas 989-992); `dy` nunca é, e é o gap citado no achado.
+   - **Campos 0|1** — `cast.ballIndex`, `d.jogador`, `d.slot`/`abilityIndex`/`passiveIndex` de `build` e de
+     `trocaDeBuild`, `compra.slot`: cada um, isoladamente, com `2`, `0.5`, `"0"` e `true`. Os quatro têm
+     de dar `null`. Hoje só `ballIndex` (linhas 994-995) e `d.jogador` (linha 996) são testados; a faixa
+     de `abilityIndex`/`passiveIndex` de build/trocaDeBuild e de `slot` de compra não é — os gaps exatos
+     de `M14` e `M15` no gate.
+   - **Descarte de `tick`/`extra`** — hoje só provado para `cast` (linhas 1013-1019, o caso `comExtra`).
+     Passa a valer para as 4 variantes de `DoCliente` (`entrar`, `decisao`, `cast`, `pong`) e para as 6 de
+     `decisao.d` (`draft`, `build`, `buildPadrao`, `compra`, `trocaDeBuild`, `pronto`): cada uma recebe
+     `{ …válida, tick: 5, extra: 1 }` (e, em `decisao`, também `{ …válida, d: { …d válido, tick, extra } }`)
+     e o resultado parseado não contém `tick` nem `extra`, é um objeto novo (`!== raw`), e em `decisao`
+     também `.d !== raw.d`. São os gaps exatos de `M4a` (`pronto`/`buildPadrao`), `M4b` (`entrar`) e `M4c`
+     (`pong`) no gate.
+   - A lista de casos "→ `null`" que já existe (`nulos`, linhas 982-1006) e os de "→ parse OK" (`validos`,
+     linhas 1025-1037) continuam — a tabela **complementa**, não substitui, o que já prova o AC 4 de
+     `e4.8`.
+   [Fonte: `docs/qa/gates/e4.8-codec-do-fio.yml`, achado `E48-TST-001`; `docs/stories/e4.8.codec-do-fio.story.md`,
+   Change Log v1.4.0 item (a) e v1.5.0]
+4. **Fronteira do piso de FP com limiares não inteiros (`E48-TST-002`).** A varredura de `guardaCodec()`
+   (`src/tools/determinism.ts:1090-1122`), que hoje só usa os limiares do roster (110 e 130, inteiros),
+   ganha limiares sintéticos **não inteiros, múltiplos de 0,01**, cujo produto por 100 cai abaixo do
+   inteiro: **110.07, 0.29, 87.04**. Para cada um, `ultCharge = thr` e `ultCharge = thr − 0,004` (o mesmo
+   par que a varredura já usa para os limiares do roster). Sem a correção de ponto flutuante do `pisoQ`
+   (decisão 4 do @dev em `e4.8`), `pisoQ(110.07)` dá `110.06` em vez de `110.07`, e a ult carregada até o
+   teto nunca acenderia no cliente — o efeito exato que `M7` explora. Esses limiares sintéticos **não**
+   substituem os do roster; entram como casos adicionais da mesma varredura.
+   [Fonte: `docs/qa/gates/e4.8-codec-do-fio.yml`, achado `E48-TST-002`; `docs/stories/e4.8.codec-do-fio.story.md`,
+   Change Log v1.4.0 item (b)]
+5. **Fixture congelada do fio (`E48-ARC-003`, parte 2 — Decisão 1 da §11.6.1).**
+   - **`AMOSTRA_DO_FIO`**, uma função própria em `src/tools/determinism.ts`, devolve exatamente o
+     `Snapshot` citado em "Depende de" acima, com os valores exatos do bloco `ts` da §11.6.1 — não o
+     `snapshotSintetico` já existente (linha 1053), que tem três colisões de valor entre posições
+     escalares da mesma tupla (`over`/`arena.pad`, `id`/`alive`, `y`/restante da habilidade) e por isso
+     deixa passar despercebidas trocas com a forma de `M9` (medição M-1 da §11.6.1). A amostra nova
+     garante que nenhuma posição escalar repete valor dentro da mesma tupla, e que todo campo quantizado
+     está fora da grade de 0,01, com o valor separando explicitamente uma regra de quantização da outra
+     (`pisoQ(ultCharge) ≠ q(ultCharge)`, `tetoQ(restante) ≠ q(restante)`).
+   - **`FIO_CONGELADO: readonly { versao: number; snap: string }[]`**, uma lista **só de acréscimo**, que
+     nasce com `[{ versao: 1, snap: '<texto de 287 B citado acima>' }]`. Mora inline em
+     `src/tools/determinism.ts`, no bloco do codec (ao lado de `guardaCodec()`), no mesmo padrão do
+     `BASELINE` do golden hash (linha 120) — um array congelado, comentado, dentro do próprio arquivo, não
+     um JSON à parte em `docs/`.
+   - **A guarda confere, numa linha própria do `sim:check`, dentro do bloco `codec do fio`:**
+     1. `codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO(), seq: 4 }) === última.snap`. Se falhar, a
+        mensagem de problema aponta a **primeira posição divergente** da tupla, com o caminho (ex.:
+        `s[6][0][4]`), o valor congelado e o atual, e o texto: "se foi de propósito, incremente
+        `VERSAO_DO_FIO` em `net/protocolo.ts` e ACRESCENTE uma entrada; nunca edite uma existente
+        (§11.6.1)".
+     2. `última.versao === VERSAO_DO_FIO` (importado de `net/protocolo.ts`, seta `tools/ → net/` já
+        declarada desde `e4.2`/§2.2), e `FIO_CONGELADO.length === VERSAO_DO_FIO`, com as versões
+        consecutivas a partir de 1.
+     3. Ponto fixo: `codificarDoServidor(decodificarDoServidor(última.snap)) === última.snap`.
+     4. Canário da propriedade discriminante: no texto congelado, nenhuma posição escalar de uma mesma
+        tupla repete valor, e `AMOSTRA_DO_FIO()` mantém `pisoQ(ultCharge) ≠ q(ultCharge)` e
+        `tetoQ(restante) ≠ q(restante)`.
+   - **Nota de contingência (não se aplica nesta ordem, registrar mesmo assim no Dev Notes):** a §11.6.1
+     prevê que, se `debt.12` viesse antes de `VERSAO_DO_FIO` existir, a fixture nasceria com `versao: 1`
+     literal e só com os itens 1, 3 e 4 (sem o item 2). Pela ordem vigente (`e4.8` → `debt.11` → `e4.9` →
+     `e4.3` → `debt.12` → `e4.6`), `VERSAO_DO_FIO` já existe quando esta story começa (é entregue por
+     `e4.9`), então esse caso **não se aplica** — mas se a Task 0 (AC 8) encontrar `VERSAO_DO_FIO`
+     ausente, é sinal de que a ordem foi quebrada, e a story deve parar e escalar ao @po, não implementar
+     o caso de contingência sozinha.
+   [Fonte: `docs/architecture-e4.md` §11.6.1, "Decisão 1"; `docs/stories/e4.8.codec-do-fio.story.md`,
+   Change Log v1.5.0, item (c)]
+6. **Contrafactual — as 10 mutações fazem `sim:check` sair com código diferente de 0.** Cada uma aplicada
+   numa cópia descartável (worktree ou diretório temporário do commit desta story), rodada e revertida,
+   com o resultado registrado no Dev Agent Record:
+   - **M4a** — `decisao.d` `'pronto'`/`'buildPadrao'` devolvendo `{ ...raw, t, jogador }` (extra/tick
+     vazam);
+   - **M4b** — `entrar` devolvendo `{ ...raw, t, sala }`;
+   - **M4c** — `pong` devolvendo `raw`;
+   - **M12** — `dy` verificado só com `typeof`, sem `isFinite`;
+   - **M14** — `abilityIndex` de `build`/`trocaDeBuild` sem checagem de faixa;
+   - **M15** — `slot` de `compra` sem checagem de faixa;
+   - **M7** — `pisoQ` sem a correção de ponto flutuante que evita "ult cheia um passo abaixo" (o caso
+     `110.07 * 100 = 11006.999…`);
+   - **M9** — `hp ↔ ultCharge` trocados nos **dois** lados (codificador e decodificador) — mudança de
+     layout consistente, a mesma classe de risco da §11.6;
+   - **`over ↔ pad`** — troca de posição entre `over` e `arena.pad` nos dois lados, a mesma troca que a
+     medição M-1 mostrou passar despercebida com a amostra antiga (`snapshotSintetico`);
+   - **`pisoQ → q`** — trocar a função de quantização do `ultCharge` de `pisoQ` (piso) para `q`
+     (arredondamento simples), que muda o texto codificado da amostra congelada.
+
+   As 10 têm de sair com código diferente de 0. Uma mutação que não reprove com a amostra nova é achado,
+   não ajuste silencioso da amostra.
+   [Fonte: `docs/qa/gates/e4.8-codec-do-fio.yml`, "Mutações próprias"; `docs/stories/e4.8.codec-do-fio.story.md`,
+   Change Log v1.5.0, item (d)]
+7. **Escopo de arquivos, fechado.** Esta story abre **só** `src/tools/determinism.ts`. `src/net/codec.ts`
+   é **proibido**, sem exceção: se, ao escrever um caso novo do AC 3, do AC 4 ou do AC 6, o `@dev`
+   encontrar um comportamento do código de hoje que **não** corresponde ao que o caso exige (por exemplo,
+   um campo do parser que hoje realmente deixa `tick`/`extra` vazarem, ou uma mutação do AC 6 que já passa
+   verde sem ser aplicada), a story **para** nesse ponto, registra o achado no Dev Agent Record com
+   detalhe suficiente para reproduzir, e escala ao @po/@architect — **não** corrige `codec.ts` para fazer
+   o caso passar. Um caso novo que falha contra o código de hoje é achado, não desvio de escopo. Proibido
+   também, sem exceção: `package.json` (nenhum script novo — a guarda roda dentro do `sim:check`
+   existente), `src/net/protocolo.ts`, `src/net/sala.ts`, `src/net/snapshot.ts`, `src/net/projecao.ts`,
+   `src/sim/`, `src/match/`, `src/shop/`, `src/bot/`, `src/chars/`, `src/client/`, e qualquer outro arquivo
+   de `src/tools/` além de `determinism.ts`, e `docs/` (exceto a própria story).
+8. **Sequenciamento.** `src/tools/determinism.ts` é disputado por `e4.9` (Draft), `e4.3` (Ready) e `e4.6`
+   (Ready), além desta story. A ordem, decidida pelo @architect na §11.6.1 e registrada por `e4.8`
+   v1.5.0, é **`e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `e4.6`**.
+   - **Pré-condição de início:** o commit de implementação de `e4.3` existe, e
+     `git status --short src/tools/determinism.ts` sai vazio.
+   - A Task 0 registra no Dev Agent Record o hash de `e4.3` usado como base, e confirma que
+     `VERSAO_DO_FIO` já existe em `net/protocolo.ts` (entregue por `e4.9`, que vem antes de `e4.3` nesta
+     ordem) — se não existir, ver a nota de contingência do AC 5.
+   - O escopo é conferido por `git show --stat <commit(s) desta story>`, **nunca** pela árvore de trabalho
+     compartilhada, porque `e4.6` (que vem depois nesta ordem) pode já ter começado a preparar mudanças
+     locais.
+   - Esta story tem de ter commit de implementação **antes da Task 1 de `e4.4`** — a pré-condição já está
+     registrada em `e4.4` v1.5.0 (AC 1, Task 0), `e4.3` v1.5.0 e `e4.6` v1.2.0. Não é responsabilidade
+     desta story editar essas três; a pré-condição já existe nelas.
+   [Fonte: `docs/architecture-e4.md` §11.6.1, "Decisão 1", bullet "Ordem de `determinism.ts`"; `docs/stories/e4.8.codec-do-fio.story.md`,
+   Change Log v1.5.0, item (g)]
+
+## 🤖 CodeRabbit Integration
+
+### Story Type Analysis
+
+**Primary Type**: Architecture / Testing (guarda de regressão dirigida por tabela e fixture congelada de
+formato de fio, sem regra de jogo nova)
+**Secondary Type(s)**: Integration (o fio cliente-servidor é o contrato que a fixture protege)
+**Complexity**: Medium — um único arquivo (`src/tools/determinism.ts`), mas com uma tabela de casos
+adversariais detalhada (campo por campo), uma fixture com texto byte-exato ditado pelo @architect, e
+coordenação de sequência com até três stories concorrentes em `determinism.ts`.
+
+### Specialized Agent Assignment
+
+**Primary Agents**:
+- @dev
+- @qa (quality gate — confere que as 10 mutações do AC 6 de fato reprovam o `sim:check`, que o texto
+  congelado bate byte a byte com o da §11.6.1, que `FIO_CONGELADO` só ganha linhas em diff (nunca edita
+  uma existente), e que a guarda do parser cobre cada campo listado no AC 3, não só a lista de casos que
+  já existia)
+
+**Supporting Agents**:
+- @architect (dono da decisão de forma da fixture em `architecture-e4.md` §11.6.1; consultar só se um dos
+  quatro itens da guarda ou os valores de `AMOSTRA_DO_FIO` se mostrarem inaplicáveis na implementação — não
+  para decidir de novo o que já foi decidido)
+- @po (dono do roteamento que criou esta story; não implementa)
+
+### Quality Gate Tasks
+
+- [ ] Pre-Commit (@dev): Rodar antes de marcar a story como completa
+- [ ] Pre-PR (@github-devops): Rodar antes de criar pull request
+
+### Self-Healing Configuration
+
+**Expected Self-Healing**:
+- Primary Agent: @dev (light mode)
+- Max Iterations: 2
+- Timeout: 15 minutes
+- Severity Filter: CRITICAL
+
+**Predicted Behavior**:
+- CRITICAL issues: auto_fix (até 2 iterações)
+- HIGH issues: document_only
+
+### CodeRabbit Focus Areas
+
+**Primary Focus**:
+- As 10 mutações do contrafactual (M4a, M4b, M4c, M12, M14, M15, M7, M9, `over↔pad`, `pisoQ→q`) de fato
+  fazem `sim:check` sair com código diferente de 0 (AC 6)
+- O texto de `AMOSTRA_DO_FIO` codificado bate byte a byte com o citado na §11.6.1, e `FIO_CONGELADO` é
+  tratado como lista só de acréscimo — nenhuma entrada existente é editada (AC 5)
+- A guarda do parser testa cada campo numérico e cada campo 0|1 isoladamente, não só a lista de casos que
+  já existia (AC 3)
+- `src/net/codec.ts` não foi tocado; qualquer caso que falhasse contra o código de hoje foi registrado
+  como achado, não corrigido por dentro da story (AC 7)
+
+**Secondary Focus**:
+- O `diff` do `sim:check` antes × depois não remove nem move nenhuma linha fora das seções do AC 2 (AC 2)
+- A fronteira do piso de FP cobre os três limiares não inteiros exigidos (AC 4)
+
+## Tasks / Subtasks
+
+- [ ] Task 0 — Pré-condição de sequência (AC: 8)
+  - [ ] Confirmar que o commit de implementação de `e4.3` existe; registrar o hash usado como base no Dev
+        Agent Record
+  - [ ] Confirmar que `git status --short src/tools/determinism.ts` sai vazio
+  - [ ] Confirmar que `VERSAO_DO_FIO` já existe em `src/net/protocolo.ts` (entregue por `e4.9`); se não
+        existir, parar e escalar ao @po antes de prosseguir
+
+- [ ] Task 1 — Guarda do parser por tabela (AC: 3)
+  - [ ] Reescrever/estender `guardaParser()` (`determinism.ts:978-1044`) com uma tabela de (campo, tipo)
+        para os 4 campos numéricos (`cast.dx`, `cast.dy`, `cast.mag`, `pong.id`), cada um testado com
+        `NaN`, `1e999` via `JSON.parse`, `-Infinity` e `"1"`
+  - [ ] Acrescentar a tabela dos 6 campos 0|1 (`cast.ballIndex`, `d.jogador`, `d.slot`/`abilityIndex`/
+        `passiveIndex` de `build` e `trocaDeBuild`, `compra.slot`), cada um testado com `2`, `0.5`, `"0"`
+        e `true`
+  - [ ] Estender o descarte de `tick`/`extra` (hoje só em `cast`) às 4 variantes de `DoCliente` e às 6 de
+        `decisao.d`, conferindo objeto novo (`!== raw`, `.d !== raw.d` em `decisao`)
+  - [ ] Preservar os casos "→ `null`" e "→ parse OK" já existentes
+
+- [ ] Task 2 — Fronteira do piso de FP (AC: 4)
+  - [ ] Acrescentar os limiares sintéticos 110.07, 0.29 e 87.04 à varredura de `guardaCodec()`
+        (`determinism.ts:1090-1122`), cada um com `ultCharge = thr` e `thr − 0,004`
+
+- [ ] Task 3 — Fixture congelada do fio (AC: 5)
+  - [ ] Criar `AMOSTRA_DO_FIO()` com os valores exatos citados na §11.6.1
+  - [ ] Criar `FIO_CONGELADO: readonly { versao: number; snap: string }[]`, iniciando com
+        `[{ versao: 1, snap: <texto gerado pelo codec no commit desta story> }]`
+  - [ ] Implementar os 4 checks da guarda (igualdade com `última.snap`, `versao === VERSAO_DO_FIO` +
+        `length === VERSAO_DO_FIO`, ponto fixo do decodificador, canário de não-colisão)
+  - [ ] Acrescentar a linha de seção própria no `sim:check`, no ponto fixo depois das linhas do bloco
+        `codec do fio` já existentes
+
+- [ ] Task 4 — Contrafactual, as 10 mutações (AC: 6)
+  - [ ] M4a, M4b, M4c, M12, M14, M15, M7 — aplicar, rodar `sim:check`, confirmar código != 0, reverter
+  - [ ] M9 (`hp ↔ ultCharge` nos dois lados) — aplicar, rodar, confirmar código != 0, reverter
+  - [ ] `over ↔ pad` nos dois lados — aplicar, rodar, confirmar código != 0, reverter
+  - [ ] `pisoQ → q` no `ultCharge` — aplicar, rodar, confirmar código != 0, reverter
+
+- [ ] Task 5 — Verificação (AC: 1, 2, 7, 8)
+  - [ ] `npm run check` — 0 erros
+  - [ ] `npm run sim:check` antes e depois da mudança — golden hash idêntico, `diff` só com inserção
+  - [ ] `git show --stat` do(s) commit(s) desta story, restrito a `src/tools/determinism.ts`
+
+## Dev Notes
+
+### O bloco do codec hoje, e onde cada AC entra (fonte: `src/tools/determinism.ts`)
+
+```
+970  // parser de entrada (e4.8, AC 4) — parseDoCliente
+978  function guardaParser(): { linha; problemas }        <- AC 3 estende esta função
+1047 // codec de saída (e4.8, AC 5) — fronteira, roster, fio
+1053 function snapshotSintetico(...)                       <- NÃO usar para a fixture (AC 5)
+1078 function guardaCodec(a): { linhas; problemas }        <- AC 4 estende a varredura da fronteira (linhas 1090-1122)
+1210 const { linha: linhaParser, ... } = guardaParser()
+1211 const { linhas: linhasCodecSaida, ... } = guardaCodec(achadosCodec)
+1213 const linhasCodec = [ ... ]                            <- AC 5 acrescenta linha(s) de seção aqui
+```
+
+[Fonte: `src/tools/determinism.ts:970-1217`]
+
+### O texto atual do parser — os gaps exatos que o AC 3 fecha
+
+```ts
+// linha 980
+const cast = { t: 'cast', ballIndex: 0, slot: 'ability', dx: 0.6, dy: -0.8, mag: 0.5 }
+// linhas 989-992 — só dx é testado
+['dx NaN', { ...cast, dx: NaN }],
+['dx de JSON.parse 1e999', JSON.parse('{"t":"cast",...,"dx":1e999,...}')],
+['mag -Infinity', { ...cast, mag: -Infinity }],
+['dx "1"', { ...cast, dx: '1' }],
+// linhas 994-996 — só ballIndex e d.jogador
+['ballIndex 2', { ...cast, ballIndex: 2 }],
+['ballIndex 0.5', { ...cast, ballIndex: 0.5 }],
+['d.jogador 2', { t: 'decisao', d: { t: 'pronto', jogador: 2 } }],
+```
+
+`dy` nunca aparece na lista `nulos`; `abilityIndex`/`passiveIndex` de `build`/`trocaDeBuild` e `slot` de
+`compra` também não. O descarte de `tick`/`extra` (linhas 1013-1019) só é provado para `cast`.
+
+[Fonte: `src/tools/determinism.ts:978-1023`]
+
+### A varredura da fronteira hoje — onde entram os limiares não inteiros (AC 4)
+
+```ts
+// linha 1084
+const limiares = Object.values(CHARS).map((c) => ({ id: c.id, thr: c.ult.threshold }))
+// linha 1096-1099
+for (const time of tempos) {
+  for (const { thr } of limiares) {
+    for (const restante of [0.004, 0, -0.004]) {
+      for (const ultCharge of [thr - 0.004, thr]) {
+```
+
+Os `limiares` vêm hoje só do roster (110 e 130). O AC 4 pede limiares sintéticos adicionais — não trocar os
+do roster, acrescentar 110.07, 0.29 e 87.04 à mesma varredura ou a uma paralela que reusa o mesmo laço.
+
+[Fonte: `src/tools/determinism.ts:1084-1122`]
+
+### O padrão de array congelado a seguir para `FIO_CONGELADO` (fonte: `BASELINE`)
+
+```ts
+// linha 120
+const BASELINE: { seed: number; hash: string; ticks: number; winner: number }[] = [ ... ]
+```
+
+`FIO_CONGELADO` segue a mesma forma — array de literais dentro do próprio `determinism.ts`, comentado,
+nunca um arquivo em `docs/`. A diferença é que `BASELINE` é substituído inteiro numa re-baseline
+autorizada (ver comentário da linha 104), e `FIO_CONGELADO` é **só de acréscimo**: nenhuma entrada
+existente é editada, nunca.
+
+[Fonte: `src/tools/determinism.ts:104-120`]
+
+### O comentário desatualizado que NÃO é escopo desta story
+
+`src/tools/telemetria.ts:57-58` tem um comentário que diz "`tools/ → net/` não existe na tabela de camadas
+(`architecture-e4.md` §2.2)" — falso desde `e4.2`. A correção desse comentário é escopo de `debt.13`
+(AC 8 dela), não desta story. Esta story não toca `tools/telemetria.ts`.
+
+[Fonte: `docs/stories/debt.11.guarda-automatica-telemetria.story.md`, Change Log v1.5]
+
+### O que esta story explicitamente NÃO faz
+
+- Não corrige nem toca `src/net/codec.ts`. Um caso adversarial novo que falhe contra o código de hoje é
+  achado, e a story para (AC 7).
+- Não decide a versão do formato do `{t:'sala'}` nem o campo `assento`/`snapshotHz` — isso é `e4.9`
+  (Draft, em validação em paralelo; não tocada por esta story).
+- Não implementa a máquina de estados da sala nem toca `src/net/sala.ts` — isso é `e4.3`.
+- Não altera `BASELINE`, `BUILD_BASELINE` nem qualquer valor do golden hash existente.
+
+### Testing
+
+- `npm run check` — 0 erros.
+- `npm run sim:check` — rodado antes e depois da mudança; golden hash idêntico; `diff` da saída completa
+  só com linhas inseridas ou com o conteúdo da linha `parser`/`fronteira` mudando de texto (não de
+  resultado ✓/✗) dentro do bloco `codec do fio`.
+- As 10 mutações do contrafactual (M4a, M4b, M4c, M12, M14, M15, M7, M9, `over↔pad`, `pisoQ→q`), cada uma
+  aplicada numa cópia descartável, testada e revertida — todas devem fazer `sim:check` sair com código
+  diferente de 0.
+- Conferência de que `FIO_CONGELADO` é só de acréscimo: no commit desta story, a entrada `{versao:1,...}`
+  é criada, não editada (é a primeira entrada).
+
+## Change Log
+
+| Date | Version | Description | Author |
+|---|---|---|---|
+| 2026-09-21 | 1.0 | Story criada a partir dos achados `E48-TST-001` (medium) e `E48-TST-002` (low) do gate de `e4.8` (`docs/qa/gates/e4.8-codec-do-fio.yml`), e da parte 2 do achado `E48-ARC-003`, conforme roteamento do @po em `docs/stories/e4.8.codec-do-fio.story.md` Change Log v1.4.0 (itens a, b, e, f) e v1.5.0 (itens c, d, g, que substituem os equivalentes da v1.4.0, decididos pelo @architect na §11.6.1 de `architecture-e4.md`, commit `bed4603`). Escopo fechado: só `src/tools/determinism.ts`; `src/net/codec.ts` é proibido, e um caso novo que falhe contra o código de hoje é achado a escalar, não correção dentro da story. Sequenciada depois do commit de implementação de `e4.3` (que já vem depois de `e4.9`), na ordem `e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `e4.6` registrada pela §11.6.1. `e4.9` está Draft, em validação do @po em paralelo, e não é tocada por esta story. Precondição registrada em `e4.4` v1.5.0 (Task 0), `e4.3` v1.5.0 e `e4.6` v1.2.0: commit de implementação desta story antes da Task 1 de `e4.4`. Status: Draft. | River (@sm) |
