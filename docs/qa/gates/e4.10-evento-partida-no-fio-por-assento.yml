@@ -1,0 +1,264 @@
+schema: 1
+story: 'e4.10'
+story_title: '`{t:''evento''}` no fio, por assento — `VERSAO_DO_FIO` de 1 para 2'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 13 ACs (v1.3.0) estão MET. Refiz tudo do zero, sem confiar no Dev Agent Record. check, sim:check (em
+  par) e build saíram com rc=0, e o golden hash não mudou. O diff da saída inteira do sim:check contra um
+  worktree de c6ed82f^ (c388485) muda exatamente as cinco linhas declaradas (não-snap, versão fio, fio
+  congelado, assentos, cobertura 52→53) e acrescenta só a linha nova `eventos`. Os dois greps de pureza
+  saem com rc=1. O escopo são os quatro arquivos do AC 12. O codec.ts tem um hunk só, em T_DO_SERVIDOR.
+  FIO_CONGELADO só ganhou linhas, e a entrada 2 tem o `snap` byte a byte igual ao da 1 (287 B, com
+  "shield"). AMOSTRA_DO_FIO não tem hunk. Reapliquei as 13 mutações da story, e as 13 deram par rc≠0,
+  pela linha esperada. Rodei também 23 mutações minhas. O filtro, a ordem e a entrega por assento
+  reprovam por conteúdo em toda forma que testei. O veredito é CONCERNS, e não PASS, por dois LOW, os dois
+  de alcance de guarda e nenhum de implementação:
+  (1) E410-TST-001: "sem reenvio" só está provado nas fases em que alguma sala da guarda reassenta (no
+  meio da rodada e em `builds`). Um reenvio condicionado à `loja` (Q14) dá rc=0.
+  (2) E410-TST-002: a troca de 'shield' feita nos dois lados (Q3) dá rc=0, e a única pista é a linha
+  dizer `284 B`. A edição da entrada 1 no lugar (Q5) dá rc=0 sem pista nenhuma. As duas continuam sendo
+  conferência do gate por desenho (§11.6.1). Para esta story, a conferência foi feita e passou.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:c6ed82f (implementação). O pai é c388485 (@po, só docs), sem commit paralelo no meio. 451e9df
+  (registro do @dev) toca só a story, com Status, checkboxes e seções acrescentadas; nenhum AC foi
+  alterado. `git diff c6ed82f HEAD -- src` está vazio, e o HEAD que rodei tem o mesmo código de c6ed82f.
+  c6ed82f NÃO está em origin/master (merge-base --is-ancestor rc=1): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Node v24.13.1. `npm run check` deu rc=0. `npm run check && npm run sim:check` deu rc=0. `npm run
+      build` deu rc=0 (53.27 kB). "golden hash ✓ ok — 6 seeds batem o baseline" aparece nas duas saídas.
+      Comparei `node src/tools/determinism.ts` de um worktree descartável de c388485 (c6ed82f^) com a
+      saída do HEAD. Tirando as 4 linhas de cabeçalho do npm, o diff tem exatamente: `26,27c` (não-snap
+      8→9 mensagens e 7→8 variantes; versão fio v1→v2 e `2`→`3` no parêntese), `29c` (fio congelado:
+      v1→v2, 1→2 entrada(s), VERSAO_DO_FIO 1→2, congeladas (8)→(9), e **287 B nos dois lados**), `65c`
+      (assentos: v1→v2, contagens 28/17/119 iguais), `69c` (cobertura: 52→53 e "com a sala jogando"→"com
+      a sala fora de aguardando", 6 rodadas iguais) e `70a` (linha nova `eventos`: 7 no log, 5 e 6 por
+      assento, 13 passos com evento e 19 entregas em 6 salas, M-6 e trocaDeBuild sintético). Nenhuma
+      outra linha muda de texto ou de lugar. Bate com o AC 2 e com o que o @dev registrou.
+  - id: 'Pureza (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnwE "ws|document|window|localStorage|Math\.random" src/net/` deu rc=1, e `grep -rnE
+      "Date\.now|performance\.now" src/net/` deu rc=1. Os dois com `-r`, sem stdout.
+  - id: 'Escopo, codec e procedimento de versão (ACs 4, 5, 6, 11, 12)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat c6ed82f` lista só codec.ts (1+), protocolo.ts (37, 29+/8-), sala.ts (18+) e
+      determinism.ts (161, com 26 remoções), 191/26 no total. codec.ts tem um hunk só, `@@ -402,6 +402,7`,
+      com `evento: true,` dentro de `T_DO_SERVIDOR`. A seção ENTRADA não tem linha no diff. protocolo.ts:
+      `EventoPartida` entra no mesmo `import type` de `match/types.ts`; `| { t: 'evento'; e: EventoPartida
+      }` fica no fim de DoServidor; `VERSAO_DO_FIO = 2`, com nota de histórico; o cabeçalho de setas diz
+      "deste arquivo" e cita sala.ts (e4.3) e codec.ts (e4.9). A mensagem de commit diz "Mudança de
+      protocolo" e cita a lista de variantes com `evento` e o layout do snap inalterado. Nenhum arquivo
+      proibido aparece (sim/, match/, shop/, chars/, bot/, client/, server/, docs/, package.json).
+  - id: 'Fixture congelada e errata DEBT12-ARC-001 (AC 8 d/e), conferência manual'
+    verdict: PASS
+    evidence: >-
+      Extraí os literais de FIO_CONGELADO do arquivo. São 2 entradas, versao [1, 2].
+      `snap[1] === snap[0]` dá true, com 287 B nos dois e "shield" nos dois. As variantes são
+      'erro,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao' e
+      'erro,evento,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao'. No `git show c6ed82f`, dentro de
+      FIO_CONGELADO só há um hunk de acréscimo (+5 linhas), e a entrada 1 não perdeu nem mudou linha.
+      `grep AMOSTRA_DO_FIO` no diff sai com rc=1, ou seja, sem hunk. A linha `fio congelado` diz 287 B.
+      A amostra `evento` é `{ t: 'evento', e: { t: 'compra', rodada: 1, jogador: 0, itemId: 'chumbo',
+      trilha: 'fisica', preco: 4, ouroDepois: 5 } }`, sem `as`, `as const` nem `<T>`. Todas as linhas
+      removidas do diff de determinism.ts são substituições (import, rótulos, condição do AC 13, lista do
+      W.O., tipo de retorno e `return` → `return []` de recusaEControle). Nenhuma fica dentro da fixture.
+  - id: 'Filtro por assento e ordem (ACs 7, 8 a/b/c)'
+    verdict: PASS
+    evidence: >-
+      Leitura de sala.ts: enviarEventos() percorre `t.eventos` na ordem e usa paraCadaAssento (só os
+      assentos conectados), com `!('jogador' in e) || e.jogador === j`. É chamada logo depois de
+      enviarVisao em decidir (`+538`) e em encerrarRodada (`+629`), antes de sincronizar, e em nenhum
+      outro lugar. O primeiro assentamento (enviarVisao dentro de assentar) e o ramo de reassentamento
+      (`if (ja !== null)`) não mudaram. Por execução: na Bo5 da seed 1 são 7 eventos no log, 5 ao assento
+      do jogador 0 e 6 ao do 1, profundamente iguais ao log filtrado. A guarda de ordem (bloco contíguo
+      depois da visao, nada depois do encerrada, partidaFim antes do encerrada nos dois assentos) é
+      verificada por mensagem, em conduzir(). O W.O. usa a lista `'0:snap,0:rodadaFim,0:visao,0:evento'`
+      (determinism.ts:2284), e a do reassentamento continua `'sala,visao,rodadaInicio'` (:2099).
+  - id: 'AC 13 — cobertura no passo final e piso'
+    verdict: PASS
+    evidence: >-
+      A condição é `s.partida !== antes.partida && s.fase !== 'aguardando'`, e o comentário foi
+      atualizado (o passo `encerrada` conta; a queda no draft e o 'anular' não). O piso
+      PISO_TRANSICOES = 53 e PISO_RODADAS_FECHADAS = 6 usa `<`, e portanto aceita `>=`. Ele empurra `  ✗
+      sala cobertura: …` em `problemas`, e não só no ✓/✗ decorativo. A contagem final é 53/6. MC1–MC4
+      reaplicadas deram rc=1. Na minha MC3 (`if (porTipo.size >= 0) return`, sem estreitar tipo) o `tsc`
+      dá 0 e o sim:check dá 1, e só o piso acusa: o sim:check reprova sozinho.
+  - id: 'debt.14 não afrouxa'
+    verdict: PASS
+    evidence: >-
+      As contagens de `assentos`, `autoridade`, `negativos`, `por variante` e `bordas` são byte a byte
+      iguais antes e depois, fora o `v1`→`v2` de `assentos`. A lista da recusa (exatamente 1 {t:'erro'}
+      ao remetente) está intacta em recusaEControle. O controle positivo continua com a mesma condição.
+      Os `return` dos ramos de falha viraram `return []`, e todos vêm DEPOIS do `falha(...)`, então nenhum
+      ✗ deixa de sair. A lista do reassentamento não mudou. As conferências do AC 4 (visão, rodadaInicio e
+      rodadaFim por assento), do AC 5 ii (prazo no reassentamento em builds) e do AC 5 iii (W.O. de
+      loja/builds) continuam no mesmo lugar. A única mudança de condição é a do AC 13, que é uma extensão
+      (52→53).
+  - id: 'Contrafactual da story, reaplicado (AC 9, AC 13 d): as 13'
+    verdict: PASS
+    evidence: >-
+      Script qa-e410-mut.mjs no scratchpad, numa cópia de `src/` FORA do repo, com node_modules por
+      junction. A `src/` volta limpa de uma cópia intocada antes de cada mutação. O padrão tem de casar
+      exatamente 1 vez, senão a mutação aborta, e o EOL é normalizado. Nenhum arquivo foi criado no repo.
+      O controle sem mutação deu check 0 / sim:check 0. ME1: 0/1 (`assento do jogador 0 … recebeu
+      [buildPadrao] num passo que produziu [buildPadrao1]; esperado []`, e Bo5 7 contra 5). ME2: 0/1
+      (`recebeu [] num passo que produziu [rodadaFim]`). ME3: 0/1 (buildPadrao1 no assento 0, compra0 no
+      assento 1). ME4a: 0/1 (`(buildPadrao) … veio depois de {t:'rodadaInicio'}` e `(rodadaFim) … depois
+      do {t:'sala'} encerrada`). ME4b: 0/1, só pela forma contígua (`(buildPadrao) … depois de
+      {t:'rodadaInicio'}`). ME5: 0/1 (`recebeu [] … produziu [rodadaFim]`). ME6: 0/1 (item 5: `as
+      variantes de DoServidor [erro,evento,…] não são as da v1`). ME6b: **2/0** (TS1360 no `satisfies`
+      de `amostras`, com o sim:check sozinho verde, que é o ponto cego DEBT12-TST-002). ME7: 0/1 (lista
+      `[sala,visao,evento,evento,rodadaInicio]`, por passo `recebeu [buildPadrao,rodadaFim] num passo que
+      produziu []`, e também na sala `builds`). MC1: 0/1 (`a partida mudou (fase fim) e o assento
+      conectado do jogador 0/1 não recebeu {t:'visao'}`, mais a guarda de ordem). MC2: 0/1 (só o jogador
+      1). MC3: 0/1 (`0 transição(ões) (piso 53)`). MC4: 0/1 (`52 transição(ões) (piso 53)`).
+  - id: 'Pergunta 1 — a conferência extra por passo (conferirEventos)'
+    verdict: PASS
+    evidence: >-
+      É sólida, e é ela que dá dente a "sem reenvio" fora da Bo5, mas só nos passos que alguma sala
+      exercita. O oráculo é o crescimento de `Sala.eventos` no passo, filtrado por uma cópia local da
+      regra (`visivelPara`). A comparação é profunda e na ordem, por assento, e exige `[]` ao vago e a
+      chaves fora dos assentos. Provei com o par da debt.13. Q10 (reenvio no reassentamento só quando
+      `n.rodada === null`, isto é, fora de rodada) deu rc=1, pego só pela sala `builds` por passo. Q10b
+      (Q10 com SÓ a comparação por passo desligada, e a acumulação mantida) deu rc=0: ela é a única defesa
+      nesse caso. Q13 (só a comparação desligada) deu rc=0, sanidade. Q9 (ME7 com a comparação desligada)
+      continua rc=1, pela lista fixa e pela Bo5 final, e Q11 (ME7 sem a lista fixa) também, pela
+      comparação por passo. As duas defesas são independentes. Q8 (enviar `n.eventos` inteiro em
+      decidir) é pego nos dois modos. Q12 (o `e` enviado difere do log num campo) é pego pela igualdade
+      profunda. **Limite:** a prova vale para as fases em que alguma sala reassenta. Q14 (reenvio só na
+      `loja`) deu rc=0, porque nenhuma sala da guarda cai e volta na loja (E410-TST-001). Q15 (reenvio só
+      em draft/fim) é mutante equivalente: a queda no draft libera o assento, e em `encerrada` cair() não
+      marca desconexão. Detalhe de acoplamento: a Bo5 final lê o acumulador que conferirEventos preenche.
+      Desligar a função inteira faz a Bo5 acusar "recebeu 0". Falha alto, na direção segura.
+  - id: 'Pergunta 2 — recusaEControle devolve os envios do controle positivo'
+    verdict: PASS
+    evidence: >-
+      Nenhum veredito da debt.14 muda. A condição de cada ramo é a mesma. Os ramos de falha fazem
+      `falha(...)` e só então `return []`. O ramo feliz faz o mesmo `aceitas.push` e devolve env2. Só a
+      troca usa o retorno. Os envios de env2 já passaram por conduzir(), porque decidirPor usa conduzir,
+      então o trocaDeBuild sintético é conferido duas vezes. Q7 (trocaDeBuild em broadcast) é pego pelas
+      duas conferências. Q7b (Q7 sem a comparação por passo) continua rc=1 só pela checagem explícita
+      `[0:trocaDeBuild0]`. Efeito colateral inofensivo: se o controle positivo falhar, a checagem da troca
+      soma um segundo ✗, e isso só acrescenta.
+  - id: 'Pergunta 3 — ponto cego da troca de shield'
+    verdict: CONCERNS
+    evidence: >-
+      Confirmei o achado do @po por execução. Q3 (`'dot'` na AMOSTRA_DO_FIO e na entrada 2, com a v1
+      intacta) deu check 0 / sim:check 0. A única diferença na saída é `fio congelado ✓ … (284 B …)`. Q3b
+      (`'dot'` só na amostra) deu rc=1 pelo item 1 (`s[6][0][8][1]: congelado "shield", atual "dot"`).
+      Q5 (a entrada 1 editada no lugar, `'dot'` só na v1) também deu rc=0, e sem pista nenhuma na saída,
+      nem de bytes. É a classe "lista só de acréscimo conferida pela última entrada" do gate da debt.12.
+      Ver E410-TST-002 para a recomendação.
+  - id: 'Pergunta 4 — efeito da subida de versão nas stories em andamento'
+    verdict: PASS
+    evidence: >-
+      e4.5 (Ready) já está em dia, desde a v1.7.0. O AC 3 (iv) compara com `VERSAO_DO_FIO` sem literal, e
+      as Testing Notes dizem "depois de e4.10, que o sobe para 2, 0 e 1 servem" (linha 361). O
+      "Depende de" cita e4.10 entregando VERSAO_DO_FIO = 2. e4.7 (Ready) registra o VERSAO_DO_FIO por
+      partida, sem literal (AC 12). e4.4 (Draft) diz que e4.10 não é pré-condição e não cita número de
+      versão. e4.6 (Ready) só trata a ordem de determinism.ts. src/client/ não referencia VERSAO_DO_FIO (a
+      `versao` de client/telemetria.ts é a chave da telemetria). Nada precisa de ajuste. A nota "Em
+      aberto" do @dev (um cliente pré-v2 falha por DescompassoDeVersao no {t:'sala'} antes de ver o
+      evento) já é o caso (iv) da e4.5. Como c6ed82f não está publicado, nenhum aparelho recebeu a v2
+      ainda.
+  - id: 'Mutações próprias (23, cópias descartadas)'
+    verdict: CONCERNS
+    evidence: >-
+      Pegas (rc≠0): Q1 (eventos antes da visão, nas duas chamadas: `veio depois de nada` e `depois de
+      {t:'rodadaFim'}`). Q1b (antes da visão, só em decidir). Q2 (partidaFim tratado como privado e sem
+      dono, sem ir a ninguém: por passo, Bo5 4 contra 5, e `não recebeu o partidaFim antes do
+      encerrada`). Q2b (partidaFim só ao jogador 0: o assento 1 sem partidaFim). Q3b. Q4 (VERSAO_DO_FIO =
+      3 sem entrada: `FIO_CONGELADO [1, 2] não termina em VERSAO_DO_FIO 3`). Q6 (só o buildPadrao em
+      broadcast, o vazamento M-6: pego na Bo5, na `variantes` e na `builds`). Q7, Q7b, Q8, Q8b, Q9, Q10,
+      Q11, Q12 e MC3 sem estreitar tipo. O `!==` no filtro invertendo a posse é a ME3, reaplicada acima.
+      Verdes por desenho (rc=0): Q13 (controle do desligamento), Q10b (o par que prova a comparação por
+      passo), Q15 (equivalente). Verdes que são achado: Q14 (E410-TST-001), Q3 e Q5 (E410-TST-002).
+
+top_issues:
+  - id: 'E410-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia; dono natural é a próxima story que abrir o bloco `sala pura`)'
+    finding: >-
+      O AC 7 exige "sem reenvio no reassentamento" em geral, mas a guarda só reassenta no meio de uma
+      rodada (Bo5, pela lista fixa `[sala,visao,rodadaInicio]` e pela comparação por passo) e em `builds`
+      (sala `builds`, só pela comparação por passo). Nenhuma sala cai e volta na `loja`. Medido: Q14 (no
+      ramo `if (ja !== null)` de assentar, `if (n.partida.fase === 'loja')` reenvia `n.eventos` filtrado)
+      dá rc=0. A loja é justamente a fase em que o log já tem `rodadaFim` e `compra`, e um reenvio ali
+      duplicaria esses eventos no export do aparelho que volta, contaminando a soma dos dois exports de
+      P4.4 (e4.7/AC 8). O risco é baixo: o ramo de reassentamento é um só para todas as fases e não envia
+      evento nenhum, e a mutação precisa de uma condição de fase inventada. Não é defeito de
+      implementação, e o AC 8 (a)–(c) foi cumprido como escrito.
+    suggested_action: >-
+      Na próxima story que abrir o bloco `sala pura`: um reassentamento na `loja` numa sala descartável
+      (a sala `builds` ou a `variantes` servem: queda depois do rodadaFim e volta antes do estouro da
+      pausa). Não precisa de lista fixa nova, porque a comparação por passo já exige `[]`. Mutação de
+      aceite: Q14 com rc=1. Não bloqueia a e4.4 nem a e4.5.
+  - id: 'E410-TST-002'
+    severity: low
+    category: tests
+    owner: '@architect (dono da §11.6.1, decide se a linha ganha o marcador); @po roteia'
+    finding: >-
+      Uma edição dentro de FIO_CONGELADO que não seja na última entrada, ou uma troca feita igual na
+      amostra e na última entrada, passa verde no par check + sim:check. Q3 (`'dot'` na amostra e na v2)
+      só aparece como `284 B` na linha `fio congelado`. Q5 (v1 editada no lugar) não deixa rastro nenhum na
+      saída. Nesta story a prova manual foi feita (snap[1] === snap[0], 287 B, sem hunk na amostra, v1 sem
+      linha alterada). O resíduo é para as próximas subidas.
+    suggested_action: >-
+      NÃO recomendo uma asserção `FIO_CONGELADO[k].snap === FIO_CONGELADO[k-1].snap`. A guarda não sabe,
+      sozinha, se a subida mudou o layout, e a próxima subida que mudar o layout é exatamente a que a
+      errata manda trocar 'shield' por 'dot'. A asserção teria de ser desligada à mão nesse commit, e seria
+      uma exceção com cara de carimbo. A conferência manual do gate basta, desde que fique no
+      quality_gate_tools de toda story que subir versão, como ficou nesta. Melhoria opcional e barata: a
+      linha `fio congelado` imprimir, para cada k > 1, `snap = v{k-1}` ou `snap ≠ v{k-1}`, e um digest
+      curto das entradas anteriores à última. Assim o diff antes × depois do sim:check, que todo gate já
+      faz, mostra na hora uma troca de layout não declarada (Q3) e uma edição no lugar de entrada antiga
+      (Q5). É informativo, não reprova, e não precisa de exceção.
+
+avaliacoes_pedidas:
+  conferencia_por_passo: >-
+    Sólida. Compara, por passo e por assento, o que foi entregue com o que o passo acrescentou a
+    Sala.eventos, filtrado por uma regra escrita de novo na guarda. Prova "sem reenvio" em todo passo de
+    toda sala conduzida. O par Q10/Q10b mostra que ela é a única defesa num reenvio fora de rodada. O
+    limite é de cobertura de cenário: não há reassentamento na loja (E410-TST-001).
+  recusa_e_controle_devolve_envios: >-
+    Não muda veredito nenhum da debt.14. As condições e os ✗ são os mesmos, e o retorno só é lido pela
+    checagem nova da troca. Os envios já passavam pela conferência por passo.
+  ponto_cego_shield: >-
+    Confirmado (Q3 rc=0, só `284 B`; Q5 rc=0, sem pista). Não recomendo a asserção snap[k] === snap[k-1].
+    A conferência manual do gate basta e foi feita. A melhoria opcional é um marcador informativo na
+    linha, decisão do @architect (E410-TST-002).
+  subida_de_versao_nas_stories_em_andamento: >-
+    Nenhuma precisa de ajuste. e4.5 já reflete o 2 desde a v1.7.0, e4.7 registra a versão sem literal, e
+    e4.4/e4.6 não dependem do número.
+
+observacoes:
+  - >-
+    O Status veio "Ready for Review" (o canônico é "InReview"). Registrei a transição como Ready for
+    Review (= InReview) → Done, com o mesmo precedente de debt.12 e debt.14.
+  - >-
+    As Dev Notes da story continuam desatualizadas, e o próprio @dev registrou isso em "Em aberto":
+    "Fatos conferidos" diz debt.14 "sem commit de implementação", e Testing diz "Sete mutações". Os ACs
+    9, 10 e 13 prevalecem. É texto de estado, não achado.
+  - >-
+    O mesmo objeto `e` vai no `{t:'evento'}` dos dois assentos e fica também em Sala.eventos, sem cópia.
+    Isso é correto porque o fio serializa cada envio (e4.4). Um consumidor no processo que mutasse a
+    mensagem corromperia o log. Sem ação, fica só registrado para a e4.4.
+  - >-
+    `npm run lint` não existe no projeto, e `check` é o gate de tipos. CodeRabbit não roda nesta máquina
+    (sem WSL/CLI). A cobertura veio de check, sim:check e build, do diff da saída inteira contra
+    c6ed82f^, da leitura hunk a hunk, das 13 mutações da story e de 23 minhas.
+  - >-
+    O worktree descartável de c388485 foi removido com `git worktree remove`, e a cópia de mutação (com a
+    junction de node_modules desfeita por rmdir antes) foi apagada. A árvore compartilhada nunca foi
+    mutada: `git status --short src` saiu vazio.
+
+waiver: { active: false }
+updated: '2026-09-21T12:00:00Z'
