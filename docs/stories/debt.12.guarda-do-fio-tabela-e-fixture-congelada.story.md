@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready for Review
+Done
 
 ## Executor Assignment
 
@@ -726,6 +726,43 @@ foi acionado.
 | `src/tools/determinism.ts` | Modificado (só o bloco do codec): tabela do parser, limiares sintéticos + canário, `AMOSTRA_DO_FIO` / `FIO_CONGELADO` / `primeiraDivergencia` / `guardaFioCongelado` (itens 1-5), linha `fio congelado`, `formaRuim` 6 → 10, ramo "sem a propriedade servidor", versão errada relativa |
 | `docs/stories/debt.12.guarda-do-fio-tabela-e-fixture-congelada.story.md` | Checkboxes, Status, Dev Agent Record, File List, Change Log |
 
+## QA Results
+
+### Review Date: 2026-09-21
+
+### Reviewed By: Quinn (@qa) — gate `docs/qa/gates/debt.12-guarda-do-fio-tabela-e-fixture-congelada.yml`
+
+**Gate: CONCERNS → Status Done.** Revisão avaliada: `5766137` (implementação). O pai é `29d7b51`, só docs, e o código-base é o de `e4.3` (`git diff --stat 99f4ee3 5766137^ -- src` vazio). O registro é `9de7cd9`, que toca só a story. `17ecf5c` (`debt.14`) mexe só no bloco `sala pura`, e o bloco do codec está byte a byte igual no HEAD. O commit é local e não publicado (`merge-base --is-ancestor 5766137 origin/master` rc=1).
+
+**Verificação independente (tudo refeito do zero, em worktrees descartáveis de `5766137` e `5766137^`):**
+
+| AC | Veredito | Evidência |
+|---|---|---|
+| 1, 2 | MET | `check`, `sim:check` e `build` com rc=0, golden hash ✓, stderr vazio. O `diff` da saída inteira contra `5766137^` tem só 4 blocos: `parser` e `fronteira` com texto acrescentado no fim (o antigo continua como prefixo), `versão fio` `6/6 → 10/10` com ✓, e `fio congelado` como linha nova |
+| 3 | MET | 4 numéricos × 4, 14 campos 0/1 × 4, 16 formas de descarte com `!== raw` e `.d !== raw.d`. O 1e999 é conferido `=== Infinity`. `nulos`/`validos` intactos. M4c, M12 e M15 reprovam. P7 (`bit` só em `pronto`) reprova por draft/build/…, então o caso por variante tem dente |
+| 4 | MET | 110.07, 0.29 e 87.04 × (`thr`, `thr − 0,004`), 0/72. M7 reprova só pelo 0.29 (12/72). O canário está vivo (P3, 0.29 → 0.3, rc=1) e é a única defesa de M7 nesse caso (P3c, com o canário desligado, rc=0) |
+| 5 | MET | Texto **gerado por mim** a partir do codec: 287 B, igual caractere a caractere à §11.6.1 e ao literal. Ponto fixo ok. Itens 1-4 e **item 5** (§11.6.2) presentes. M9, over↔pad, pisoQ→q e M-VARIANTE reprovam. Canário com ressalva (DEBT12-TST-001) |
+| 6, 9 | MET | 10 mutações da story reaplicadas, todas com rc=1: M9, over↔pad, M7, pisoQ→q, M-HZ-INT, M-HZ-POS, M4c, M12, M15 e M-VARIANTE. O caso `VERSAO_DO_FIO + 1` passa com a v2 (Q3a: "3" ✓) |
+| 7 | MET | `git show --stat 5766137`: só `determinism.ts`, 303/9, igual com `-w`, 0 CR. Os 8 hunks ficam entre o cabeçalho do parser (988) e o de `sala pura` (1589), sem hunk em `sala pura`. `codec.ts`, `protocolo.ts` e `sala.ts` não foram tocados |
+| 8 | MET | O código-base é o de `e4.3` (`99f4ee3`). `VERSAO_DO_FIO = 1` existe. A contingência não se aplica |
+
+**Mutações próprias (25):** Q2a/Q2b (variante sem amostra), Q3a–Q3f (procedimento de versão), P1–P10 (tabela, canários, item 5 e decodificador). Os detalhes estão no gate.
+
+**Perguntas do lead:**
+1. **`kind: 'shield'`**: aceitável como está. A posição é `[lit]`, e trocar o valor mudaria os 287 B, o que exigiria subir a versão sem que o protocolo tenha mudado. O dono é o @architect, com uma errata de texto na §11.6.1, sem bump (DEBT12-ARC-001).
+2. **`variantes` a partir de `amostras`**: não é tautológico, mas o elo é o `tsc`. Uma variante nova em `DoServidor`/`T_DO_SERVIDOR` sem amostra passa pelo `sim:check` sozinho (Q2a/Q2b rc=0), e o `npm run check` a pega (rc=2). A derivação é a que a §11.6.2 manda (DEBT12-TST-002).
+3. **Procedimento**: v2 acrescentada com bump passa (Q3a, Q3b). Bump sem acrescentar reprova (Q3c). Editar a v1 no lugar com `versao: 2` reprova (Q3e). Editar a v1 no lugar sem bump (Q3d), ou reescrever a v1 e acrescentar a v2 (Q3f), passa verde. Esse é o limite que a §11.6.1 declara, e só a forma do diff o denuncia. Fica com o @qa em todo gate que tocar `FIO_CONGELADO`.
+4. **Mais estrito que o AC**: `d.jogador` nas 6 variantes tem dente (P7). Os arredondamentos locais do canário estão certos para os valores de hoje e errados na borda de ponto flutuante (P6b).
+
+**Achados (todos LOW):**
+- **DEBT12-TST-001 (low, tests; @dev, opcional, na próxima story do bloco do codec):** o canário do item 4 usa piso e arredondamento ingênuos locais. Com ultCharge 0.29, o codec escreve 0.29, igual ao arredondado, e o canário diz "piso ≠ arredondado ✓" (P6b rc=0). Correção: ancorar o canário no valor **codificado** (`s[6][0][6]` e `s[6][0][7]`) em vez do piso local.
+- **DEBT12-TST-002 (low, tests; @po/@sm na e4.10, @devops opcional):** o item 5 depende de `npm run check`. A prova é o par `check && sim:check`, e nenhum CI roda os dois.
+- **DEBT12-TST-003 (low, tests; @dev, opcional):** a tabela não tem trava de tamanho. Remover a linha `cast.dy` mais M12 (P1), ou `compra.slot` mais M15 (P2), passa verde.
+- **DEBT12-ARC-001 (low, docs; @architect):** errata do `'shield'` na §11.6.1, sem bump.
+- **DEBT12-REQ-001 (low, requirements; @po):** o item 5 com M-VARIANTE e o caso `VERSAO_DO_FIO + 1` ainda não estão no texto dos ACs (delta já combinado).
+
+**Observações:** o Status veio "Ready for Review" (o canônico é "InReview"), e a transição foi registrada como Ready for Review → Done. CodeRabbit não roda nesta máquina. Worktrees e cópias de mutação foram removidos.
+
 ## Change Log
 
 | Date | Version | Description | Author |
@@ -735,3 +772,4 @@ foi acionado.
 | 2026-09-21 | 1.2 | **Achados do gate de `e4.9` absorvidos (`docs/qa/gates/e4.9-versao-do-fio-e-assento.yml`, `c4b22db`, CONCERNS). Status permanece Ready:** o acréscimo são 4 linhas numa lista que já existe, um ramo de mensagem e 4 mutações, tudo no mesmo arquivo e no mesmo bloco do codec. **Roteamento:** `E49-TST-001` (medium), `E49-TST-002` (low) e `E49-TST-003` (low, opcional no gate, **obrigatório aqui**, porque é uma condição a mais e a M-SERVIDOR já o prova) viram o **AC 9** novo. `debt.12` é a casa porque só abre `determinism.ts`, roda depois de `e4.3` e é a próxima story a abrir o bloco do codec. `e4.3` está em implementação e não foi tocada. `E49-REQ-004` (@architect) não entra aqui: ficou registrado no Change Log de `e4.9` v1.2.0. **Mudanças:** título; `quality_gate_tools` (10 → 14 mutações); "Depende de" (nota v1.2); AC 2 (a linha `versão fio` pode mudar os contadores, `6/6` → `10/10`, com ✓ inalterado); AC 6 (ponteiro para as 4 do AC 9); AC 9 novo; CodeRabbit Focus; Task 6 nova; Task 5 e Testing. **Fatos conferidos** numa cópia descartável de `c4b22db` (`git archive HEAD src`, Node 24.13.1), e não copiados do gate: `conferirSala` (`src/net/codec.ts`, `6f2f56c`) lança `Error` para `snapshotHz` -30, 7.5 e 120 e para `assento: 123`, e aceita 20. Com os 4 casos em `formaRuim`, `node src/tools/determinism.ts` sai rc=0 com `10/10` (o gate falava em `9/9` porque contava só o TST-001). Q3/M-HZ-POS, Q2/M-HZ-INT e Q5/M-ASSENTO saem rc=1, cada uma com `9/10` e o ✗ no caso previsto. Q1 (sem divisor) reprova por 7 e 120, e Q9 (`hz <= 60`) por 7. Com o ramo (c) aplicado na cópia, Q6b/M-SERVIDOR sai rc=1 e imprime "sem a propriedade servidor" em "versao ausente" e "forma de hoje". Tirar `typeof hz === 'number'` sai rc=0, e é mutante equivalente, porque `Number.isInteger` já recusa não números. O AC registra isso como não exigido. Linhas da guarda em `c4b22db`: `formaRuim` `:1222-1229`, laço `descompassos` `:1197-1220`, mensagem de três condições `:1213-1216`, linha `versão fio` `:1258`. | Pax (@po) |
 | 2026-09-21 | 1.3 | **Gate de `e4.3` (`docs/qa/gates/e4.3-sala-pura.yml`, `5f6c44f`, CONCERNS, `e4.3` Done): os achados de teste da sala NÃO entram aqui. Status permanece Ready. Nenhum AC muda de critério.** O gate listou `debt.12` como candidata para E43-TST-001/002/003, porque é a próxima story a abrir `determinism.ts`. O @po decidiu por uma story própria, sugestão `debt.14`, a criar pelo @sm, com spec no Change Log de `e4.3` v1.9.0. Absorver mudaria o título, o AC 2 (diff só no bloco `codec do fio`), o AC 6 e o AC 9 (mutações em `codec.ts`) e o AC 7 (proíbe `sala.ts`), e poria a guarda do fio e a da sala sob um só gate, o que o corte de `e4.3` (`1564ae4`) e o roteamento de `e4.8` v1.4.0 evitaram. Também exigiria revalidar esta story. **Mudanças:** (1) AC 7 ganhou uma nota em itálico: o bloco `sala pura` de `determinism.ts` fica fora do escopo. (2) AC 8 ganhou a ordem vigente em itálico, com `debt.14` entre esta e `e4.6`. O texto original ficou. Nada muda na pré-condição de início (commit de `e4.3`, que é `99f4ee3`), no prazo (antes da Task 1 de `e4.4`) nem nas 14 mutações. | Pax (@po) |
 | 2026-09-21 | 1.4 | **Implementação @dev. Ready → InProgress → Ready for Review.** Commit de implementação `5766137`, só `src/tools/determinism.ts`, com pai `29d7b51` e código-base de `e4.3` (`99f4ee3`), sem mudança. Os AC 3, 4, 5 e 9 foram implementados no bloco do codec. O texto congelado foi gerado pelo codec e é igual caractere a caractere ao da §11.6.1 (287 B). Golden hash idêntico. O diff do `sim:check` só muda `parser` e `fronteira` (texto acrescentado no fim), `versão fio` (`6/6` → `10/10`) e ganha a linha nova `fio congelado`. As 14 mutações do contrafactual saem rc=1, e o `typeof hz` é equivalente (rc=0). **Por orientação do @architect (`188998e`, §11.6.2), pedida pelo lead antes do commit, e sem editar os ACs:** a entrada ganhou `variantes` e a guarda ganhou o item 5 (M-VARIANTE rc=1), e o caso de versão errada passou a `VERSAO_DO_FIO + 1`. Nenhum caso novo falhou contra o código de hoje (o AC 7 não foi acionado). O delta de AC fica com o @po. | Dex (@dev) |
+| 2026-09-21 | 1.5 | **Gate @qa: CONCERNS, Ready for Review → Done** (`docs/qa/gates/debt.12-guarda-do-fio-tabela-e-fixture-congelada.yml`). Os 9 ACs estão MET, e também o item 5/M-VARIANTE e o caso `VERSAO_DO_FIO + 1` (§11.6.2, em escopo por orientação do @architect). Tudo foi verificado do zero em worktrees de `5766137`/`5766137^`: `check`, `sim:check` e `build` com rc=0, golden hash idêntico, e o diff da saída com só as 4 mudanças permitidas. O texto congelado foi gerado pelo @qa a partir do codec (287 B, igual à §11.6.1). As 10 mutações da story reaplicadas deram rc=1, e o @qa rodou mais 25 próprias. E48-TST-001, E48-TST-002, E48-ARC-003 (parte 2) e E49-TST-001/002/003 estão fechados. Achados, todos LOW: DEBT12-TST-001 (canário do item 4 com arredondamento local, ✓ falso na borda de FP; @dev), DEBT12-TST-002 (item 5 depende de `npm run check`; @po/@sm na e4.10), DEBT12-TST-003 (tabela sem trava de tamanho; @dev), DEBT12-ARC-001 (errata do `'shield'`, sem bump; @architect) e DEBT12-REQ-001 (delta de AC; @po). | Quinn (@qa) |

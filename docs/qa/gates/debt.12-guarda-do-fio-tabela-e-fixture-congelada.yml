@@ -1,0 +1,285 @@
+schema: 1
+story: 'debt.12'
+story_title: 'Guarda do fio dirigida por tabela, fronteira de piso não inteira e fixture congelada — `E48-TST-001`, `E48-TST-002`, `E48-ARC-003` (parte 2) e `E49-TST-001`/`002`/`003`'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 9 ACs estão MET, e também os dois acréscimos que o @architect pediu no meio da tarefa (188998e,
+  §11.6.2): o item 5 da fixture com M-VARIANTE e o caso de versão errada `VERSAO_DO_FIO + 1`. Refiz tudo do
+  zero, sem confiar no Dev Agent Record, em worktrees descartáveis de 5766137 e de 5766137^. check,
+  sim:check e build saíram com rc=0, e o golden hash não mudou. O diff da saída inteira do sim:check tem
+  só as quatro mudanças permitidas: texto acrescentado em `parser` e em `fronteira`, `6/6 → 10/10` em
+  `versão fio` e a linha nova `fio congelado`. Gerei o texto congelado a partir do codec: são 287 B,
+  iguais caractere a caractere à §11.6.1 e ao literal em FIO_CONGELADO, com ponto fixo válido. Reapliquei
+  10 mutações da story, e as 10 saíram com rc=1. Rodei também 25 mutações minhas. E48-TST-001, E48-TST-002,
+  E48-ARC-003 (parte 2) e E49-TST-001/002/003 estão fechados. O veredito é CONCERNS, e não PASS, por dois
+  achados LOW de guarda que propõem mudança de código. (1) O canário do item 4 mede piso e arredondamento
+  ingênuos, e não os do codec. Com um valor na borda de ponto flutuante (ultCharge 0.29), ele dá ✓ falso
+  (P6b). (2) O item 5 só não é tautológico quando roda junto com `npm run check`. Sozinho, o sim:check
+  deixa passar uma variante nova em DoServidor/T_DO_SERVIDOR que não tenha amostra (Q2a e Q2b rc=0; o tsc
+  pega com rc=2), e nenhum CI roda check nem sim:check. Nenhum dos dois afeta o código de produção nem o
+  valor congelado de hoje.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:5766137 (implementação). O pai é 29d7b51 (docs do @sm). `git diff --stat 99f4ee3 5766137^ -- src`
+  está vazio, então o código-base é o de e4.3. 9de7cd9 (registro do @dev) toca só a story. Depois dele vieram
+  6d525df (@po, só e4.3-e4.7, sem tocar debt.12) e 17ecf5c (debt.14, @dev). O diff 5766137..17ecf5c em
+  src/ tem hunks só a partir da linha 1621, dentro do bloco `sala pura` (que começa na 1589 de 5766137). O
+  bloco do codec (988-1588) está byte a byte igual no HEAD. 5766137 NÃO está em origin/master
+  (merge-base --is-ancestor rc=1; origin/master é 44311f6): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Rodei num worktree descartável de 5766137 (node_modules por junção), no Node v24.13.1, porque o @dev
+      fazia debt.14 na árvore compartilhada. `npm run check` deu rc=0, `node src/tools/determinism.ts` rc=0
+      com stderr de 0 B, e `npm run build` rc=0 com 53.27 kB. "golden hash ✓ ok — 6 seeds batem o baseline"
+      aparece nas duas saídas. No worktree de 5766137^ o sim:check também deu rc=0 com stderr vazio. O `diff`
+      das duas saídas inteiras tem exatamente quatro blocos. `22c22` é `parser`, em que o texto antigo é
+      prefixo e se acrescenta "· por campo: 4 numéricos × 4 = 16 e 14 campos 0|1 × 4 = 56 → null ·
+      tick/extra descartados em 16 formas". `24c24` é `fronteira`, também com o texto antigo como prefixo,
+      acrescida de "· limiares não inteiros [110.07, 0.29, 87.04]: ✓ vira 0/72, com thr × 100 abaixo do
+      inteiro em [0.29]". `27c27` é `versão fio`, que só muda de `6/6` para `10/10`, com o ✓ mantido. `28a29`
+      é a linha nova `fio congelado`. Nenhuma linha do golden hash, do build coverage, do replay nem da
+      `sala pura` muda ou troca de lugar. O @dev citou 26c26/28c28/31c31/32a33 porque mediu com `npm run`,
+      que acrescenta 4 linhas de banner.
+  - id: 'Escopo (AC 7, AC 8) e EOL'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 5766137` lista um único arquivo, src/tools/determinism.ts, com 303 inserções e 9
+      remoções. `--numstat -w` dá o mesmo 303/9, e o blob tem 0 CR. Os 8 hunks começam em 1058, 1093, 1132,
+      1212, 1225, 1241, 1267 e 1283 (numeração do pai). Todos ficam entre `// ... parser de entrada (e4.8, AC
+      4)` (988) e `// ... sala pura (e4.3, AC 11 e 16)` (1589 no filho). O último hunk termina na linha de
+      contexto do cabeçalho `sala pura`, sem alterá-la. As 9 remoções são a linha `parser`, a assinatura de
+      guardaCodec, o caso `versao 2`, a condição do laço `descompassos`, as linhas `fronteira` e `versão
+      fio`, o `return` de guardaCodec e as duas linhas de montagem do bloco. Nenhuma delas está dentro de
+      FIO_CONGELADO, que nasce neste commit. codec.ts, protocolo.ts e sala.ts não aparecem no diff.
+  - id: 'Texto congelado (AC 5), gerado por mim'
+    verdict: PASS
+    evidence: >-
+      Script descartável no worktree de 5766137 que importa o codec real, codifica a amostra da §11.6.1 como
+      ela está escrita e compara o resultado com a linha de architecture-e4.md:1377 e com o literal
+      extraído por regex de determinism.ts. `gerado === doc` deu true e `gerado === fonte` também. São 287
+      caracteres e 287 bytes UTF-8, sem nenhuma posição divergente. O ponto fixo
+      `codificar(decodificar(t)) === t` vale. Medi também os produtos por 100: `0.29 * 100 =
+      28.999999999999996`, enquanto 110.07 dá 11007 e 87.04 dá 8704, exatos. Isso confirma a correção
+      factual do AC 4 v1.1.
+  - id: 'Tabela do parser (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `numericos` tem cast.dx, cast.dy, cast.mag e pong.id, cada um com NaN, 1e999 via JSON.parse,
+      -Infinity e "1". O 1e999 é montado por texto e conferido `=== Infinity` antes de ser usado, com uma
+      linha ✗ própria ("o caso não testa nada") se a montagem falhar. `bits` tem 14 campos × 4 valores:
+      ballIndex, jogador nas 6 variantes, slot/abilityIndex/passiveIndex de build e de trocaDeBuild, e
+      compra.slot. `descartes` tem 16 formas: entrar sem e com assento, cast, pong, e as 6 de decisao.d com
+      tick/extra por fora e dentro de d. Cada forma confere `!== raw`, `.d !== raw.d` e igualdade profunda.
+      `nulos` e `validos` continuam intactos. A tabela bate campo a campo com finito() e bit() de
+      codec.ts (lido em 5766137).
+  - id: 'Contrafactual da story, reaplicado (ACs 4, 5, 6, 9 e §11.6.2)'
+    verdict: PASS
+    evidence: >-
+      Script bateria-qa.mjs no scratchpad. Cada mutação roda numa cópia nova de src/, package.json e
+      tsconfig do worktree de 5766137. O `\n` do padrão é normalizado para o CRLF do arquivo, e a mutação
+      aborta se o padrão não casar exatamente 1 vez. Nenhuma abortou. O controle deu rc=0 e tsc rc=0.
+      Resultados, todos com rc=1:
+      M9 ("s[6][0][4]: congelado 432.13, atual 55.55").
+      over↔pad ("s[1]: congelado 0, atual 17.25", e o ponto fixo também falha em s[5]).
+      M7 (`fronteira` sintéticos "vira 12/72", roster 0/48).
+      pisoQ→q (fidelidade, fronteira 24/48 e 36/72, fio congelado).
+      M-HZ-INT ("snapshotHz 7.5 não lançou", 9/10).
+      M-HZ-POS ("-30 não lançou").
+      M4c ("pong com tick/extra").
+      M12 (cast.dy NaN, 1e999 e -Infinity).
+      M15 (compra.slot com 2, 0.5, "0" e true).
+      M-VARIANTE (só o item 5: "[…,visao,x] não são as da v1"; itens 1 a 4 ✓; tsc rc=0, porque a mutação é
+      coerente nos três arquivos).
+  - id: 'Procedimento de mudança deliberada (pergunta 3)'
+    verdict: PASS
+    evidence: >-
+      Q3a, `VERSAO_DO_FIO = 2` com uma entrada v2 acrescentada e o mesmo texto (o que a e4.10 vai fazer):
+      rc=0 e tsc rc=0. A linha fica "FIO_CONGELADO v2 (287 B, 2 entrada(s))", e `versão fio` mostra v2 ✓
+      com o caso "3". Q3b, M9 mais bump mais v2 acrescentada com o texto novo: rc=0. Q3c, bump sem
+      acrescentar entrada: rc=1 ("FIO_CONGELADO [1] não termina em VERSAO_DO_FIO 2"). Q3e, M9 com a v1
+      editada no lugar para `versao: 2` e texto novo, mais bump: rc=1 ("[2] não termina…", pego pelo
+      length e pelas versões consecutivas). Q3d, M9 com a v1 editada no lugar SEM bump: rc=0. Q3f, M9 com a
+      v1 reescrita com o texto novo MAIS v2 acrescentada, mais bump: rc=0. Q3d e Q3f são o limite que a
+      §11.6.1 (linhas 1415-1422) declara: nenhuma guarda dentro do arquivo impede editar a última entrada,
+      e a guarda nunca relê as entradas anteriores à última. O que os denuncia é a forma do diff (linha
+      removida ou alterada dentro de FIO_CONGELADO), e essa checagem é do @qa em todo gate que tocar a
+      lista. Em 5766137 a lista nasce, e 0 linhas removidas estão dentro dela.
+  - id: 'Fonte de variantes (pergunta 2)'
+    verdict: CONCERNS
+    evidence: >-
+      Q2a acrescentou `| { t: 'evento'; e: number }` a DoServidor e `evento: true` a T_DO_SERVIDOR, sem
+      amostra. O sim:check deu rc=0 com a linha `fio congelado` toda ✓, e o tsc deu rc=2 (TS1360 no
+      `satisfies` de `amostras`, determinism.ts:1304). Q2b acrescentou `evento: true` só a T_DO_SERVIDOR: o
+      sim:check deu rc=0 e o tsc rc=2 (TS2353 em codec.ts:405, propriedade desconhecida). O item 5 não é
+      tautológico, porque a cadeia DoServidor → `satisfies` de T_DO_SERVIDOR / `satisfies` de `amostras` →
+      chaves amarra a lista ao tipo, mas o elo é do COMPILADOR. `npm run sim:check` é `node
+      src/tools/determinism.ts` em strip-only, sem checagem de tipo. E deploy-pages.yml só roda `npm run
+      build`, e o vite não checa tipo. A derivação a partir de `amostras` é a que a §11.6.2 manda, e não
+      um desvio do @dev: T_DO_SERVIDOR é privada de codec.ts, que a story proíbe. Ver DEBT12-TST-002.
+  - id: 'Mais estrito que o AC (pergunta 4)'
+    verdict: PASS
+    evidence: >-
+      P7 fez `bit()` conferir o jogador só em `pronto` (o mínimo que o AC exigiria), e deixou as outras
+      variantes com `campo as 0|1`. Deu rc=1 por draft.jogador, build.jogador e as demais. Uma tabela com
+      jogador numa variante só passaria verde, então o caso por variante tem dente. P8 (decisao devolve
+      `raw.d`) deu rc=1 em todas as 12 formas de decisao. Os auxiliares locais de arredondamento do canário
+      acertam a amostra de hoje, mas divergem do codec na borda de ponto flutuante: ver DEBT12-TST-001.
+  - id: 'Mutações próprias (25, todas no scratchpad, cópias descartadas)'
+    verdict: CONCERNS
+    evidence: >-
+      Canário do limiar (AC 4): P3 (0.29 → 0.3) deu rc=1, com o canário acusando "nenhum limiar sintético…
+      abaixo do inteiro". P3b (0.3 mais M7) deu rc=1, só pelo canário. P3c (0.3, M7 e canário desligado) deu
+      rc=0. P3d (só o canário desligado) deu rc=0. O canário, portanto, está vivo, e é a única defesa de M7
+      quando 0.29 sai: é o par da debt.13. P4 (varredura sintética sem `ultCharge = thr`, mais M7) deu rc=0.
+      Esvaziar a própria varredura tira o dente, o que é inerente a mutar o teste e não é achado.
+      Canário da amostra (AC 5, item 4): P5 (y = x = 100.25, com o texto regenerado no lugar) deu rc=1 por
+      "colisões [s[6][0][1] = s[6][0][2]]". P6 (ultCharge 55.55, na grade) deu rc=1 por "piso 55.55 vs
+      arredondado 55.55". P6c (0.3) deu rc=1. P6b (ultCharge 0.29, com o texto regenerado: o codec escreve
+      0.29) deu rc=0, com o canário "piso ≠ arredondado ✓". O piso ingênuo local dá 0.28, mas pisoQ(0.29)
+      === q(0.29) === 0.29 no codec. Com essa amostra, trocar pisoQ por q não mudaria os bytes da fixture,
+      e o canário diria que muda (DEBT12-TST-001).
+      Tabela (AC 3): P1 (linha cast.dy removida mais M12), P1b (só a remoção) e P2 (linha compra.slot
+      removida mais M15) deram rc=0. Nenhum tamanho de tabela é conferido, e a remoção só aparece no
+      contador impresso (DEBT12-TST-003).
+      Item 5: P9 (a comparação do item 5 trocada por `true`, mais M-VARIANTE) deu rc=0. O item 5 é a única
+      defesa contra M-VARIANTE.
+      Decodificador: P10 (só o decodificador lê ultCharge de b[4]) deu rc=1 pelo ponto fixo, pela
+      fidelidade e pela fronteira. O item 3 prende o decodificador, como a §11.6.1 afirma.
+
+top_issues:
+  - id: 'DEBT12-TST-001'
+    severity: low
+    category: tests
+    owner: '@dev (opcional, na próxima story que abrir o bloco do codec de determinism.ts; e4.10 está na fila)'
+    finding: >-
+      O canário do item 4 (AC 5) usa `Math.floor(v*100)/100`, `Math.ceil` e `Math.round` locais. A decisão
+      do @dev é legítima, porque pisoQ/tetoQ/q são privados de codec.ts, que a story proíbe. O problema é
+      que o AC pede `pisoQ(ultCharge) ≠ q(ultCharge)`, e os locais divergem de pisoQ justamente no caso que
+      pisoQ corrige, `v*100` abaixo do inteiro. Medido (P6b): com ultCharge 0.29 na amostra e o texto
+      regenerado, o codec escreve 0.29, que é igual ao arredondado. As regras NÃO estão separadas, e ainda
+      assim o canário dá ✓ (piso local 0.28 ≠ 0.29). Para 55.559 e 183.341, os valores de hoje, os locais
+      coincidem com o codec. O defeito só aparece se alguém "simplificar" a amostra para um valor de borda,
+      que é exatamente o cenário que o canário existe para pegar.
+    suggested_action: >-
+      Ancorar o canário na saída do próprio codec, sem abrir codec.ts: exigir que o ultCharge CODIFICADO
+      (`s[6][0][6]` do texto congelado) seja diferente de `Math.round(ultCharge*100)/100`, e que o restante
+      codificado (`s[6][0][7]`) seja diferente de `Math.round(restante*100)/100`. Assim, "piso ≠
+      arredondado" passa a significar "a regra que o codec aplica difere do arredondamento", que é o que a
+      §11.6.1 quer. Mutação de aceite: P6b tem de dar rc=1.
+  - id: 'DEBT12-TST-002'
+    severity: low
+    category: tests
+    owner: '@po/@sm (texto da e4.10 e das stories que mexerem em DoServidor); @devops (opcional, CI)'
+    finding: >-
+      O item 5 (§11.6.2) só não é tautológico quando roda junto com `npm run check`. Medido: uma variante
+      nova em DoServidor e em T_DO_SERVIDOR sem amostra (Q2a), ou só em T_DO_SERVIDOR (Q2b), deixa o
+      sim:check com rc=0 e todos os itens ✓, e só o tsc reprova (rc=2). A derivação a partir das chaves de
+      `amostras` é a que a §11.6.2 decidiu, e o @dev a seguiu corretamente: T_DO_SERVIDOR é privada de
+      codec.ts. O elo, porém, é de compilação, e nenhum CI roda check nem sim:check (deploy-pages.yml roda
+      só `vite build`). A ME6 da e4.10 diz que "reprova pelo item 5", o que só vale se a amostra for
+      acrescentada, e é o tsc que obriga isso.
+    suggested_action: >-
+      Registrar nas stories que tocam DoServidor (e4.10 primeiro) que a prova do item 5 é o PAR `npm run
+      check && npm run sim:check`, e que a ME6 é aplicada com a amostra acrescentada, como a M-VARIANTE foi
+      aqui. Se o @devops quiser fechar o elo, basta um job de CI com os dois comandos. Não há mudança de
+      código na debt.12.
+  - id: 'DEBT12-TST-003'
+    severity: low
+    category: tests
+    owner: '@dev (opcional, na próxima story que abrir guardaParser)'
+    finding: >-
+      A tabela por campo não tem trava de tamanho. Remover a linha cast.dy de `numericos` junto com M12
+      (P1), ou a linha compra.slot de `bits` junto com M15 (P2), deixa o sim:check com rc=0. A única pista é
+      o contador da linha `parser` (16 → 12, 56 → 52), que o diff antes × depois mostraria, se alguém o
+      fizesse. É a mesma classe de E48-TST-001 (a guarda cobre a lista escrita, não os campos), só que
+      agora no nível da tabela. O risco é baixo, porque exige editar o teste.
+    suggested_action: >-
+      Travar os tamanhos contra literais comentados, como POPULACOES_FIXTURE na debt.13 (`numericos.length
+      === 4`, `bits.length === 14`, `descartes.length === 16`), com uma mensagem que mande conferir finito()
+      e bit() em codec.ts. Mutação de aceite: P1 e P2 têm de dar rc=1.
+  - id: 'DEBT12-ARC-001'
+    severity: low
+    category: docs
+    owner: '@architect (errata na §11.6.1; SEM subir a versão)'
+    finding: >-
+      A amostra da §11.6.1 tem `effects: [{ kind: 'slow' }, { kind: 'shield' }]`, e `'shield'` não está em
+      EffectKind ('slow' | 'dot' | 'amp' | 'vuln'). O @dev manteve o valor com uma asserção de tipo,
+      localizada em AMOSTRA_DO_FIO e comentada. Julgo a asserção ACEITÁVEL: a posição é [lit], o codec
+      repassa `kind` sem ler, e o texto congelado não depende do vocabulário. Trocar o valor mudaria os 287
+      B decididos, e isso, pela própria §11.6.1, é mudança de protocolo, que exigiria subir
+      VERSAO_DO_FIO sem que o protocolo tenha mudado. Subir a versão por isso seria errado. O dono é o
+      @architect, porque o valor é da Decisão 1, e nem o @dev nem o @qa editam o documento. Resíduo real: se
+      um dia o decodificador passar a conferir `effects[].kind` (lista fechada), o ponto fixo da v1 vai
+      lançar. Isso já seria mudança de protocolo, com entrada nova.
+    suggested_action: >-
+      Uma nota de errata na §11.6.1: "`shield` não é EffectKind; fica de propósito, porque a posição é
+      [lit]; não sobe versão". Opcional: se a e4.10 (que já sobe para a v2) quiser um kind válido, a
+      entrada v2 é o lugar. Como a §11.6.2 manda repetir o texto da v1, essa escolha é do @architect.
+  - id: 'DEBT12-REQ-001'
+    severity: low
+    category: requirements
+    owner: '@po (delta de AC já combinado)'
+    finding: >-
+      O item 5 com M-VARIANTE (AC 5 e AC 6) e o caso `VERSAO_DO_FIO + 1` (AC 9) estão implementados e foram
+      verificados por este gate, mas ainda não estão no texto dos ACs. 6d525df (@po) aplicou as decisões de
+      188998e em e4.3-e4.7, e não na debt.12. O Dev Agent Record registra a mudança como orientação do
+      @architect.
+    suggested_action: >-
+      O @po registra o delta (AC 5 item 5 e forma `{versao, snap, variantes}`, AC 6 M-VARIANTE, AC 9 versão
+      relativa) no Change Log da debt.12, sem reabrir a story. O gate já julgou os três como em escopo.
+
+avaliacoes_pedidas:
+  kind_shield: >-
+    Aceitável como está. A asserção é local, comentada e não vaza para nenhum outro ponto. O dono da
+    correção é o @architect, e a correção é uma errata de texto na §11.6.1, SEM bump: mudar o valor mudaria
+    o texto congelado, e subir a versão sem mudança de protocolo quebraria a regra da Decisão 2 (sobe se, e
+    só se, o formato mudar). DEBT12-ARC-001, low.
+  fonte_de_variantes: >-
+    Não é tautológico, mas depende do tsc. Se a e4.10 acrescentar `evento` a T_DO_SERVIDOR sem mexer em
+    `amostras`, o sim:check sozinho NÃO pega (Q2a e Q2b rc=0). O `npm run check` pega (rc=2, TS1360 ou
+    TS2353). Como o AC 1 de toda story exige check verde, o par fecha. Só que nenhum CI roda o par, e o
+    sim:check isolado dá falso verde. A derivação a partir de `amostras` é a decisão da §11.6.2 e a única
+    possível sem abrir codec.ts. DEBT12-TST-002, low.
+  procedimento_de_mudanca: >-
+    Confirmado. v2 acrescentada com bump passa (Q3a, e Q3b com o layout mudado). Bump sem acrescentar
+    reprova (Q3c). Editar a v1 no lugar: com bump para `versao: 2` numa lista de 1 entrada, reprova (Q3e,
+    pelo length). SEM bump, passa (Q3d), e reescrever a v1 E acrescentar v2 também passa (Q3f). Os dois
+    verdes são o limite declarado na §11.6.1 (1415-1422): só a forma do diff os denuncia, e a conferência
+    "nenhuma linha removida ou alterada dentro de FIO_CONGELADO" fica com o @qa em todo gate futuro que
+    tocar a lista. Não é achado contra esta story.
+  mais_estrito_que_o_ac: >-
+    d.jogador nas 6 variantes tem dente: P7 (bit só em `pronto`) reprova por draft/build/etc., o que uma
+    tabela com uma variante só não pegaria. Os auxiliares locais do canário estão certos para os valores
+    de hoje e errados na borda de ponto flutuante (P6b). DEBT12-TST-001, low.
+
+observacoes:
+  - >-
+    O fechamento dos achados de origem é por execução. E48-TST-001 (M4c, M12, M15 e P7/P8 reprovam),
+    E48-TST-002 (M7 reprova só pelo 0.29, e o canário protege a troca do 0.29), E48-ARC-003 parte 2 (M9,
+    over↔pad e pisoQ→q reprovam pela fixture) e E49-TST-001/002/003 (M-HZ-INT e M-HZ-POS reprovam; o
+    ramo "sem a propriedade servidor" está no diff e não reapliquei a M-SERVIDOR, porque o @dev e o @po
+    (v1.2) já a mediram, e a mudança é só de texto de diagnóstico).
+  - >-
+    Sob P3c, a linha `fronteira` imprime ✗, mas o rc é 0: o ✓/✗ das linhas é decoração, e o rc vem da
+    lista `problemas`. Isso só acontece com a própria guarda mutada. Sem ação.
+  - >-
+    O rótulo `fio congelado`, com 13 caracteres, desalinha uma coluna. É uma decisão consciente do @dev, e
+    é cosmética.
+  - >-
+    O Status veio "Ready for Review" (o canônico é "InReview"), e a transição foi registrada como Ready
+    for Review → Done.
+  - >-
+    CodeRabbit não roda nesta máquina (sem WSL/CLI). A cobertura veio de check, sim:check e build em
+    worktree descartável, do diff da saída inteira contra 5766137^, da geração independente do texto
+    congelado, da leitura hunk a hunk, de 10 mutações da story e de 25 minhas.
+  - >-
+    Os worktrees descartáveis de 5766137 e 5766137^ foram removidos, com as junções de node_modules
+    desfeitas antes, e as cópias de mutação foram apagadas. `git worktree list` mostra só a árvore
+    principal. A árvore compartilhada nunca foi mutada.
+
+waiver: { active: false }
+updated: '2026-09-21T10:10:00Z'
