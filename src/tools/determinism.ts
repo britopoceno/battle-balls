@@ -44,6 +44,21 @@ import { hash, MAX_ROUND_TICKS, runRound, type RoundDriver, type RoundResult } f
 // sobre `sim/` — e porque este arquivo já é o mais longo de `tools/`.
 import { verificarPartida } from './partida.ts'
 import { verificarTelemetria } from './guarda-telemetria.ts'
+// e4.3 — a sala pura (AC 11 e 16), pela mesma seta `tools/ → net/`. A Bo5 de referência é a de
+// `jogarPartida` (`tools/partida.ts`), e o hash injetado na sala é o `hash` do arnês, importado acima.
+import { ATRASO_ALVO_TICKS } from '../net/protocolo.ts'
+import {
+  CONFIG_PADRAO_DA_SALA,
+  criarSala,
+  passo,
+  type ConfigDaSala,
+  type EntradaDaSala,
+  type Envio,
+  type RodadaEmCurso,
+  type Sala,
+} from '../net/sala.ts'
+import { jogadorDoLado, placarDe, type Decisao, type Jogador, type VisaoPartida } from '../match/index.ts'
+import { jogarPartida, type PartidaGravada } from './partida.ts'
 
 const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
 
@@ -1277,6 +1292,640 @@ const linhasCodec = [
   ...linhasCodecSaida,
 ]
 
+// ------------------------------------------- sala pura (e4.3, AC 11 e 16) — a Bo5 inteira por passo()
+
+/**
+ * `e4.3`, AC 11 — **a guarda que justifica a sala existir.** Uma Bo5 COMPLETA, conduzida só por `passo()`
+ * de `net/sala.ts`, com `agora` sintético e mensagens sintéticas nos dois assentos, tem de dar o mesmo
+ * placar, a mesma sequência de vencedores e os mesmos hashes de rodada que o caminho headless de
+ * `tools/partida.ts` (`jogarPartida`). Se divergir, a sala acrescentou regra de jogo.
+ *
+ * As mensagens saem da gravação do arnês: as decisões de `PartidaGravada.decisoes`, cada uma pelo assento
+ * do seu `d.jogador`, e os `Command[]` de cada rodada, convertidos de volta em `{t:'cast', ballIndex}` pelo
+ * lado que o jogador ocupa naquela rodada. **Cada cast é submetido `ATRASO_ALVO_TICKS` ticks ANTES do tick
+ * gravado** (correção do @po, v1.1.0): a sala o carimba em `tickAtual + ATRASO_ALVO_TICKS`, e ele cai
+ * exatamente onde o arnês o executou. É isso que faz desta guarda o teste do AC 6 — carimbo errado por um
+ * tick e o hash denuncia, e a guarda confere também o `Command` carimbado, campo a campo. Comando gravado
+ * com `tick < ATRASO_ALVO_TICKS` não tem como ser submetido cedo o bastante: a seed que tiver algum é
+ * PULADA, nunca clampada.
+ *
+ * AC 16, caminho feliz: TODA mensagem sintética passa por `parseDoCliente(JSON.parse(JSON.stringify(msg)))`
+ * antes de virar `EntradaDaSala`. Um parser estrito demais quebra esta guarda, e isso é achado contra `e4.8`.
+ *
+ * O `buildPadrao` do jogador 1 que o roteiro traz NÃO é enviado: quem o produz aqui é o relógio de RF-04 da
+ * sala (AC 9), no estouro do prazo. O resultado é o mesmo em qualquer ordem (RF-04), e o log de decisões da
+ * sala é conferido contra o que a guarda enviou mais o que o prazo produziu.
+ */
+const POOL_SALA = ['golem', 'vex'] // o `POOL` de tools/partida.ts (não exportado): R-01(B), composição fixa
+/** candidatas, na ordem das `MATCH_SEEDS` de `tools/partida.ts` — a primeira sem comando em `tick < 6` */
+const SEEDS_SALA = [1, 2, 12345]
+const CHAVES_SALA: readonly [string, string] = ['segredo-do-assento-0', 'segredo-do-assento-1']
+const T0_SALA = 1_000_000
+
+interface ConferenciaDeEnvios {
+  salas: number
+  assentamentos: number
+  visoes: number
+  pelaFronteira: number
+}
+
+/** Toda chamada a `passo()` da guarda passa por aqui, e o AC 11 (e) e o AC 8 são conferidos em TODO passo. */
+interface Condutor {
+  sala: Sala
+  hz: number
+  rotulo: string
+  problemas: string[]
+  conf: ConferenciaDeEnvios
+}
+
+function novoCondutor(sala: Sala, rotulo: string, problemas: string[]): Condutor {
+  return { sala, hz: sala.config.snapshotHz, rotulo, problemas, conf: { salas: 0, assentamentos: 0, visoes: 0, pelaFronteira: 0 } }
+}
+
+function conduzir(c: Condutor, agora: number, entrada: EntradaDaSala[]): Envio[] {
+  const r = passo(c.sala, agora, entrada)
+  c.sala = r.sala
+  const s = r.sala
+  const falha = (m: string) => anotar(c.problemas, `  ✗ sala ${c.rotulo}: ${m}`)
+  // AC 11 (e) — o PRIMEIRO envio a todo assento recém-assentado (primeira entrada ou reassentamento) é o {t:'sala'}
+  const aguardando = new Set(
+    entrada
+      .filter((e) => 'conexao' in e && e.conexao === 'assentou' && s.assentos.includes(e.assento))
+      .map((e) => e.assento),
+  )
+  c.conf.assentamentos += aguardando.size
+  const salasVistas = new Set<DoServidor>()
+  const ultimaVisao = new Map<string, VisaoPartida>()
+  for (const { assento, msg } of r.envios) {
+    if (aguardando.has(assento)) {
+      if (msg.t !== 'sala') falha(`primeiro envio ao assento recém-assentado '${assento}' foi {t:'${msg.t}'}, não {t:'sala'} (AC 11 e)`)
+      aguardando.delete(assento)
+    }
+    if (msg.t === 'sala') {
+      c.conf.salas++
+      const j = s.assentos.indexOf(assento)
+      if (salasVistas.has(msg)) falha("o MESMO objeto {t:'sala'} foi endereçado a mais de um assento — broadcast (AC 11 e)")
+      salasVistas.add(msg)
+      if (msg.assento !== assento) falha(`{t:'sala'} endereçado a '${assento}' carrega o segredo '${msg.assento}' (AC 11 e)`)
+      // @architect, §11.6.1 (adendo 6c6b9a0): o jogador trocado entre os assentos é o bug do servidor que o decoder não vê
+      if (msg.jogador !== j) falha(`{t:'sala'} endereçado ao assento do jogador ${j} diz jogador ${msg.jogador} (AC 11 e, §11.6.1)`)
+      if (msg.versao !== VERSAO_DO_FIO) falha(`{t:'sala'} com versao ${String(msg.versao)}, esperado ${VERSAO_DO_FIO} (AC 11 e)`)
+      if (msg.snapshotHz !== c.hz) falha(`{t:'sala'} com snapshotHz ${msg.snapshotHz}, a configuração da sala diz ${c.hz} (AC 10/11 e)`)
+    }
+    if (msg.t === 'visao') {
+      c.conf.visoes++
+      ultimaVisao.set(assento, msg.v)
+    }
+  }
+  for (const k of aguardando) falha(`assento recém-assentado '${k}' não recebeu envio nenhum`)
+  // AC 8 — a última visão de cada assento no passo é `visaoPara(estado final, jogador DAQUELE assento)`
+  for (const [assento, v] of ultimaVisao) {
+    const j = s.assentos.indexOf(assento)
+    if (j < 0 || !profundamenteIgual(v, visaoPara(s.partida, j as Jogador))) {
+      falha(`{t:'visao'} endereçado a '${assento}' não é visaoPara(estado, jogador ${j}) — broadcast ou projeção alheia (AC 8)`)
+    }
+  }
+  return r.envios
+}
+
+/** AC 16, caminho feliz — `parseDoCliente(JSON.parse(JSON.stringify(msg)))`, sempre. */
+function pelaFronteira(c: Condutor, chave: string, raw: unknown): EntradaDaSala[] {
+  c.conf.pelaFronteira++
+  const msg = parseDoCliente(JSON.parse(JSON.stringify(raw)))
+  if (msg === null) {
+    anotar(c.problemas, `  ✗ sala ${c.rotulo}: parseDoCliente recusou ${JSON.stringify(raw)} — achado contra e4.8 (AC 15/16), não ajuste aqui`)
+    return []
+  }
+  return [{ assento: chave, msg }]
+}
+
+function errosPara(envios: Envio[]): Envio[] {
+  return envios.filter((e) => e.msg.t === 'erro')
+}
+
+function tickDoSnap(s: Snapshot): number {
+  return Math.round(s.time / TICK_MS)
+}
+
+/** `agora` que deixa a rodada exatamente no tick `alvo` (`floor((agora − início) · 60 / 1000) = alvo`). */
+function agoraDoTick(r: RodadaEmCurso, alvo: number): number {
+  return r.inicioMs + Math.ceil((alvo * 1000) / TICK_HZ)
+}
+
+/** A sequência de `world.events` que a rodada gravada produz — o laço do arnês, observado tick a tick. */
+function eventosDeReferencia(s: RoundSetup, comandos: readonly Command[]): SimEvent[] {
+  const w = createWorld(CHARS, s)
+  const eventos: SimEvent[] = []
+  while (!w.over && w.tick < MAX_ROUND_TICKS) {
+    step(w, [...comandos])
+    eventos.push(...w.events)
+  }
+  return eventos
+}
+
+interface ResumoBo5 {
+  seed: number
+  puladas: string[]
+  rodadas: number
+  placar: string
+  vencedores: string
+  hashesIguais: number
+  casts: number
+  castsMortos: number
+  snaps: number
+  eventos: number
+  foraDaCadencia: number
+  rejeitadas: number
+  prazo: boolean
+  reassentou: boolean
+  mortaRecusada: boolean
+  alheiaRecusada: boolean
+  conf: ConferenciaDeEnvios
+}
+
+function bo5PelaSala(g: PartidaGravada, problemas: string[]): ResumoBo5 {
+  const falha = (m: string) => anotar(problemas, `  ✗ sala bo5: ${m}`)
+  const c = novoCondutor(criarSala({ id: 'guarda-e4.3', seed: g.matchSeed, pool: POOL_SALA, chars: CHARS, hashDoMundo: hash }), 'bo5', problemas)
+  const intervalo = TICK_HZ / c.hz
+  const [K0, K1] = CHAVES_SALA
+  const resumo: ResumoBo5 = {
+    seed: g.matchSeed, puladas: [], rodadas: 0, placar: '', vencedores: '', hashesIguais: 0, casts: 0, castsMortos: 0,
+    snaps: 0, eventos: 0, foraDaCadencia: 0, rejeitadas: 0, prazo: false, reassentou: false, mortaRecusada: false,
+    alheiaRecusada: false, conf: c.conf,
+  }
+  let agora = T0_SALA
+  conduzir(c, agora, [{ assento: K0, conexao: 'assentou' }])
+  agora += 50
+  conduzir(c, agora, [{ assento: K1, conexao: 'assentou' }])
+  if (c.sala.fase !== 'jogando') falha(`dois assentos ocupados e a sala está '${c.sala.fase}', não 'jogando'`)
+
+  const esperado: Decisao[] = [] // o log de decisões que a sala TEM de ter: o que foi enviado + o que o prazo produziu
+  let iDec = 0
+  let iRod = 0
+  for (let volta = 0; c.sala.partida.fase !== 'fim'; volta++) {
+    if (volta > 400) {
+      falha(`a partida não terminou (fase ${c.sala.partida.fase}, sala ${c.sala.fase})`)
+      break
+    }
+    const p = c.sala.partida
+    if (p.fase === 'rodada') {
+      const r = c.sala.rodada
+      const gr = g.rodadas[iRod]
+      if (r === null || gr === undefined) {
+        falha(`fase rodada sem rodada em curso na sala (${r === null}) ou sem gravação (rodada ${iRod})`)
+        break
+      }
+      agora = conduzirRodada(c, r, gr.comandos, gr.setup, iRod, agora, intervalo, resumo, falha)
+      iRod++
+      continue
+    }
+    const d = g.decisoes[iDec]
+    if (p.fase === 'builds' && (d === undefined || (d.t !== 'build' && d.t !== 'pronto'))) {
+      if (d?.t === 'buildPadrao') {
+        iDec++ // quem produz esta decisão é o relógio de RF-04 da sala (AC 9)
+        continue
+      }
+      // AC 9 / AC 11 (c) — o estouro do prazo: 1 ms antes nada acontece; no prazo, buildPadrao de quem não está pronto
+      const prazo = c.sala.prazoDeBuilds
+      if (prazo === null || prazo <= agora) {
+        falha(`fase builds sem prazo futuro de RF-04 (prazoDeBuilds ${prazo}, agora ${agora})`)
+        break
+      }
+      const antesP = c.sala.partida
+      conduzir(c, prazo - 1, [])
+      if (c.sala.partida !== antesP) falha('o prazo de RF-04 estourou 1 ms ANTES do fim (AC 9)')
+      const nLog = c.sala.decisoes.length
+      const naoProntos = JOGADORES_SALA.filter((j) => !c.sala.partida.prontos[j])
+      conduzir(c, prazo, [])
+      agora = prazo
+      const produzidas = c.sala.decisoes.slice(nLog)
+      const esperadas: Decisao[] = naoProntos.map((j) => ({ t: 'buildPadrao', jogador: j }))
+      if (!profundamenteIgual(produzidas, esperadas)) {
+        falha(`no estouro do prazo a sala produziu ${JSON.stringify(produzidas)}, esperado ${JSON.stringify(esperadas)} (AC 9)`)
+      } else if (!c.sala.eventos.some((e) => e.t === 'buildPadrao')) {
+        falha('buildPadrao aplicado sem EventoPartida buildPadrao no log da sala (AC 11 c)')
+      } else {
+        resumo.prazo = produzidas.length > 0
+      }
+      esperado.push(...produzidas)
+      continue
+    }
+    if (d === undefined) {
+      falha(`as decisões gravadas acabaram antes do fim da partida (fase ${p.fase})`)
+      break
+    }
+    // AC 16, "→ sala": na vez do jogador 1, o assento 0 manda uma decisão PERFEITA em nome dele. `aplicar()`
+    // a aceitaria (é a vez de d.jogador); quem recusa é a checagem de assento da sala.
+    if (!resumo.alheiaRecusada && p.fase === 'draft' && p.draft.ordem[p.draft.passo] === 1 && d.t === 'draft' && d.jogador === 1) {
+      const nLog = c.sala.decisoes.length
+      const env = conduzir(c, agora, pelaFronteira(c, K0, { t: 'decisao', d }))
+      const erros = errosPara(env)
+      if (c.sala.partida !== p || c.sala.decisoes.length !== nLog) falha('decisão com d.jogador alheio chegou a aplicar() / mudou o estado (AC 16)')
+      else if (env.length !== 1 || erros.length !== 1 || erros[0].assento !== K0) {
+        falha(`decisão com d.jogador alheio: esperado 1 {t:'erro'} só ao remetente, veio ${JSON.stringify(env.map((e) => [e.assento, e.msg.t]))} (AC 16)`)
+      } else resumo.alheiaRecusada = true
+    }
+    agora += 100
+    const faseAntes = p.fase
+    const env = conduzir(c, agora, pelaFronteira(c, CHAVES_SALA[d.jogador], { t: 'decisao', d }))
+    esperado.push(d)
+    iDec++
+    const erros = errosPara(env)
+    if (c.sala.partida === p) {
+      // AC 7 / AC 11 (b) — recusada por aplicar(): erro só ao remetente, estado intacto por referência
+      resumo.rejeitadas++
+      if (env.length !== 1 || erros.length !== 1 || erros[0].assento !== CHAVES_SALA[d.jogador]) {
+        falha(`decisão ilegal ${d.t}/j${d.jogador}: esperado 1 {t:'erro'} só ao remetente, veio ${JSON.stringify(env.map((e) => [e.assento, e.msg.t]))}`)
+      }
+    } else if (erros.length > 0) {
+      falha(`decisão aceita ${d.t}/j${d.jogador} veio com {t:'erro'}`)
+    }
+    if (faseAntes === 'draft' && c.sala.partida.fase === 'builds') {
+      // AC 9 — o prazo vai aos dois assentos, com o restante inteiro
+      const prazos = env.filter((e) => e.msg.t === 'prazo')
+      const ok = prazos.length === 2 && prazos.every((e) => e.msg.t === 'prazo' && e.msg.terminaEmMs === c.sala.config.prazoDeBuildsMs)
+      if (!ok) falha(`entrada na fase builds sem {t:'prazo', terminaEmMs: ${c.sala.config.prazoDeBuildsMs}} para os dois assentos (AC 9)`)
+    }
+  }
+
+  // AC 11 — placar, vencedores e hashes contra o arnês
+  const h = c.sala.partida.historico
+  const placarSala = placarDe(c.sala.partida)
+  if (placarSala.join('-') !== g.placar.join('-')) falha(`placar ${placarSala.join('-')} != ${g.placar.join('-')} do arnês`)
+  if (h.length !== g.rodadas.length) falha(`${h.length} rodada(s) na sala != ${g.rodadas.length} no arnês`)
+  for (let i = 0; i < Math.min(h.length, g.rodadas.length); i++) {
+    const a = g.rodadas[i].resultado
+    const b = h[i]
+    const campos: [string, string | number, string | number][] = [
+      ['hash', a.hash, b.hash],
+      ['ticks', a.ticks, b.ticks],
+      ['vencedor', a.vencedor, b.vencedor],
+      ['seedDaRodada', a.seedDaRodada, b.seedDaRodada],
+      ['ladoDoJogador', a.ladoDoJogador.join(','), b.ladoDoJogador.join(',')],
+    ]
+    let iguais = true
+    for (const [campo, esp, obt] of campos) {
+      if (esp !== obt) {
+        iguais = false
+        falha(`rodada ${i}: ${campo} ${obt} na sala != ${esp} no arnês`)
+      }
+    }
+    if (iguais) resumo.hashesIguais++
+  }
+  if (c.sala.fase !== 'encerrada') falha(`partida no fim e a sala está '${c.sala.fase}', não 'encerrada'`)
+  if (!profundamenteIgual(c.sala.decisoes, esperado)) {
+    falha(`o log de decisões da sala (${c.sala.decisoes.length}) != enviadas + produzidas pelo prazo (${esperado.length}) — a sala inventou ou perdeu decisão`)
+  }
+  if (resumo.rejeitadas !== g.rejeicoes.length) falha(`${resumo.rejeitadas} decisão(ões) recusada(s) pela sala != ${g.rejeicoes.length} rejeitada(s) no arnês`)
+  // AC 12 — `controle` real, nunca o default ['bot','bot']
+  const fins = c.sala.eventos.filter((e) => e.t === 'rodadaFim')
+  if (fins.length !== h.length) falha(`${fins.length} evento(s) rodadaFim para ${h.length} rodada(s)`)
+  for (const e of fins) {
+    if (e.t === 'rodadaFim' && e.controle.join(',') !== 'humano,humano') falha(`rodadaFim da rodada ${e.rodada} com controle [${e.controle.join(',')}] (AC 12)`)
+  }
+  if (!resumo.prazo) falha('a Bo5 não exercitou o estouro do prazo de RF-04 (AC 11 c)')
+  if (!resumo.reassentou) falha('a Bo5 não exercitou o reassentamento no meio de uma rodada (AC 11 e)')
+  if (!resumo.mortaRecusada) falha('a Bo5 não exercitou o cast de bola morta (AC 6)')
+  if (!resumo.alheiaRecusada) falha('a Bo5 não exercitou a decisão com d.jogador alheio (AC 16)')
+  resumo.rodadas = h.length
+  resumo.placar = placarSala.join('-')
+  resumo.vencedores = h.map((x) => x.vencedor).join(' ')
+  return resumo
+}
+
+const JOGADORES_SALA: readonly Jogador[] = [0, 1]
+
+/**
+ * Uma rodada da Bo5 pela sala. Três tipos de passo, todos por `conduzir`: SUBMISSÃO (com `agora` parado, os
+ * casts do tick `N + ATRASO` quando a sala está no tick `N`, e o `Command` carimbado conferido), AVANÇO (um
+ * salto até a próxima submissão — vários ticks num `passo()`, cada um observado) e os passos de TESTE
+ * (reassentamento na rodada 1, bola morta na primeira rodada que tiver uma). Devolve o `agora` final.
+ */
+function conduzirRodada(
+  c: Condutor,
+  r: RodadaEmCurso,
+  comandos: readonly Command[],
+  setupGravado: RoundSetup,
+  iRod: number,
+  agoraInicial: number,
+  intervalo: number,
+  resumo: ResumoBo5,
+  falha: (m: string) => void,
+): number {
+  let agora = agoraInicial
+  const snapsK0: Snapshot[] = []
+  let snapsK1 = 0
+  let seqEsperado = 0
+  const w = r.world
+  const [K0, K1] = CHAVES_SALA
+  let i = 0
+
+  const colher = (env: Envio[]) => {
+    for (const e of env) {
+      if (e.msg.t !== 'snap') continue
+      if (e.assento === K1) {
+        snapsK1++
+        continue
+      }
+      if (e.msg.seq !== seqEsperado) falha(`rodada ${iRod}: snap com seq ${e.msg.seq}, esperado ${seqEsperado} (AC 10)`)
+      seqEsperado++
+      snapsK0.push(e.msg.s)
+    }
+  }
+
+  for (let volta = 0; c.sala.rodada === r; volta++) {
+    if (volta > 20_000) {
+      falha(`rodada ${iRod} não terminou pela sala`)
+      break
+    }
+    const N = w.tick
+
+    // ---- teste: reassentamento no meio da rodada (AC 11 e), com a pausa de R-02 congelando o mundo
+    if (iRod === 1 && !resumo.reassentou && N >= 600) {
+      conduzir(c, agora, [{ assento: K1, conexao: 'caiu' }])
+      if (c.sala.pausa === null) falha('queda de assento no meio da rodada não abriu a pausa (AC 13)')
+      agora += 5_000
+      colher(conduzir(c, agora, []))
+      if (w.tick !== N) falha(`o mundo andou ${w.tick - N} tick(s) durante a pausa (AC 13)`)
+      agora += 1_000
+      const env = conduzir(c, agora, [{ assento: K1, conexao: 'assentou' }])
+      colher(env)
+      const paraK1 = env.filter((e) => e.assento === K1).map((e) => e.msg.t).join(',')
+      if (paraK1 !== 'sala,visao,rodadaInicio') falha(`reassentamento na rodada: envios ao assento foram [${paraK1}], esperado [sala,visao,rodadaInicio] (§6)`)
+      if (c.sala.pausa !== null || w.tick !== N) falha(`reassentamento não retomou a rodada no tick ${N} (pausa ${c.sala.pausa !== null}, tick ${w.tick})`)
+      resumo.reassentou = true
+    }
+
+    // ---- teste: cast de bola morta, descartado com erro só ao dono (AC 6)
+    const morta = w.balls.find((b) => !b.alive)
+    if (!resumo.mortaRecusada && morta !== undefined && !w.over) {
+      const j = jogadorDoLado(r.lados, morta.team)
+      const ballIndex = w.balls.filter((b) => b.team === morta.team).indexOf(morta)
+      const nPend = r.pendentes.length
+      const env = conduzir(c, agora, pelaFronteira(c, CHAVES_SALA[j], { t: 'cast', ballIndex, slot: 'ability', dx: 1, dy: 0, mag: 1 }))
+      const erros = errosPara(env)
+      if (env.length !== 1 || erros.length !== 1 || erros[0].assento !== CHAVES_SALA[j] || r.pendentes.length !== nPend) {
+        falha(`cast de bola morta: esperado 1 {t:'erro'} só ao dono e nenhum comando, veio ${JSON.stringify(env.map((e) => [e.assento, e.msg.t]))} (AC 6)`)
+      } else resumo.mortaRecusada = true
+    }
+
+    // ---- submissão: os casts gravados para o tick N + ATRASO, na ordem gravada
+    const lote: Command[] = []
+    while (i < comandos.length && comandos[i].tick === N + ATRASO_ALVO_TICKS) lote.push(comandos[i++])
+    if (lote.length > 0) {
+      const entrada: EntradaDaSala[] = []
+      const esperados: Command[] = []
+      let mortos = 0
+      for (const cmd of lote) {
+        const bola = w.balls.find((b) => b.id === cmd.ballId)
+        if (bola === undefined) {
+          falha(`rodada ${iRod}: comando gravado para a bola ${cmd.ballId}, que não existe no mundo da sala`)
+          continue
+        }
+        const j = jogadorDoLado(r.lados, bola.team)
+        const ballIndex = w.balls.filter((b) => b.team === bola.team).indexOf(bola)
+        entrada.push(...pelaFronteira(c, CHAVES_SALA[j], { t: 'cast', ballIndex, slot: cmd.slot, dx: cmd.dx, dy: cmd.dy, mag: cmd.mag }))
+        if (bola.alive) esperados.push(cmd)
+        else mortos++
+      }
+      const nPend = r.pendentes.length
+      const env = conduzir(c, agora, entrada)
+      colher(env)
+      if (w.tick !== N) falha(`rodada ${iRod}: o passo de submissão avançou o mundo de ${N} para ${w.tick}`)
+      const carimbados = r.pendentes.slice(nPend)
+      if (!profundamenteIgual(carimbados, esperados)) {
+        falha(
+          `rodada ${iRod} tick ${N}: a sala carimbou ${JSON.stringify(carimbados)}, o arnês executou ${JSON.stringify(esperados)} ` +
+            '(AC 5: bola do lado do jogador nesta rodada; AC 6: tick = tickAtual + ATRASO_ALVO_TICKS)',
+        )
+      }
+      if (errosPara(env).length !== mortos) falha(`rodada ${iRod} tick ${N}: ${errosPara(env).length} erro(s) para ${mortos} cast(s) de bola morta`)
+      resumo.casts += esperados.length
+      resumo.castsMortos += mortos
+    }
+
+    // ---- avanço: até a próxima submissão, ou até o fim da rodada
+    const alvo = i < comandos.length ? comandos[i].tick - ATRASO_ALVO_TICKS : c.sala.config.tetoDeTicks
+    if (alvo <= N) {
+      falha(`rodada ${iRod}: próximo comando no tick ${comandos[i]?.tick} não pode ser submetido depois do tick ${N}`)
+      break
+    }
+    agora = agoraDoTick(r, alvo)
+    const env = conduzir(c, agora, [])
+    colher(env)
+    if (c.sala.rodada === r && w.tick !== alvo) falha(`rodada ${iRod}: agora do tick ${alvo} deixou o mundo no tick ${w.tick}`)
+    if (c.sala.rodada !== r) {
+      // AC 10 / AC 11 (d) — o snap final vem ANTES do rodadaFim nos envios do passo em que a rodada termina
+      const iSnap = env.map((e) => e.assento === K0 && e.msg.t === 'snap').lastIndexOf(true)
+      const iFim = env.findIndex((e) => e.assento === K0 && e.msg.t === 'rodadaFim')
+      if (iSnap < 0 || iFim < 0 || iSnap > iFim) falha(`rodada ${iRod}: snap final (índice ${iSnap}) não precede rodadaFim (índice ${iFim}) nos envios (AC 10)`)
+    }
+  }
+  if (i < comandos.length && comandos.slice(i).some((cmd) => cmd.tick < w.tick)) {
+    falha(`rodada ${iRod}: ${comandos.length - i} comando(s) gravado(s) não submetido(s)`)
+  }
+
+  // AC 11 (d) — o último snap tem over:true e roundEnd; os events de todos os snaps = world.events da rodada
+  const ultimo = snapsK0[snapsK0.length - 1]
+  if (ultimo === undefined || !ultimo.over || !ultimo.events.some((e) => e.t === 'roundEnd')) {
+    falha(`rodada ${iRod}: o último snap não tem over:true com roundEnd (flush de fim de rodada, AC 10/11 d)`)
+  }
+  const entregues = snapsK0.flatMap((s) => s.events)
+  const referencia = eventosDeReferencia(setupGravado, comandos)
+  if (JSON.stringify(entregues) !== JSON.stringify(referencia)) {
+    falha(`rodada ${iRod}: ${entregues.length} evento(s) nos snaps != ${referencia.length} em world.events (ou outra ordem) (AC 11 d)`)
+  }
+  for (const s of snapsK0.slice(0, -1)) {
+    if (tickDoSnap(s) % intervalo !== 0) {
+      falha(`rodada ${iRod}: snap no tick ${tickDoSnap(s)}, fora da cadência de ${intervalo} ticks (AC 10)`)
+      break
+    }
+  }
+  if (snapsK1 !== snapsK0.length) falha(`rodada ${iRod}: ${snapsK0.length} snap(s) para o assento 0 e ${snapsK1} para o 1`)
+  if (ultimo !== undefined && tickDoSnap(ultimo) % intervalo !== 0) resumo.foraDaCadencia++
+  resumo.snaps += snapsK0.length
+  resumo.eventos += entregues.length
+  return agora
+}
+
+/**
+ * `e4.3`, casos que a Bo5 não pode exercitar sem mudar a partida: numa sala descartável, a 20 Hz (a taxa da
+ * CONFIGURAÇÃO, não a constante — AC 10), assento vazio, sala cheia, cast fora da fase `rodada`, bola alheia
+ * (AC 5, pelo parser e por fora dele), a cadência de 20 Hz, e o mecanismo de R-02 (AC 13): W.O. na rodada e
+ * na loja, `anular`, e a desconexão no draft (§6).
+ */
+function salaNegativos(problemas: string[]): { linha: string; conf: ConferenciaDeEnvios[] } {
+  const falha = (m: string) => anotar(problemas, `  ✗ sala negativos: ${m}`)
+  const [K0, K1] = CHAVES_SALA
+  const cast = { t: 'cast', ballIndex: 0, slot: 'ability', dx: 1, dy: 0, mag: 1 }
+  const umErroPara = (env: Envio[], chave: string) => env.length === 1 && env[0].msg.t === 'erro' && env[0].assento === chave
+  const confs: ConferenciaDeEnvios[] = []
+  const nova = (rotulo: string, config: Partial<ConfigDaSala>) => {
+    const c = novoCondutor(criarSala({ id: `guarda-e4.3-${rotulo}`, seed: 777, pool: POOL_SALA, chars: CHARS, hashDoMundo: hash, config }), rotulo, problemas)
+    confs.push(c.conf)
+    return c
+  }
+  /** assenta os dois e leva a partida até a rodada 0, com decisões pelo parser; devolve o `agora` */
+  const ateARodada = (c: Condutor, agora: number): number => {
+    conduzir(c, agora, [{ assento: K0, conexao: 'assentou' }])
+    conduzir(c, agora, [{ assento: K1, conexao: 'assentou' }])
+    const roteiro: Decisao[] = [
+      { t: 'draft', jogador: 0, charId: 'golem' },
+      { t: 'draft', jogador: 1, charId: 'golem' },
+      { t: 'draft', jogador: 1, charId: 'vex' },
+      { t: 'draft', jogador: 0, charId: 'vex' },
+      { t: 'pronto', jogador: 0 },
+      { t: 'pronto', jogador: 1 },
+    ]
+    for (const d of roteiro) conduzir(c, agora, pelaFronteira(c, CHAVES_SALA[d.jogador], { t: 'decisao', d }))
+    if (c.sala.rodada === null) falha(`o roteiro mínimo não abriu a rodada 0 em '${c.rotulo}'`)
+    return agora
+  }
+
+  // ---- 20 Hz: assento vazio, sala cheia, fase errada, bola alheia, cadência, W.O.
+  const c = nova('20hz', { snapshotHz: 20 })
+  let agora = T0_SALA
+  if (!umErroPara(conduzir(c, agora, pelaFronteira(c, 'intruso', cast)), 'intruso')) falha("cast de conexão sem assento não virou {t:'erro'} só a ela (AC 6)")
+  conduzir(c, agora, [{ assento: K0, conexao: 'assentou' }])
+  const cedo = pelaFronteira(c, K0, { t: 'decisao', d: { t: 'draft', jogador: 0, charId: 'golem' } })
+  if (!umErroPara(conduzir(c, agora, cedo), K0)) falha("decisão com a sala 'aguardando' não virou {t:'erro'}")
+  conduzir(c, agora, [{ assento: K1, conexao: 'assentou' }])
+  const assentosAntes = c.sala.assentos.join(',')
+  if (!umErroPara(conduzir(c, agora, [{ assento: 'terceiro', conexao: 'assentou' }]), 'terceiro') || c.sala.assentos.join(',') !== assentosAntes) {
+    falha("terceira conexão numa sala cheia não foi recusada com {t:'erro'} (e4.4/AC 7)")
+  }
+  const partidaNoDraft = c.sala.partida
+  if (!umErroPara(conduzir(c, agora, pelaFronteira(c, K0, cast)), K0) || c.sala.partida !== partidaNoDraft) falha("cast fora da fase rodada não virou {t:'erro'} com estado intacto (AC 6)")
+  agora = ateARodada(c, agora)
+  const r = c.sala.rodada
+  let resumo20 = ''
+  let resumoWo = ''
+  if (r !== null) {
+    const w = r.world
+    // AC 5 — bola alheia: o assento 1 contrabandeia o ballId de uma bola do time 0 (e um tick); o parser os
+    // descarta e a sala resolve ballIndex 0 pelo lado do JOGADOR 1 nesta rodada
+    const alheia = w.balls.find((b) => b.team !== r.lados[1])
+    const propria = w.balls.filter((b) => b.team === r.lados[1])[0]
+    const nPend = r.pendentes.length
+    conduzir(c, agora, pelaFronteira(c, K1, { ...cast, ballId: alheia?.id, tick: 1 }))
+    const carimbado = r.pendentes[nPend]
+    if (carimbado === undefined || carimbado.ballId !== propria.id || carimbado.tick !== w.tick + ATRASO_ALVO_TICKS) {
+      falha(`cast do assento 1 com ballId alheio virou ${JSON.stringify(carimbado)} — esperado a bola ${propria.id} no tick ${w.tick + ATRASO_ALVO_TICKS} (AC 5/6)`)
+    }
+    // por fora do parser: um índice que alcançaria a lista inteira do mundo
+    const nPend2 = r.pendentes.length
+    const fora: EntradaDaSala = { assento: K1, msg: { t: 'cast', ballIndex: 2 as unknown as 0, slot: 'ability', dx: 1, dy: 0, mag: 1 } }
+    if (!umErroPara(conduzir(c, agora, [fora]), K1) || r.pendentes.length !== nPend2) falha("ballIndex 2 (por fora do parser) não foi recusado com {t:'erro'} só ao remetente (AC 5)")
+    // AC 10 — cadência da CONFIGURAÇÃO: 30 ticks a 20 Hz são 10 snaps, a cada 3 ticks, seq 0..9
+    const env = conduzir(c, agoraDoTick(r, 30), [])
+    const snaps = env.filter((e) => e.assento === K0 && e.msg.t === 'snap').map((e) => (e.msg.t === 'snap' ? e.msg : null))
+    const ticks = snaps.map((m) => (m === null ? -1 : tickDoSnap(m.s)))
+    const seqs = snaps.map((m) => (m === null ? -1 : m.seq))
+    const ticksOk = ticks.join(',') === '3,6,9,12,15,18,21,24,27,30' && seqs.join(',') === '0,1,2,3,4,5,6,7,8,9'
+    if (!ticksOk) falha(`a 20 Hz a sala emitiu snaps nos ticks [${ticks.join(',')}] com seq [${seqs.join(',')}], esperado a cada 3 ticks (AC 10)`)
+    resumo20 = ticksOk ? '20 Hz: 10 snaps a cada 3 ticks' : '20 Hz ✗'
+
+    // AC 13 — R-02 default: queda → pausa; 1 ms antes do prazo nada; no prazo, W.O. da rodada ao presente
+    agora = agoraDoTick(r, 30)
+    conduzir(c, agora, [{ assento: K1, conexao: 'caiu' }])
+    const prazoMs = c.sala.config.desconexao.prazoMs
+    const antesWo = conduzir(c, agora + prazoMs - 1, [])
+    if (antesWo.length !== 0 || w.tick !== 30) falha(`antes do prazo de R-02 a sala emitiu ${antesWo.length} envio(s) / andou o mundo (tick ${w.tick})`)
+    agora += prazoMs
+    const wo = conduzir(c, agora, [])
+    const tipos = wo.map((e) => `${e.assento === K0 ? 0 : 1}:${e.msg.t}`).join(',')
+    const hist = c.sala.partida.historico[0]
+    const woOk =
+      tipos === '0:snap,0:rodadaFim,0:visao' && hist !== undefined && hist.vencedor === 0 && c.sala.partida.fase === 'loja' && c.sala.pausa?.desde === agora
+    if (!woOk) {
+      falha(`W.O. de R-02 na rodada: envios [${tipos}], vencedor ${hist?.vencedor}, fase ${c.sala.partida.fase}, nova pausa ${c.sala.pausa?.desde} (AC 13)`)
+    }
+    // na loja: o presente declara pronto; no estouro seguinte, o ausente recebe {t:'pronto'} e a rodada 1 abre, pausada
+    conduzir(c, agora, pelaFronteira(c, K0, { t: 'decisao', d: { t: 'pronto', jogador: 0 } }))
+    agora += prazoMs
+    conduzir(c, agora, [])
+    const ultimaDec = c.sala.decisoes[c.sala.decisoes.length - 1]
+    const lojaOk = ultimaDec?.t === 'pronto' && ultimaDec.jogador === 1 && c.sala.rodada !== null && c.sala.rodada.world.tick === 0 && c.sala.pausa !== null
+    if (!lojaOk) falha(`W.O. de R-02 na loja: última decisão ${JSON.stringify(ultimaDec)}, rodada ${c.sala.rodada !== null}, pausa ${c.sala.pausa !== null} (AC 13)`)
+    resumoWo = woOk && lojaOk ? 'R-02 W.O.: rodada → vitória do presente, loja → pronto do ausente' : 'R-02 W.O. ✗'
+  }
+
+  // ---- R-02 'anular' (prazo 0): a sala encerra, e o presente recebe o {t:'sala'} encerrada
+  const a = nova('anular', { desconexao: { prazoMs: 0, noEstouro: 'anular' } })
+  let agoraA = ateARodada(a, T0_SALA)
+  agoraA += 17
+  const envA = conduzir(a, agoraA, [{ assento: K0, conexao: 'caiu' }])
+  const anularOk = a.sala.fase === 'encerrada' && envA.length === 1 && envA[0].assento === K1 && envA[0].msg.t === 'sala' && envA[0].msg.estado === 'encerrada'
+  if (!anularOk) falha(`R-02 'anular': sala '${a.sala.fase}', envios ${JSON.stringify(envA.map((e) => [e.assento, e.msg.t]))} (AC 13)`)
+
+  // ---- §6: desconexão no draft devolve a sala a 'aguardando', libera o assento e recria a partida
+  const d6 = nova('draft', {})
+  conduzir(d6, T0_SALA, [{ assento: K0, conexao: 'assentou' }])
+  conduzir(d6, T0_SALA, [{ assento: K1, conexao: 'assentou' }])
+  conduzir(d6, T0_SALA, pelaFronteira(d6, K0, { t: 'decisao', d: { t: 'draft', jogador: 0, charId: 'golem' } }))
+  conduzir(d6, T0_SALA, [{ assento: K1, conexao: 'caiu' }])
+  const d6Ok = d6.sala.fase === 'aguardando' && d6.sala.assentos[1] === null && d6.sala.partida.draft.passo === 0
+  conduzir(d6, T0_SALA, [{ assento: 'outra-pessoa', conexao: 'assentou' }])
+  if (!d6Ok || d6.sala.fase !== 'jogando' || d6.sala.assentos[1] !== 'outra-pessoa') {
+    falha(`desconexão no draft: sala '${d6.sala.fase}', assentos [${d6.sala.assentos.join(',')}] — esperado aguardando, assento livre e partida recriada (§6)`)
+  }
+
+  const linha =
+    `  negativos    ${problemas.length === 0 ? '✓' : '✗'} assento vazio, sala cheia, decisão com a sala aguardando e cast fora da rodada → {t:'erro'} · bola alheia: ` +
+    `ballId contrabandeado some no parser e a sala move a própria; ballIndex 2 recusado · ${resumo20} · ${resumoWo} · anular → encerrada · draft → aguardando (§6)`
+  return { linha, conf: confs }
+}
+
+function guardaSala(): { linhas: string[]; problemas: string[] } {
+  const problemas: string[] = []
+  const linhas: string[] = []
+  // tripwires: o teto de ticks da sala é o do arnês, e a taxa padrão é a constante (AC 10)
+  if (CONFIG_PADRAO_DA_SALA.tetoDeTicks !== MAX_ROUND_TICKS) {
+    problemas.push(`  ✗ sala: tetoDeTicks padrão ${CONFIG_PADRAO_DA_SALA.tetoDeTicks} != MAX_ROUND_TICKS ${MAX_ROUND_TICKS} de tools/harness.ts`)
+  }
+  if (CONFIG_PADRAO_DA_SALA.snapshotHz !== SNAPSHOT_HZ) {
+    problemas.push(`  ✗ sala: snapshotHz padrão ${CONFIG_PADRAO_DA_SALA.snapshotHz} != SNAPSHOT_HZ ${SNAPSHOT_HZ} (AC 10)`)
+  }
+  // a gravação usada não pode ter comando em tick < ATRASO_ALVO_TICKS: seed com algum é PULADA, nunca clampada
+  let gravada: PartidaGravada | null = null
+  const puladas: string[] = []
+  for (const seed of SEEDS_SALA) {
+    const g = jogarPartida(seed)
+    const cedo = g.rodadas.flatMap((r) => r.comandos).filter((cmd) => cmd.tick < ATRASO_ALVO_TICKS).length
+    if (cedo === 0) {
+      gravada = g
+      break
+    }
+    puladas.push(`${seed} (${cedo} comando(s) com tick < ${ATRASO_ALVO_TICKS})`)
+  }
+  if (gravada === null) {
+    problemas.push(`  ✗ sala: nenhuma das seeds ${SEEDS_SALA.join(', ')} tem gravação sem comando em tick < ${ATRASO_ALVO_TICKS} — escolher outra seed, nunca clampar (AC 11)`)
+    return { linhas: [`sala pura      ✗ sem gravação utilizável`], problemas }
+  }
+  const b = bo5PelaSala(gravada, problemas)
+  const nProblemasBo5 = problemas.length
+  const neg = salaNegativos(problemas)
+  const confs = [b.conf, ...neg.conf]
+  const soma = (k: keyof ConferenciaDeEnvios) => confs.reduce((s, x) => s + x[k], 0)
+  const ok = (n: number) => (problemas.length === 0 && n === 0 ? '✓' : '✗')
+  linhas.push(
+    `sala pura      ${problemas.length === 0 ? '✓ ok' : '✗ falhou'} — net/sala.ts: a Bo5 inteira por passo() reproduz tools/partida.ts; a sala não acrescenta regra de jogo (e4.3)`,
+    `  bo5          ${ok(nProblemasBo5)} matchSeed ${b.seed}${puladas.length ? ` (puladas: ${puladas.join('; ')})` : ''} · ${b.rodadas} rodada(s) · placar ${b.placar} · venc/rodada [${b.vencedores}] · ` +
+      `hash/ticks/lado iguais ao arnês em ${b.hashesIguais}/${b.rodadas} · ${b.casts} cast(s) submetidos em T−${ATRASO_ALVO_TICKS} e carimbados em T (0 com tick < ${ATRASO_ALVO_TICKS}) · ` +
+      `${b.rejeitadas} decisão(ões) ilegal(is) → {t:'erro'} ao remetente, estado intacto · buildPadrao pelo prazo de RF-04 · controle [humano,humano]`,
+    `  flush        ${ok(nProblemasBo5)} ${b.rodadas}/${b.rodadas} rodadas: último snap com over:true e roundEnd antes de rodadaFim · events de ${b.snaps} snaps = world.events (${b.eventos} eventos, em ordem) · ` +
+      `${b.foraDaCadencia} rodada(s) terminam fora da cadência de ${TICK_HZ / SNAPSHOT_HZ} ticks`,
+    `  assentos     ${ok(nProblemasBo5)} ${soma('salas')} {t:'sala'} por assento, cada um com o segredo e o jogador do próprio destinatário, v${VERSAO_DO_FIO} e o snapshotHz da configuração · ` +
+      `primeiro envio em ${soma('assentamentos')} assentamento(s), com reassentamento no meio da rodada · ${soma('visoes')} {t:'visao'} = visaoPara(estado, jogador do assento)`,
+    `  autoridade   ${ok(nProblemasBo5)} decisão com d.jogador alheio recusada só ao remetente, estado intacto (AC 16) · cast de bola morta descartado · ${soma('pelaFronteira')} mensagens pela fronteira ` +
+      '(parseDoCliente(JSON.parse(JSON.stringify(msg))), AC 16)',
+    neg.linha,
+  )
+  return { linhas, problemas }
+}
+
+const { linhas: linhasSala, problemas: problemasSala } = guardaSala()
+
 // ---------------------------------------------- Pilar 3 (debt.6) — Camada 1: estática
 
 /**
@@ -1463,6 +2112,9 @@ console.log(
 if (violacoesPilar3.length) for (const v of violacoesPilar3) console.log(v)
 console.log('')
 for (const linha of linhasTelemetria) console.log(linha)
+console.log('')
+for (const linha of linhasSala) console.log(linha)
+if (problemasSala.length) for (const p of problemasSala) console.log(p)
 
 if (divergentes > 0) throw new Error('simulação não é determinística')
 if (desvios.length > 0) {
@@ -1554,5 +2206,14 @@ if (problemasTelemetria.length > 0) {
       'Suspeitos: registrar() sem carimbo por evento (M1) ou carimbo aplicado em exportar() (M1b) em ' +
       'client/telemetria.ts; ausente lido como atraso 0 / escala 1.0 (M2) ou agregar() sem partição por ' +
       'população (M3) em tools/telemetria.ts; global da guarda não restaurado pelo descritor original (R3).',
+  )
+}
+if (problemasSala.length > 0) {
+  throw new Error(
+    `guarda da sala pura (e4.3) falhou em ${problemasSala.length} ponto(s) — ver acima. A Bo5 conduzida por passo() tem de ` +
+      'reproduzir tools/partida.ts. Suspeitos: carimbo fora de tickAtual + ATRASO_ALVO_TICKS (AC 6); ballIndex resolvido por ' +
+      'team === jogador em vez de ladosDaRodada (AC 5); snap final ausente ou depois de rodadaFim (AC 10); cadência lendo a ' +
+      "constante em vez de config.snapshotHz (AC 10); {t:'sala'} ou {t:'visao'} em broadcast, com segredo ou jogador de outro " +
+      'assento (AC 8, AC 11 e); decisão com d.jogador alheio aceita (AC 16); registrarRodada com o controle default (AC 12).',
   )
 }
