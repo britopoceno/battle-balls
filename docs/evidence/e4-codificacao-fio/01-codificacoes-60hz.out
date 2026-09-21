@@ -1,0 +1,14 @@
+cadência 60 Hz (SNAPSHOT_HZ do protocolo = 30) · quadros: 23166 (por seed 4773/4699/4363/4082/5249), ticks/quadro 1
+A keyed JSON como produzido (e4.2)               cru média   897.7 · pico  1579 | deflate isolado média   402.8 · pico   656 | deflate c/ contexto média    74.3 · pico   259
+B keyed JSON, quantização segura                 cru média   842.5 · pico  1427 | deflate isolado média   386.5 · pico   594 | deflate c/ contexto média    74.7 · pico   269
+C tupla, valores crus                            cru média   401.6 · pico   798 | deflate isolado média   216.1 · pico   430 | deflate c/ contexto média    79.3 · pico   225
+D tupla, quantização segura, events literais     cru média   318.8 · pico   685 | deflate isolado média   193.4 · pico   381 | deflate c/ contexto média    69.2 · pico   203
+E tupla, quantização segura, events em tupla     cru média   313.9 · pico   600 | deflate isolado média   189.8 · pico   331 | deflate c/ contexto média    67.5 · pico   184
+events (keyed, parte de A/B/D): média     9.6 · pico   378
+prontidão (bola×quadro = 92664): seguro vira 0 · ingênuo (round 0,01) vira 0 (habilidade 0, ult 0)
+ult a menos de 0,005 do limiar sem estar cheia: 0 bola×quadro
+habilidade a menos de 0,005 ms de pronta: 0
+amostra keyed bola: {"id":1,"x":57.41,"y":229.7,"facing":1.845,"hp":1092,"alive":true,"ultCharge":48,"abilityReadyAt":11550,"effects":[]}
+amostra tupla D: [6683.33,0,-1,960,540,0,[[1,57.41,229.7,1.845,1092,1,48,4866.67,[]],[2,759.88,350.93,-1.289,558,1,60,0,[]],[3,873.36,450.04,-2.928,1092,1,48,5066.67,[]],[4,15,334.26,2.576,558,1,60,0,[]]],[[25,775.81,369.1,343.39,320.91,5,"#b98cff"],[26,23.83,313.13,181.83,-433.4,5,"#b98cff"]],[],[]]
+amostra keyed B (1 bola): {"id":1,"x":57.41,"y":229.7,"facing":1.845,"hp":1092,"alive":true,"ultCharge":48,"abilityReadyAt":11550,"effects":[]}
+EFF { slow: 0 }

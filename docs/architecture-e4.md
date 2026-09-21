@@ -11,6 +11,9 @@
 > `docs/architecture-e2.md` (arnês) e `docs/architecture-e3.md` (partida).
 > Todos os números da §1 foram medidos nesta sessão, com o código atual, sem modificá-lo.
 > Scripts, saídas brutas e instruções de reprodução em `docs/evidence/e4-determinismo-engines/`.
+> **Revisões:** 2026-09-21 (`e4.1` — §4.1) · 2026-09-21 (`e4.2` — §1.2, §2.2, §5.1, §5.2, **§5.5
+> codificação do fio, decidida**, §5.6, §9, §11.6, §12/R-05, Anexos A e B). Evidência da revisão de
+> `e4.2` em `docs/evidence/e4-codificacao-fio/`.
 
 ---
 
@@ -25,7 +28,8 @@
 | RF-41 / P4.3 / D-08 — replay = seed + linha do tempo | §7 | Fechado, **com uma ressalva medida**: bit-exato só vale dentro da mesma engine (§1.5) |
 | RF-42 / P4.2 — anti-cheat | §8 | Fechado pela via mais barata: em rede o cliente **não simula**. Não há o que validar |
 | Segredo da build (§13.6 de E3 — "convenção reforçada por tipo") | §8.2 | **Fecha aqui.** `visaoPara` deixa de ser convenção e vira fato de fio |
-| Onde a rede mora, sem tocar em `sim/` | §2 | Camada `net/` + entrada `server/`. `sim/`, `match/`, `shop/` e `render.ts` **intactos** |
+| Onde a rede mora, sem tocar em `sim/` | §2 | Camada `net/` + entrada `server/`. `sim/`, `match/` e `shop/` **intactos**; `render.ts` muda **só em anotações de tipo** (emenda de 2026-09-21, §5.1) |
+| Codificação do fio | §5.5 | **Decidida em 2026-09-21** (`e4.2`): o `{t:'snap'}` vai como tupla posicional em JSON, com quantização que preserva prontidão; o resto do protocolo fica JSON com nomes; deflate é lever, não premissa |
 | O relógio de parede de RF-04, que hoje é do cliente | §3.4 | **Muda de dono**: vai para o servidor. Sem isso, um jogador estagna a partida de graça |
 | Determinismo entre Node e Chrome | §1.5 | **Medido pela primeira vez no projeto.** Diverge em bits, converge no hash quantizado — e o porquê disso não ser garantia está na §11.1 |
 | Custo real de banda e CPU | §1.2 a §1.4 | Medido. Banda e CPU **não são o problema desta fase** por três ordens de grandeza |
@@ -105,6 +109,30 @@ mundo**, e a diferença entre as duas linhas é fator **19×**.
 
 **Leitura:** banda não é restrição desta fase. Mesmo a 60 Hz sem compressão, 126 kbit/s cabe em
 qualquer 3G. A escolha de taxa (§5.2) é sobre *latência de interpolação* e *bateria*, não sobre bytes.
+
+> **Atualização (2026-09-21, `e4.2`) — o que estes números mediram, e o que não mediram.** A linha
+> "snapshot de render" foi medida sobre uma forma **compacta que eu escrevi no script de evidência**
+> (`snapshotRender`, `docs/evidence/e4-determinismo-engines/01-banda-cpu-duracao.mjs:81`): chaves de uma
+> letra, tuplas posicionais, só os eventos `hit` do tick, e arredondamento agressivo —
+> `Math.round(time)`, `Math.round(abilityReadyAt)`, `ultCharge` a 0,1. Três consequências, todas
+> tratadas na §5.5:
+>
+> 1. **O limiar de ~600 B do AC 9 de `e4.2` foi calibrado nessa codificação.** O snapshot real, em JSON
+>    com nomes de campo, custa **904 B/quadro** a 30 Hz (879 B sem o envelope `{t,s,seq}`), e **nada da
+>    classe 3 vazou** — o detector de chaves de `e4.2` confirma. O custo é nome repetido e dígito de
+>    float, não campo indevido. `e4.2` seguiu o AC ao pé da letra: investigou, não ajustou o orçamento, e
+>    devolveu a decisão. Ela está na §5.5.
+> 2. **Aquele arredondamento de `abilityReadyAt` e `ultCharge` é justamente o que pode acender PRONTO
+>    antes da hora.** Foi atalho de medição, nunca especificação; a §5.5 o substitui por regras que
+>    preservam a prontidão por construção.
+> 3. **A coluna "comprimido" subestimou por ~2×.** Os 34 B/tick com contexto valem para a forma
+>    reduzida a 60 Hz. Com a forma real, medido: **69 B/tick a 60 Hz e 75 B/quadro a 30 Hz** — e a
+>    conta de 30 Hz da tabela (8,2 kbit/s) multiplicava a compressibilidade de 60 Hz, ignorando que
+>    quadros a dois ticks de distância se repetem menos. O número de 30 Hz é **~18 kbit/s**, não 8,2.
+>
+> A **leitura** acima sobrevive para a codificação compacta (78 kbit/s a 30 Hz, sem compressão) e **não
+> sobrevive** para JSON com nomes sem compressão (217 kbit/s; ~11 MB numa Bo5 de cinco rodadas, em plano
+> de dados móvel). A tabela vigente está na §5.5.
 
 ### 1.3 Quanto custa mandar o input
 
@@ -282,10 +310,30 @@ shop/    catálogo de itens, agregação    → sim/ (só o TIPO BonusBlock)
 match/   draft, builds, Bo5, placar, economia, loja   → sim/, shop/
 bot/     comandos de combate, política de partida     → sim/, shop/, match/ (só tipos)
 net/     protocolo, snapshot, máquina da sala         → sim/, match/, shop/   ← NOVO
-tools/   arnês, CLI, sim:check           → sim/, chars/, bot/, match/, shop/
+tools/   arnês, CLI, sim:check           → sim/, chars/, bot/, match/, shop/, net/   ← net/ desde e4.2
 server/  entrada Node: WebSocket, roteamento, relógio → net/, match/, chars/, bot/  ← NOVO
 client/  render, input, telas, rede      → todos
 ```
+
+> **Atualização (2026-09-21, `e4.2`) — seta nova `tools/ → net/`.** `tools/determinism.ts` passou a
+> importar `net/protocolo.ts`, `net/snapshot.ts` e `net/projecao.ts` para hospedar a guarda de
+> ida-e-volta do fio (`e4.2`/AC 7 e AC 11). A seta é deliberada e coerente com a tabela: `tools/` já
+> ficava acima de todo módulo puro, e é o `sim:check` que prova `net/` sem subir servidor — o dividendo
+> que a própria §2.2 promete. `e4.3` a usa de novo (guardas da sala e do codec).
+>
+> **Sem ciclo — conferido no grafo de imports de arquivo, não só por leitura** (40 arquivos de `src/`,
+> busca em profundidade sobre `import`/`export ... from`). `net/` importa só `sim/types.ts`,
+> `match/types.ts` e a si mesmo; nenhum arquivo de `sim/`, `match/`, `shop/`, `chars/` ou `bot/`
+> importa `net/` ou `tools/`. Logo não existe caminho `net/ → … → tools/`, e a seta nova não fecha laço.
+> Os únicos ciclos de arquivo do projeto são internos a `sim/` e só de tipo (`types.ts ↔ effects.ts`,
+> `types.ts ↔ stats.ts`, ambos `import type`, apagados em runtime), anteriores a esta fase.
+>
+> **Achado da mesma auditoria, anterior a E4 e fora do escopo desta revisão:** existe uma seta
+> `tools/ → client/` que a tabela nunca declarou — `tools/telemetria.ts` (`e3.5`) importa
+> `client/input.ts` e `client/telemetria.ts`. Com `client/ → tools/` (`client/main.ts` importa `hash` de
+> `tools/harness.ts`), as duas **pastas** se apontam mutuamente, embora nenhum **arquivo** feche ciclo.
+> Não quebra nada hoje; registro para que ninguém cite esta tabela como prova de que `tools/` não
+> conhece `client/`. Se virar item, é dívida da Fase 3, não de E4.
 
 `net/` é **puro**: sem `ws`, sem DOM, sem `Date.now`, sem `Math.random`, sem I/O. Quem tem socket é
 `server/`; quem tem `WebSocket` do navegador é `client/rede.ts`. O motivo é o mesmo de sempre e
@@ -475,6 +523,20 @@ que o cliente pode passar a exibir, e daí a dois passos de alguém achar que o 
 forma a partir de (snapshot + estático da rodada + `CHARS` local). Nenhuma linha de `render.ts`
 entra nesta fase — e essa é a prova de que o corte da §2.2 está no lugar certo.
 
+> **Emenda (2026-09-21, `e4.2`) — o parágrafo acima estava errado por dez linhas, e o erro é de tipo, não
+> de comportamento.** `desenhar` e seus seis auxiliares anotavam `world: World`, e `World` completo inclui
+> `rng`, `phase`, `nextId` e os campos da classe 3 de cada bola — exatamente o que a tabela acima proíbe de
+> sair. Nenhuma projeção satisfaz esse tipo. O que entrou (`e4.2`/AC 6, `git diff --numstat` = `10 10`):
+> o import (`Ball, World` de `sim/types.ts` → `BolaVisivel, VisaoDoMundo` de `net/projecao.ts`),
+> `OpcoesRender.minhasBolas`, o `world` de `desenhar` e dos seis auxiliares, e o `b` de `desenharBola`.
+> **Só anotações de tipo; nenhuma linha de corpo.** O que o renderizador faz não mudou; o que ele
+> declara aceitar ficou mais estreito — o precedente é `WorldView = Omit<World,'rng'>` (`debt.7`), e o
+> modo local continua passando `World` sem cast, por satisfação estrutural.
+>
+> A frase certa, portanto: **o comportamento do renderizador não muda nesta fase; a assinatura estreita.**
+> E a prova do corte da §2.2 fica mais forte do que era, não mais fraca: com `VisaoDoMundo` no cabeçalho,
+> o `tsc` confere em toda chamada que o render não lê nada que o fio não traga.
+
 ### 5.2 A taxa é um lever, não um número deste documento
 
 Pela §1.2, a 30 Hz o custo é **8,2 kbit/s** comprimido. A escolha não é de banda; é entre:
@@ -490,6 +552,15 @@ final decidido no smoke de P4.4 em dois aparelhos.** 30 Hz porque paga metade do
 por 2,7 kbit/s — barato — e porque 60 Hz gasta o dobro de acordes de rádio num celular sem que a
 §1.1 (bolas lentas, 0,35 cast/s) sugira que alguém veja diferença. Mas ninguém aqui viu o jogo
 rodando em dois celulares, e este é exatamente o tipo de número que o projeto decide medindo.
+
+> **Atualização (2026-09-21, `e4.2`):** a linha "banda comprimida" da tabela acima herdou o erro da
+> §1.2 (forma reduzida, compressibilidade de 60 Hz escalada) e fica substituída pela tabela da §5.5.
+> Com a codificação decidida, a carga útil a 20 / 30 / 60 Hz é **53 / 78 / 153 kbit/s sem
+> compressão** e **13 / 18 / 33 kbit/s com deflate de contexto**, mais ~11 / 17 / 34 kbit/s de
+> transporte por mensagem (estimativa). A recomendação de 30 Hz **não muda**. O que muda é o eixo de
+> 60 Hz: sem compressão ele custa ~187 kbit/s no fio, deixa de ser "irrelevante em banda" e passa dos
+> ~125 kbit/s que a própria §1.2 tomou como teto de 3G; o deflate vira o lever que o torna barato. Por isso `e4.7` decide `SNAPSHOT_HZ` **e** o deflate juntos
+> (§5.5).
 
 ### 5.3 Interpolação, e o que não se interpola
 
@@ -512,6 +583,203 @@ interpolam.
 Sim, mas só do **tipo** e do roster: `render.ts` lê `world.chars[b.charId]` para nome, ícone, cor e
 alcance. `CHARS` continua no bundle do cliente porque é conteúdo, não autoridade. O que sai do
 bundle conectado é a *chamada* a `step()`, não o módulo.
+
+### 5.5 Codificação do fio *(decisão, 2026-09-21, `e4.2`)*
+
+> **Decisão (2026-09-21, `e4.2`):** o `{t:'snap'}` atravessa o fio como **tupla posicional dentro de
+> JSON**, com a quantização da tabela abaixo, que **preserva a prontidão por construção**. Todas as
+> outras mensagens — `DoCliente` inteiro e as demais variantes de `DoServidor` — continuam **JSON com
+> nomes de campo**. O `permessage-deflate` é **lever**, desligado por padrão e decidido em `e4.7`; o
+> orçamento **não depende dele**. O tipo `Snapshot` de `net/protocolo.ts` **não muda**: a tupla é
+> codificação de fio, e fora do fio — sala, guardas, buffer do cliente, `projetar()` — só existe o
+> objeto com nomes.
+>
+> Das três saídas que `e4.2` devolveu: **(a) e (b) juntas, não (c).** O limiar de ~600 B do AC 9 de
+> `e4.2` **se refere à codificação compacta** — é fato sobre como a §1.2 mediu, não afrouxamento — e
+> `e4.3` adota essa codificação para o `snap`. Esta é escolha técnica com argumento numérico, e por isso
+> é minha, não item `R-NN`.
+
+**O que foi medido** (`docs/evidence/e4-codificacao-fio/`, código em `b1c0668`, as 5 rodadas da §1,
+11 585 quadros a 30 Hz com o flush do último tick, envelope `{t,s,seq}` incluído):
+
+| codificação do `{t:'snap'}` | cru, média · pico | deflate isolado | deflate com contexto |
+|---|---|---|---|
+| A — JSON com nomes, como `e4.2` produz | **904,0** · 1 579 B | 406,3 B | 82,0 B |
+| B — JSON com nomes, quantização segura | 849,0 · 1 438 B | 390,2 B | 82,0 B |
+| C — tupla, valores crus | 408,4 · 785 B | 220,8 B | 85,3 B |
+| **D — tupla, quantização segura, `events` literais (a decidida)** | **325,8** · 687 B | 198,3 B | **74,7 B** |
+| E — como D, com `events` também em tupla | 316,0 · 600 B | 191,3 B | 71,5 B |
+
+Parcela de `events` (JSON literal, em A, B e D): 17,1 B de média, 381 B de pico — o pico é morte
+súbita, não vazamento. A 60 Hz a linha D dá 318,8 B e 69,2 B com contexto; a 20 Hz, 331,7 B e 79,3 B.
+
+Banda por cliente, **carga útil**, e custo de uma rodada de 77,2 s (§1.1) a 30 Hz:
+
+| | 20 Hz | 30 Hz | 60 Hz | uma rodada a 30 Hz, com transporte |
+|---|---|---|---|---|
+| A — JSON com nomes, sem compressão | 145 kbit/s | **217 kbit/s** | 431 kbit/s | ~2,3 MB |
+| **D — tupla, sem compressão** | 53 kbit/s | **78 kbit/s** | 153 kbit/s | **~0,9 MB** |
+| A com deflate de contexto | 14 kbit/s | 20 kbit/s | 36 kbit/s | ~0,35 MB |
+| D com deflate de contexto | 13 kbit/s | 18 kbit/s | 33 kbit/s | ~0,34 MB |
+| transporte por mensagem (**estimado**, ~70 B: WS 2-4 + TLS ~22 + TCP/IPv4 40) | 11 kbit/s | 17 kbit/s | 34 kbit/s | — |
+
+**Por que não (c) — JSON com nomes mais `permessage-deflate`.** A linha "A com deflate" é a melhor da
+tabela em depuração e quase empata em bytes: o compressor apaga os nomes repetidos. O problema não é o
+número; é **de quem o número depende**:
+
+1. **Faz do orçamento uma propriedade da configuração de uma biblioteca que ainda não foi ratificada**
+   (R-05). No `ws`, o `permessage-deflate` vem **desligado por padrão no servidor**; com outra biblioteca
+   a pergunta recomeça. E a negociação é por conexão: se ela terminar sem a extensão — servidor com a
+   opção desligada, biblioteca trocada, proxy corporativo que intercepta TLS —, o fio cai para **217
+   kbit/s em silêncio**, sem erro e sem log, 2,8× o da tupla.
+2. **Tira o orçamento do `sim:check`.** O tamanho da tupla é função pura de `net/`, e a guarda o mede
+   deterministicamente a cada execução. O tamanho comprimido depende do zlib da plataforma e da
+   negociação, e só aparece com socket de pé — a parte que esta fase não consegue testar headless.
+3. **Custa memória por conexão, que é o limite real do servidor** (§1.4). Com *context takeover*, cada
+   conexão retém o estado do deflate — pela fórmula documentada do zlib, ~256 KB com `windowBits 15`,
+   `memLevel 8`, mais ~40 KB de inflate. Irrelevante para duas conexões por sala; não é de graça.
+
+**Por que não só (a).** Ratificar que o limiar se refere à forma compacta sem adotar a forma compacta
+deixaria o fio real em 904 B/quadro — ~11 MB por Bo5 de cinco rodadas em plano móvel — e a §1.2 com um
+número que o código não entrega. (a) é a correção do instrumento; a decisão de fio é (b).
+
+**O custo de (b), e como fica contido:**
+
+- **Depuração.** Uma tupla é ilegível no devtools. Contenção: **só o `snap`** é posicional — `visao`,
+  `prazo`, `rodadaInicio`, `rodadaFim`, `erro`, `sala`, `ping` e todo `DoCliente` seguem com nomes; o
+  envelope do próprio `snap` continua `{"t":"snap","seq":n,"s":[…]}`, identificável por `t` e `seq`; os
+  `events` dentro dele seguem literais; e o decodificador é função pura exportada de `net/`, chamável do
+  console. O parser de entrada (`parseDoCliente`, `e4.3`/AC 16) **não muda** — `DoCliente` não é
+  posicional, e o `parseDoCliente(JSON.parse(JSON.stringify(msg)))` da guarda de `e4.3` segue valendo.
+- **Continua JSON.** Texto, `JSON.parse` dos dois lados, nenhuma dependência nova, nenhum formato
+  binário. O ganho de E (eventos em tupla) sobre D é ~10 B/quadro e não paga a legibilidade perdida.
+- **Um arquivo a mais de responsabilidade**, e ele já existe: `net/codec.ts`, criado por `e4.3` para o
+  parser. Serializador e parser do fio moram juntos, puros, sob `sim:check`.
+- **Descompasso de versão** entre cliente e servidor — §11.6.
+
+**Tabela de quantização do fio.** É **precisão de exibição**, na mesma linha de `EPS_POSICAO_PX` de
+`e4.2`, e não tem relação nenhuma com o `toFixed(4)` do `hash()` (§11.1). Passo `q = 0,01`:
+
+| campo | regra no fio | por quê |
+|---|---|---|
+| `x`, `y` (bolas, projéteis, zonas), `facing`, `angle` | repassados — `net/snapshot.ts` já os quantiza (0,01 px / 0,001 rad) | quantizar de novo é idempotente, mas é trabalho à toa |
+| `time`, `hp`, `arena.pad`, `vx`, `vy`, `radius`, `halfLen`, `pull` | arredondados a `q` | nenhum predicado de exibição depende deles no limiar; `hp` muda no máximo a cor do arco por um quadro em `frac = 0,5`/`0,25` exatos |
+| **`ultCharge`** | **piso** a `q` | nunca arredonda para cima; com `ultThreshold` múltiplo de `q`, `u' ≥ thr ⇔ u ≥ thr` |
+| **`abilityReadyAt`** | **não vai absoluto**: vai `max(0, teto_q(abilityReadyAt − time))`, e o decodificador devolve `time' + restante` | `time' ≥ time' + r' ⇔ r' ≤ 0 ⇔ time ≥ abilityReadyAt`, **para qualquer `time'`** — a prontidão não depende de `time` ser exato |
+| `over`, `alive` | `0`/`1` | — |
+| `id`, `winner`, `kind`, `color`, `ownerColor`, `effects[].kind` | literais | — |
+| `events` | `SimEvent` literais, sem arredondar | é o que mais se depura, e `amount` vira número flutuante na tela |
+
+**O que "não virar a prontidão" exige do teste — e por que a rodada real não basta.** Medido: em 46 340
+amostras bola×quadro das 5 rodadas, **o arredondamento ingênuo também vira 0 vezes** — nenhuma amostra
+caiu a menos de 0,005 do limiar. Um teste que só conferisse a rodada real passaria com a implementação
+errada. Em 2 × 10⁶ casos sintéticos na fronteira, a regra da tabela vira 0 vezes; o arredondamento
+ingênuo vira 654 971 vezes na habilidade e 2 171 710 na ult; e o piso vira em **100%** dos casos quando
+o limiar não é múltiplo de `q` (`110.005`). Hoje os limiares são 110 e 130. Por isso a guarda de `e4.3`
+(delta abaixo) tem três partes: a rodada real, os casos sintéticos com um codec ingênuo que **tem de
+falhar**, e uma tripwire no roster.
+
+**Orçamento, e o que ele passa a significar.** Na codificação posicional um campo da classe 3 **não tem
+como vazar pelo codec**: ele copia por posição, de campos tipados. O detector de vazamento continua
+sendo o de chaves, sobre o `Snapshot` com nomes (guarda de `e4.2`), e o limiar de bytes deixa de ser
+detector de vazamento para virar **alarme de regressão do codec**: **média ≤ 450 B/quadro** do
+`{t:'snap'}` codificado, na cadência de `SNAPSHOT_HZ` com o flush final. O número não é arbitrário: a
+30 Hz, 450 B dão 108 kbit/s de carga útil, que com ~17 kbit/s de transporte ficam em ~125 kbit/s — os
+126 kbit/s que a §1.2 declarou "cabe em qualquer 3G". Referência medida: 325,8 B de média, 687 B de
+pico. Pico não tem teto: ele é `events` na morte súbita, legítimo. O limite é **por quadro**, de
+propósito: é o que o codec controla, e não muda quando `SNAPSHOT_HZ` muda. Banda por taxa é outra
+pergunta — de `e4.7`, com a tabela acima.
+
+**`permessage-deflate`: lever, desligado por padrão.** `e4.4` configura a opção **explicitamente** —
+nunca pelo padrão da biblioteca, que pode mudar entre versões ou entre bibliotecas — com o valor
+inicial desligado numa constante nomeada de `server/`, e registra por conexão a extensão negociada.
+`e4.7` decide o valor junto com `SNAPSHOT_HZ`: a 30 Hz o deflate economiza ~60 kbit/s por cliente; a
+60 Hz, ~120 kbit/s, e é ele que traz 60 Hz de ~187 para ~67 kbit/s no fio, abaixo dos ~125 da §1.2. Seja qual for a biblioteca de R-05, a
+codificação desta seção não muda.
+
+**Deltas de AC para o @po aplicar** (o @architect não edita story; `e4.2` está em gate e **não muda**):
+
+- **`e4.2` — nenhum delta.** Para o gate: o AC 9 foi cumprido como escrito — mediu, investigou, não
+  ajustou, devolveu. O limiar se refere à codificação compacta (§1.2, atualização) e a decisão está
+  aqui.
+- **`e4.3`, AC 10 (acréscimo)** — *"A sala cria **um** `ProdutorDeSnapshot` por rodada, chama
+  `observar(world)` depois de **cada** `step` (inclusive os de um `passo()` que avance vários ticks) e
+  emite, além da cadência, **um `{t:'snap'}` no tick em que a rodada termina** (`world.over` ou o teto de
+  ticks), mesmo fora da cadência. Na lista de `envios` desse passo, o `snap` final vem **antes** de
+  `{t:'rodadaFim'}`. Ver `architecture-e4.md` §5.6."*
+- **`e4.3`, AC 11 (acréscimo à guarda)** — *"Em toda rodada da Bo5: o último `{t:'snap'}` tem `over:
+  true`, contém o evento `roundEnd` e precede `{t:'rodadaFim'}` nos envios; e a concatenação dos
+  `events` de todos os `snap` da rodada é idêntica, em ordem, à sequência de `world.events` que a rodada
+  produziu."* (Discrimina na rodada real: 4 das 5 rodadas da §1 terminam em tick ímpar — 4 773, 4 699,
+  4 363 e 5 249 —, fora da cadência de 30 Hz. Sem o flush, o `roundEnd` some em 4 de 5.)
+- **`e4.3`, AC 17 (novo) — o codec de saída.** *"`src/net/codec.ts` exporta também
+  `codificarDoServidor(msg: DoServidor): string` e `decodificarDoServidor(texto: string): DoServidor`,
+  puros e só com `import type`. Toda variante vai como JSON com nomes, **exceto** o `s` do `{t:'snap'}`,
+  que vai como tupla posicional com a quantização da tabela de `architecture-e4.md` §5.5; o envelope
+  `{t, seq}` continua com nomes e os `events` vão literais. O layout da tupla é declarado **num lugar
+  só** do arquivo, comentado posição a posição. O decodificador reconstrói o `Snapshot` de
+  `net/protocolo.ts` — nenhum tipo paralelo — e **lança** se a aridade de qualquer tupla divergir do
+  layout. Guarda no `sim:check`: (a) as 5 rodadas da §1, a cada quadro na cadência com flush,
+  `decodificar(codificar(m))` projetado bate o `World` com `x/y/facing/angle` idênticos ao snapshot,
+  demais números a ±0,005, `ultCharge` em `[u − 0,01, u]`, `abilityReadyAt` a ±0,015 quando não pronto,
+  e os dois predicados de prontidão (`time >= abilityReadyAt`, `ultCharge >= ultThreshold`)
+  **idênticos** aos do `World`; (b) casos sintéticos na fronteira — restante de +0,004, 0 e −0,004 ms;
+  `ultCharge` de `thr − 0,004` e `thr` — em que a regra da §5.5 preserva a prontidão e um **codec
+  ingênuo** (arredondamento simples a 0,01), reimplementado na guarda como contrafactual, **tem de
+  falhar**; (c) tripwire: todo `ult.threshold` do roster é múltiplo de 0,01; (d) toda variante que não é
+  `snap` volta idêntica (`decodificar(codificar(m))` profundamente igual a `m`); (e) orçamento: média
+  ≤ 450 B/quadro do `{t:'snap'}` codificado, com média, pico e parcela de `events` impressos."* —
+  Task 10 correspondente; `quality_gate_tools` ganha *"guarda nova: codec do fio (AC 17)"*. **AC 14, 15
+  e 16 não mudam** (`codec.ts` já está no escopo e continua só com `import type`; `DoCliente` não é
+  posicional). Se o @po cortar `e4.3` como a v1.2.0 prevê, parser e codec de saída vão **juntos** para a
+  story do codec: mesmo arquivo, nenhuma dependência da sala.
+- **`e4.4`, AC 15 (acréscimo)** — *"...e, na saída, todo `envio` é escrito como
+  `codificarDoServidor(envio.msg)`, na ordem em que `ResultadoDoPasso.envios` o devolveu. `server/` não
+  chama `JSON.stringify` sobre `DoServidor`."*
+- **`e4.4`, AC 16 (novo) — fim de rodada chega ao fio.** *"Os envios do `passo()` em que a rodada
+  termina — o `snap` final e o `rodadaFim` (`e4.3`/AC 10) — são escritos antes de qualquer
+  encerramento de sala, troca de fase ou parada do laço. Verificação no teste de duas abas: o número
+  flutuante do golpe que mata aparece nas duas antes da tela de fim de rodada."*
+- **`e4.4`, AC 17 (novo) — deflate como lever.** *"A opção de `permessage-deflate` da biblioteca é
+  configurada **explicitamente**, com o valor inicial **desligado** numa constante nomeada de
+  `server/main.ts`, com comentário apontando `architecture-e4.md` §5.5 e `e4.7`. A extensão negociada
+  é registrada por conexão. Se R-05 vier com outra biblioteca, o lever é o equivalente dela; a
+  codificação não muda."*
+- **`e4.5`, AC 3 (acréscimo)** — *"Toda mensagem recebida passa por `decodificarDoServidor(texto)`
+  (`net/codec.ts`); o cliente não faz `JSON.parse(...) as DoServidor`. O buffer guarda o `Snapshot`
+  decodificado, e é dele que `projetar()` e o AC 10 leem."*
+- **`e4.7`, AC 4 (acréscimo) e Dev Notes** — *"A varredura registra também, para cada taxa, o deflate
+  ligado e desligado (a constante de `e4.4`/AC 17), com a banda observada; a decisão de deflate sai
+  junto com a de `SNAPSHOT_HZ`."* No AC 4, "8,2 kbit/s comprimido a 30 Hz" passa a *"78 kbit/s sem
+  compressão e ~18 kbit/s com deflate, a 30 Hz (§5.5)"*; na armadilha 2 do Dev Notes, "5,5 a 16,4
+  kbit/s (§1.2)" passa a *"53 a 153 kbit/s sem compressão, 13 a 33 com deflate (§5.5)"* — e a frase
+  "a banda é irrelevante nesta faixa" ganha a ressalva *"exceto 60 Hz sem deflate, ~187 kbit/s no fio,
+  acima dos ~125 kbit/s de 3G da §1.2"*. AC 11 (escopo) ganha a constante de deflate em `src/server/main.ts`.
+- **`e4.6` — nenhum delta.** O replay grava decisões e comandos, não snapshots.
+
+### 5.6 O contrato do produtor: todo tick observado, e um snapshot no último *(2026-09-21, `e4.2`)*
+
+> **Obrigação do lado servidor do fio, registrada a partir da implementação de `e4.2`.** O
+> `ProdutorDeSnapshot` (`net/snapshot.ts`) acumula os `world.events` entre quadros e **lança exceção**
+> se um tick for pulado, observado duas vezes, ou fotografado sem ter sido observado. Isso é
+> deliberado — falha alto em vez de perder eventos em silêncio —, e tem uma consequência que o
+> consumidor precisa cumprir: **no tick em que a rodada termina, sai um último snapshot, esteja ou não
+> na cadência.** Sem ele, os eventos do tick final — o golpe que matou, o `death`, o `roundEnd` — ficam
+> no acúmulo e nunca chegam ao fio. O jogador veria a tela de fim de rodada sem ver o golpe que a
+> causou.
+
+A obrigação é do **lado servidor**, e se divide pelo corte da §2.3:
+
+| quem | o quê |
+|---|---|
+| `net/sala.ts` (`e4.3`) — dona da cadência (`e4.3`/AC 10) | um produtor por rodada; `observar` depois de **cada** `step`; o `snap` final no tick de término, **antes** do `rodadaFim` na lista de envios |
+| `server/main.ts` (`e4.4`) — dono do socket | escreve os envios **na ordem devolvida** e **antes** de encerrar sala, trocar fase ou parar o laço; não descarta o último passo de uma rodada |
+| `client/rede.ts` (`e4.5`) | aplica os `events` do `snap` final **na chegada** (§5.3), antes de trocar para a tela de fim de rodada |
+
+A guarda de `e4.2` já emula o flush (`tools/determinism.ts`, laço da guarda `fio snapshot`), e é por
+ela que o contrato está provado para o produtor. O que falta provar é que a **sala** o cumpre: é o
+acréscimo ao AC 11 de `e4.3` na §5.5, que discrimina na rodada real porque 4 das 5 rodadas medidas
+terminam fora da cadência.
 
 ---
 
@@ -618,6 +886,10 @@ Na mesma forma da §11.2 de E3:
   `EventoPartida` passa a chegar pelo fio em vez de sair do redutor local, e o coletor não sabe a
   diferença.
 - `render.ts`, `telas.ts`, `input.ts`, `layout.ts`: **intactos**.
+  *(Emenda de 2026-09-21: `render.ts` muda em `e4.2` **só em anotações de tipo**, 10 linhas, nenhuma de
+  corpo — §5.1. Os outros três seguem intactos.)*
+- *(2026-09-21)* `client/rede.ts` recebe texto e o entrega a `decodificarDoServidor` (`net/codec.ts`,
+  §5.5); o resto do cliente só vê o `Snapshot` com nomes.
 
 ---
 
@@ -706,6 +978,21 @@ fosse.
 e ainda assim é superfície nova (segurança, atualização, tamanho). Registrado para ser decisão
 consciente, não consequência.
 
+### 11.6 Formato posicional e descompasso de versão *(2026-09-21, `e4.2`)*
+
+O preço estrutural da §5.5. JSON com nomes degrada com elegância quando cliente e servidor discordam:
+um campo novo é ignorado, um campo ausente vira `undefined`. **Uma tupla não**: se a ordem das posições
+mudar e a aridade continuar a mesma — trocar `hp` com `ultCharge`, por exemplo —, o cliente antigo
+decodifica lixo com cara de dado, sem erro. O cenário concreto é uma aba aberta durante um deploy.
+
+O que a §5.5 já cobre: o decodificador **lança** em aridade divergente, então acrescentar ou remover
+campo falha alto; e o layout mora num lugar só, comentado posição a posição. O que **não** cobre:
+reordenar campos de mesmo tipo. Hoje isso é teórico — não há deploy, e P4.4 é manual em duas abas ou
+dois aparelhos do mesmo build. Mitigação quando houver deploy de verdade: número de versão do formato
+no `{t:'sala'}` (é mudança de protocolo, portanto `net/protocolo.ts`, ato deliberado). **Não entra
+agora**: seria abrir o vocabulário de `e4.0` por um risco que esta fase não tem como materializar.
+Regra até lá: **mudar o layout da tupla é mudança de protocolo**, revisada como tal, nunca refatoração.
+
 ---
 
 ## 12. Ressalvas e o que este documento devolve ao @pm / usuário
@@ -751,6 +1038,11 @@ novo é uma fonte a mais.
 
 `ws` (§10). Óbvia, madura, e ainda assim a primeira. Registrada para ser ratificada, não assumida.
 
+> **Nota (2026-09-21, `e4.2`):** a decisão de codificação da §5.5 tira do R-05 um peso que ele não
+> precisava carregar. O orçamento de banda **não depende** da biblioteca escolhida nem da configuração
+> de compressão dela: sem deflate, o fio já cabe (78 kbit/s a 30 Hz). Ratificar, vetar ou trocar de
+> biblioteca muda o lever de deflate de `e4.4`/`e4.7`, não o formato.
+
 ### R-06 — A morte súbita virou caminho comum, e ninguém decidiu isso *(informativa, herda R-05 de E3)*
 
 `architecture-e3.md` §14/R-05 registrou o Risco #6 como *"morte súbita segue em 0% mesmo no alvo de
@@ -765,9 +1057,10 @@ reler R-05 com o número novo. **Não reabre D-05.**
 
 | Arquivo | Estado | Papel |
 |---|---|---|
-| `src/net/protocolo.ts` | **novo** | Tipos de mensagem, codec, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro |
-| `src/net/snapshot.ts` | **novo** | `World → Snapshot`. Puro. Só campos da §5.1 |
-| `src/net/projecao.ts` | **novo** | `Snapshot + estático → a forma que `render.ts` já aceita`. Puro |
+| `src/net/protocolo.ts` | **novo** (`e4.0`) | Tipos de mensagem, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro. *(O "codec" que esta linha citava foi para `codec.ts`.)* |
+| `src/net/codec.ts` | **novo** (`e4.3`) | `parseDoCliente` (entrada, `e4.3`/AC 16) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro, só `import type` |
+| `src/net/snapshot.ts` | **novo** (`e4.2`) | `World → EstaticoDaRodada`, `ProdutorDeSnapshot` (acumula eventos; contrato da §5.6). Puro. Só campos da §5.1 |
+| `src/net/projecao.ts` | **novo** (`e4.2`) | `Snapshot + estático + CHARS → VisaoDoMundo`, a forma que `render.ts` passou a declarar. Puro |
 | `src/net/sala.ts` | **novo** | Máquina de estados da sala. Pura, relógio injetado (§3.2) |
 | `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento |
 | `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação |
@@ -776,8 +1069,14 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | `src/sim/**` | **intacto** | Nem um campo, nem um import (§2.2) |
 | `src/match/**` | **intacto** | Muda quem chama, não o que é (§3.3) |
 | `src/shop/**`, `src/chars/**` | **intactos** | — |
-| `src/client/render.ts`, `telas.ts`, `input.ts`, `layout.ts` | **intactos** | §5.1 |
-| `src/tools/**` | **intacto** | Ganha uma guarda no `sim:check` (§10, passo 3) |
+| `src/client/render.ts` | **muda só em anotações de tipo** (`e4.2`) | 10 linhas, nenhuma de corpo: `World`/`Ball` → `VisaoDoMundo`/`BolaVisivel` (§5.1, emenda) |
+| `src/client/telas.ts`, `input.ts`, `layout.ts` | **intactos** | §5.1 |
+| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), sala e codec (`e4.3`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo |
+| `src/tools/**` (resto) | **intacto** | — |
+
+*Atualização (2026-09-21, `e4.2`): o Anexo acima foi escrito antes de haver código. As linhas de
+`codec.ts`, `render.ts` e `tools/` foram corrigidas pelo que `e4.2` entregou e pelo que `e4.3` já tem no
+escopo; a coluna "Estado" passou a citar a story dona.*
 
 ---
 
@@ -794,6 +1093,8 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | — | `npm run check` (`tsc --noEmit`) verde | comando | — |
 | — | `sim/` segue sem importar de `chars/`, `bot/`, `client/`, `match/`, `shop/`, `net/` | grep + revisão | §2.2 |
 | — | `net/` não importa `ws` nem toca DOM | grep + revisão | §2.3 |
+| — | Codec do fio: prontidão preservada, contrafactual ingênuo reprovado, média ≤ 450 B/quadro *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 17) | §5.5 |
+| — | O `snap` final de cada rodada chega ao fio antes do `rodadaFim` *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 11) + duas abas (`e4.4`/AC 16) | §5.6 |
 
 ---
 

@@ -1,0 +1,8 @@
+{
+  n: 2000000,
+  errSafeA: 0,
+  errNaiveA: 654971,
+  errSafeU: 0,
+  errNaiveU: 2171710,
+  errFloorNonMult: 2000000
+}
