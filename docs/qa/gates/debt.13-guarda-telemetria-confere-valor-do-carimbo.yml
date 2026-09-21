@@ -1,0 +1,217 @@
+schema: 1
+story: 'debt.13'
+story_title: 'Guarda da telemetria confere o VALOR do carimbo — achados `DEBT11-TST-001` e `DEBT11-TST-002`'
+gate: PASS
+story_status_after_gate: Done
+status_reason: >-
+  Os 9 ACs estão MET, e DEBT11-TST-001 e DEBT11-TST-002 estão fechados. Conferi tudo do zero, sem confiar
+  no Dev Agent Record. check, sim:check e build saíram com rc=0 num worktree descartável de 181db27, e o
+  golden hash ficou idêntico. O diff da saída inteira do sim:check contra um worktree de 181db27^
+  (c4b22db) é uma única linha trocada, a `telemetria`. `globais` é byte a byte igual, com 3 console.warn.
+  `git show --stat 181db27` lista só os 2 arquivos do AC 9, e o diff de tools/telemetria.ts é só
+  comentário. Os blobs commitados são LF, e o incidente de CRLF do @dev não deixou resíduo. Reapliquei
+  as 12 mutações da story mais Q1 e T7, com os resultados declarados: as 12 nocivas com rc=1, Q1 e T7 com
+  rc=0. Acrescentei 14 mutações minhas. A checagem R6 (soma das desconhecidas), que nenhuma mutação do
+  @dev atingia, está viva (R6a, R6b e R6e reprovam o baseline) e tem dente: uma mutação de produção que
+  trunca as populações desconhecidas (R6c) só é pega por ela. Com a R6 desligada, a mesma mutação passa
+  verde (R6d). A R6 também segura Q13b sozinha quando a M2 inteira é afrouxada (X6). O limite do AC 7
+  (campos trocados) não contamina evidência nenhuma: com as constantes iguais, a troca grava dados
+  idênticos, e quando elas diferem a guarda acusa a troca (medido com ATRASO_ALVO_TICKS = 7). PASS, e
+  não CONCERNS, porque os três achados são LOW, opcionais e sem efeito no dado.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:181db27 (implementação). O pai é c4b22db (gate de e4.9, só docs/). `git diff --quiet c4b22db
+  181db27^` rc=0. 1fa6301 (registro do @dev) toca só a story. `git diff --stat 181db27 HEAD -- src` está
+  vazio no HEAD 6c6b9a0 (commits do @po e do @architect depois de 1fa6301, só docs/). 181db27 NÃO está
+  em origin/master (merge-base --is-ancestor rc=1; origin/master é 44311f6, de 2026-08-16): é commit
+  local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Rodei num worktree descartável de 181db27 (node_modules por junção), no Node v24.13.1, porque o @dev
+      está implementando e4.3 em paralelo na árvore compartilhada. `npm run check` deu rc=0, e
+      `npm run build` rc=0, com 32 módulos e 53.27 kB, o mesmo tamanho do gate de debt.11. `node
+      src/tools/determinism.ts` deu rc=0 no worktree de 181db27 e no de 181db27^, com stderr de 0 bytes
+      nos dois. "golden hash ✓ ok — 6 seeds batem o baseline" está nos dois. O `diff` das duas saídas
+      inteiras é um único bloco `57c57`, só a linha `telemetria`. Ela ganha "2 com o valor esperado
+      (atraso=6, escala=6)", e "3 bloco(s) … 3 população(ões), a desconhecida à parte" vira "5 … 5 …, as
+      3 desconhecidas à parte". `cmp` da linha `globais` dos dois lados: idêntica, "3 console.warn
+      capturado(s)". O @dev citou a linha 61 porque mediu com `npm run`, que soma 4 linhas de banner.
+  - id: 'Escopo (AC 9), comentário (AC 8) e CRLF'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 181db27` lista 2 arquivos: src/tools/guarda-telemetria.ts (+56/−12) e
+      src/tools/telemetria.ts (+4/−4), 60/16 no total, como o @dev declarou. Os 8 hunks de telemetria.ts
+      ficam dentro do bloco /** … */ de populacaoDe(). A frase "tools/ → net/ não existe na tabela de
+      camadas" sai, e o motivo (o valor histórico certo é o gravado) fica. Nenhuma linha de código muda.
+      CRLF: `git cat-file -p 181db27:<arquivo> | grep -c $'\r'` dá 0 nos dois arquivos (e 0 no pai).
+      `git ls-files --eol` mostra i/lf w/lf na árvore principal. `git diff -w --stat` e
+      `--ignore-cr-at-eol --stat` dão o mesmo 60/16, então não há linha só de espaço nem de fim de linha.
+      O `git checkout --` com core.autocrlf=true não deixou resíduo no commit.
+  - id: 'Setas (AC 4)'
+    verdict: PASS
+    evidence: >-
+      `grep -rln "from '\.\./client/" src/tools/` (com -r, rc=0) devolve exatamente
+      src/tools/guarda-telemetria.ts e src/tools/telemetria.ts. A linha 1 da guarda (client/telemetria.ts)
+      não mudou. Os imports novos estão nas linhas 3-4: ESCALA_HP de ../chars/tuning.ts e
+      ATRASO_ALVO_TICKS de ../net/protocolo.ts. Os dois estão declarados em architecture-e4.md §2.2:
+      a linha 317 traz `tools/ … → sim/, chars/, bot/, match/, shop/, net/ ← net/ desde e4.2`, e a linha
+      357 diz que chars/tuning.ts e net/protocolo.ts já estavam no fecho do sim:check. Em 181db27,
+      protocolo.ts só tem `import type` (linhas 1-2), e tuning.ts não importa nada. Nenhum módulo novo
+      entra no fecho.
+  - id: 'Valor do carimbo (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `carimbadosNovos = doExportNovo.filter((e) => !semCarimbo(e))` e `comValorErrado =
+      carimbadosNovos.filter((e) => e.atrasoTicks !== ATRASO_ALVO_TICKS || e.escalaHp !== ESCALA_HP)`
+      usam `!==`, sem tolerância, contra as constantes importadas, e não contra literais. A checagem é
+      separada da de presença (M1), e a mensagem traz o achado e o esperado por campo. Corre só sobre os
+      carimbados. Sob M1, a saída tem só a mensagem de presença (medido). X3 (escala ×(1+1e-9)) e X4 (só
+      o evento cast errado) reprovam, o que prova a ausência de tolerância e a checagem por evento.
+  - id: 'Fixture parcial (AC 5)'
+    verdict: PASS
+    evidence: >-
+      Entraram `rodadaFim(44, 1, 16000, { escalaHp: 6 })` e `rodadaFim(55, 1, 17000, { atrasoTicks: 6 })`,
+      em partidas distintas entre si e das existentes (11, 22, 33). `POPULACOES_FIXTURE = 5` e
+      `DESCONHECIDAS_FIXTURE = 3` são literais, e o comentário explica por quê. SEM_CARIMBO_FIXTURE e
+      N_COMBINADO_FIXTURE continuam derivados por .filter e valem 4 e 9. Os cabeçalhos das desconhecidas
+      saem "eventos 1", "eventos 1" e "eventos 2" (visto na mensagem de R6a), e nenhum bloco tem n=9. A
+      M2 exige exatamente 3 desconhecidas, e que sejam as 3 últimas. A R6 exige que todos os cabeçalhos
+      casem `^eventos (\d+) ·` e que a soma seja SEM_CARIMBO_FIXTURE. O comentário do fixture foi
+      atualizado (5 populações, 3 desconhecidas, n combinado 9).
+  - id: 'Limite documentado e linha de status (AC 7)'
+    verdict: PASS
+    evidence: >-
+      O limite dos campos trocados está nos Dev Notes (subseção própria) e no cabeçalho de
+      guarda-telemetria.ts. A linha de status imprime "com o valor esperado (atraso=6, escala=6)",
+      interpolado das constantes. T7 (troca) deu rc=0, como declarado. Fui além do AC: com
+      ATRASO_ALVO_TICKS = 7 mais T7, a guarda acusa "achado atraso=6, escala=7; esperado atraso=7,
+      escala=6 (DEBT11-TST-001)". A troca só é invisível enquanto for inofensiva.
+  - id: 'Contrafactual da story (AC 6), reaplicado em worktree descartável de 181db27'
+    verdict: PASS
+    evidence: >-
+      O script (scratchpad, bateria-qa.mjs) normaliza o \n do padrão para o EOL do arquivo (o worktree
+      saiu em CRLF por autocrlf), aborta se o padrão não casar exatamente 1 vez, roda o sim:check e
+      restaura. Nenhum aborto, e `git status` do worktree ficou vazio no fim. Resultados: Q12, Q12a e Q12b
+      com rc=1 e a mensagem DEBT11-TST-001 ("achado atraso=0, escala=1", "0, 6" e "6, 1"). Q13 com rc=1
+      ("4 bloco(s) … esperado 5" e "2 desconhecida … esperadas 3"). Q13b com rc=1 (só "2 desconhecida",
+      e o total fica em 5). M1 com rc=1, só a mensagem de presença. M1b com rc=1. M2 com rc=1 (3
+      problemas). M3 com rc=1 (5 problemas, "n combinado (9)"). MR1 com rc=1 (4 globais com descritor).
+      MR2a e MR2b com rc=1 (localStorage e document). Q1 (toFixed(2)) com rc=0. T7 com rc=0.
+  - id: 'Mutações próprias (14)'
+    verdict: PASS
+    evidence: >-
+      R6, a lacuna que o @dev apontou: R6a (soma comparada com N_COMBINADO_FIXTURE) rc=1. R6b (o 1º grupo
+      fora da soma, `desconhecidas.slice(1)`) rc=1. R6e (regex que não casa) rc=1. As três reprovam o
+      baseline, então a checagem está viva. R6c, de PRODUÇÃO, em tools/telemetria.ts:
+      `agregarPopulacao(g.conhecida ? g.eventos : g.eventos.slice(0, 1), …)` dá rc=1, e o único ✗ é o da
+      R6 ("eventos 1", "eventos 1", "eventos 1", esperado 4). R6d (R6c com a R6 desligada) dá rc=0, então
+      a R6 é a ÚNICA checagem que pega R6c. Estrito: X1b (registrar() grava `String(ATRASO_ALVO_TICKS)`)
+      rc=1, pego pela M1, porque Number.isFinite("6") é false. X1 (a guarda com `!=` mais o carimbo
+      string) rc=1 pelo mesmo motivo. Sobre números, `!=` e `!==` coincidem, então com o filtro de
+      semCarimbo a troca é um mutante EQUIVALENTE. Quem barra o tipo é o filtro, e o `===` é o que barra
+      o valor. Tolerância e por evento: X3 e X4 com rc=1. Filtro dos carimbados: X2 (checagem de valor
+      sobre TODOS os novos) rc=0, e X2 mais M1 rc=1, com as duas mensagens juntas e "atraso=undefined". O
+      filtro do AC 3 não muda o rc, só a mensagem (ver observacoes). M2 exata: X5 (só a contagem afrouxada
+      para `< 1`, mais Q13b) rc=1, pega pela posição. X5b (sem a posição, mais Q13b) rc=1, pega pela
+      contagem. X6 (a M2 inteira afrouxada para `< 1`, mais Q13b) rc=1, pega pela R6 (soma 3 ≠ 4). A
+      contagem, a posição e a soma seguram Q13b cada uma sozinha (ver DEBT13-DOC-002).
+
+top_issues:
+  - id: 'DEBT13-DOC-001'
+    severity: low
+    category: docs
+    owner: '@dev (opcional, na próxima story que abrir src/tools/determinism.ts; debt.12 está na ordem)'
+    finding: >-
+      A mensagem do `throw` da guarda em determinism.ts:1553-1556 lista como suspeitos M1, M1b, M2, M3 e
+      R3, e não o carimbo com valor errado. Sob Q12, o sim:check termina com "Suspeitos: registrar() sem
+      carimbo por evento (M1) …", o que aponta para o defeito vizinho. A linha ✗ logo acima nomeia o
+      caso certo (DEBT11-TST-001), então o diagnóstico não se perde. A story proibia abrir
+      determinism.ts, então isto não é desvio.
+    suggested_action: >-
+      Acrescentar "carimbo com valor diferente das constantes-fonte (DEBT11-TST-001) em registrar()" à
+      lista de suspeitos, quando alguém abrir o arquivo.
+  - id: 'DEBT13-DOC-002'
+    severity: low
+    category: docs
+    owner: '@po (texto do AC 5, só se reabrir a story) e @dev (comentário da M2 na guarda, opcional)'
+    finding: >-
+      O AC 5 diz que "só a checagem de quantas são desconhecidas" pega Q13b e que ela "sustenta sozinha o
+      caso". O comentário da guarda repete: "só esta contagem a pega". Medido, isso é falso a favor da
+      segurança. A checagem de posição (slice(-3)) pega Q13b sem a contagem (X5), e a soma da R6 pega
+      Q13b com a M2 inteira afrouxada (X6). A regra "não afrouxar para pelo menos uma" continua certa. Só
+      a justificativa subestima a redundância.
+    suggested_action: >-
+      Nenhuma ação de código. Se alguém tocar no comentário, trocar por "a contagem, a posição e a soma
+      da R6 pegam Q13b, cada uma sozinha".
+  - id: 'DEBT13-TST-003'
+    severity: low
+    category: tests
+    owner: 'nenhum — fechado por este gate'
+    finding: >-
+      A lacuna que o @dev apontou é real no REGISTRO: a bateria do Dev Agent Record não tem mutação que
+      atinja a R6 (soma das desconhecidas). Não é real na GUARDA: R6a, R6b e R6e mostram que ela está
+      viva, e R6c/R6d mostram que ela é a única que pega uma partição de produção que perde eventos das
+      populações desconhecidas. Um limite residual, por desenho: por ser uma soma, a R6 não distingue
+      uma troca de eventos ENTRE as desconhecidas que mantenha as 3 populações e o total 4. Com os
+      rótulos escritos campo a campo, isso exigiria inventar um rótulo, e não é um modo de falha
+      plausível.
+    suggested_action: >-
+      Nenhuma. As mutações R6a-R6e deste gate são a evidência que faltava. Se a bateria for reaplicada
+      no futuro, incluir R6c/R6d.
+
+avaliacoes_pedidas:
+  lacuna_r6: >-
+    É real só no registro, não na proteção. Severidade: LOW, e já fechada por este gate
+    (DEBT13-TST-003), sem dono. R6a, R6b e R6e reprovam o baseline, então a checagem executa e compara.
+    R6c é uma mutação de produção plausível em agregar() (o cabeçalho de uma desconhecida contando menos
+    eventos do que ela tem) e sai com rc=1, com a R6 como único ✗. R6d, a mesma mutação com a R6
+    desligada, sai com rc=0. A R6 é, portanto, a única linha de defesa contra essa classe, e funciona.
+  fecha_debt11_tst_001_002: >-
+    Sim, fecha os dois. TST-001: Q12, Q12a e Q12b reprovam, por uma asserção própria com achado e
+    esperado, e X3/X4 mostram que ela não tem tolerância e é por evento. TST-002: o fixture tem carimbo
+    parcial nos dois sentidos, e Q13 e Q13b reprovam. O limite dos campos trocados (AC 7) não impede o
+    fechamento: com as constantes iguais, a troca grava exatamente os mesmos números (6 e 6), então o
+    dado está certo, e no dia em que elas diferirem a guarda acusa (medido). O coletor
+    (src/client/telemetria.ts) é byte a byte o mesmo de 3de1cfe (debt.10) até 181db27 (`git diff --quiet`
+    rc=0), e as duas constantes valem 6 e 6.0 desde 3de1cfe. Por isso a guarda de 181db27 também atesta,
+    retroativamente, o valor gravado por qualquer build a partir de 3de1cfe. RECOMENDAÇÃO AO @po: a
+    cláusula provisória de COLETA pode ser retirada. Em e4.7 (v1.6.0): o bloco "Cláusula provisória de
+    COLETA" com (i)/(ii) e o parágrafo "Limite" (linhas 41-56), o parágrafo do AC 8 sobre a conferência
+    manual (133-135), o subitem "Antes da mesma partida" (232-233) e a nota de 300-302. Em debt.9 (v1.3):
+    o bloco (101-118), a frase da cláusula em 136-137 e o subitem de conferência manual (241-243). O que
+    NÃO sai com ela: a pré-condição de fronteira de debt.10/e4.1. 3de1cfe e 181db27 não estão em
+    origin/master (último push 44311f6, 2026-08-16), e o build publicado ainda não tem carimbo nenhum.
+    A amostra continua tendo de vir de um build que contenha 3de1cfe, e o sim:check do commit do build
+    é o que vale como conferência.
+  incidente_crlf: >-
+    Confirmado sem efeito. Os dois blobs em 181db27 têm 0 CR. `git ls-files --eol` dá i/lf w/lf.
+    numstat 56/12 e 4/4, igual com -w e com --ignore-cr-at-eol, então nenhuma linha mudou só por
+    espaço ou fim de linha. Todo hunk corresponde a uma mudança descrita no AC.
+
+observacoes:
+  - >-
+    A separação de mensagens do AC 3 (filtro dos carimbados) não se protege pelo rc: sem o filtro (X2),
+    o baseline continua verde e a M1 continua rc=1, só que com as duas mensagens. É inerente, porque uma
+    guarda não testa o próprio diagnóstico. Conferi por leitura e pela saída da M1, que tem uma
+    mensagem só. Sem ação.
+  - >-
+    Sob X2 mais M1, a linha de status imprime "-2 com o valor esperado". Isso só acontece sob mutação da
+    própria guarda. No código real, novosComValorEsperado = carimbadosNovos.length − comValorErrado.length,
+    e comValorErrado é subconjunto dos carimbados, então o valor nunca fica negativo. Sem ação.
+  - >-
+    O Status foi escrito "Ready for Review", e o canônico de story-lifecycle.md é "InReview". Não afeta o
+    gate. A transição registrada é Ready for Review → Done.
+  - >-
+    CodeRabbit não roda nesta máquina (WSL). A cobertura veio de check, sim:check e build em worktree
+    descartável, do diff da saída inteira contra 181db27^, da leitura linha a linha do diff, de 14
+    mutações da story (as 12 nocivas, Q1 e T7) e de 14 mutações minhas, mais a prova da troca com
+    ATRASO_ALVO_TICKS = 7.
+  - >-
+    Worktrees descartáveis (181db27 e 181db27^) removidos no fim (junção de node_modules desfeita antes
+    do remove). A árvore compartilhada nunca foi mutada. `git worktree list` mostra só a árvore principal.
+
+waiver: { active: false }
+updated: '2026-09-21T09:10:00Z'
