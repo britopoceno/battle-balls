@@ -1,0 +1,207 @@
+schema: 1
+story: 'e4.1'
+story_title: 'P4.1 — ativar o atraso de input no modo local (`INPUT_DELAY_TICKS` 0 → 6)'
+gate: PENDING
+story_status_after_gate: InReview
+status_reason: >-
+  O código está aprovado. Os ACs 1, 2, 3, 4, 5, 8, 9 e 10 estão MET, todos conferidos do zero sem
+  confiar no Dev Agent Record: check exit 0; sim:check exit 0 com golden hash ok; saída completa do
+  sim:check IDÊNTICA antes (worktree em b8e8a41^) e depois (b8e8a41), inclusive os oito hashes curtos
+  de `política bot`; build exit 0; `INPUT_DELAY_TICKS` some de src/ (rc=1); `ATRASO_ALVO_TICKS` só é
+  declarado em net/protocolo.ts:38; escopo de código é só src/client/main.ts (+6/−8). Os ACs 6 e 7
+  NÃO estão cumpridos. Não é defeito: eles não foram executados, porque exigem um humano jogando no
+  aparelho. Por isso o gate fica PENDING e a story fica em InReview. NÃO é CONCERNS, por quatro
+  motivos. (1) Pela story-lifecycle, CONCERNS leva a story a Done, e Done com AC não cumprido é
+  aprovar story com AC faltando. (2) O AC 6 é "verificação manual obrigatória" e diz "isso reprova".
+  Uma checagem capaz de reprovar a story não pode virar observação em aberto. (3) O precedente do
+  projeto é o mesmo: a e3.4 manteve a Task 9 aberta, com a frase "a story não pode ir a Done sem ela",
+  quando o smoke no celular real (P3.4) estava pendente. O único AC humano que o projeto aceitou
+  como não cumprido foi o da e3.6, e ali houve decisão EXPLÍCITA do usuário, registrada como WAIVED.
+  (4) P4.1 é critério do portão da Fase 4. Com Done, o portão leria P4.1 como fechado sem que ninguém
+  tivesse jogado com o atraso, e a story diz que esse julgamento humano "é o único instrumento que
+  existe para isso". Caminhos de saída: o usuário joga, registra a frase do AC 7 e o @qa refaz o
+  gate curto (CONCERNS por E41-TEL-002 se a mira estiver imediata, FAIL se o arrasto tiver lag); ou
+  o usuário dispensa explicitamente os ACs 6/7, e o gate vira WAIVED como na e3.6.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:b8e8a41. `git show --stat` dá 2 arquivos: src/client/main.ts (+6/−8, 14 linhas) e
+  docs/stories/e4.1.ativar-atraso-de-input.story.md. Zero linhas em src/sim/, match/, shop/, bot/,
+  chars/, tools/, net/, client/input.ts e client/render.ts. HEAD no momento do gate é 261c4ab
+  (@architect, emenda do GDD §8, só docs, feita depois da implementação).
+
+verificacao_independente:
+  - id: 'npm run check / sim:check / build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      `npm run check` (tsc --noEmit) exit 0. `npm run sim:check` exit 0, com todas as guardas ok e a
+      linha "golden hash ✓ ok — 6 seeds batem o baseline". `npm run build` (Vite) exit 0, 32 módulos,
+      e o import de net/ resolve no bundle.
+  - id: 'Hash-neutralidade reproduzida antes/depois (AC 3)'
+    verdict: PASS
+    evidence: >-
+      Criei um worktree temporário em b8e8a41^, rodei `node src/tools/determinism.ts` e comparei com a
+      execução em b8e8a41: `diff` vazio na saída inteira. Isso cobre golden hash, replay, bot replay,
+      os 3 matchSeeds da partida e os hashes curtos de política bot (d12c2706, 4bcb7488, d387aee6,
+      d8d3ff54, ded662f8, e7126e97). A cadeia do AC 3 foi conferida na fonte: bot/dummy.ts:30 e :43 e
+      bot/heuristic.ts:583 carimbam `tick: view.tick`; tools/determinism.ts não importa nada de
+      client/. Não há diff em src/tools/, então o baseline está intocado. Nenhum acoplamento escondido,
+      nada a escalar.
+  - id: 'Controle de mutação: o que o AC 2 prova e o que não prova'
+    verdict: INFO
+    evidence: >-
+      Em outro worktree temporário troquei o uso para `world.tick + 600` e rodei o sim:check: saída
+      idêntica à do código real. O sim:check é estruturalmente cego ao caminho humano de
+      client/main.ts. Portanto o AC 2 prova que não existe acoplamento (que era a pergunta do AC 3),
+      mas não protege o VALOR 6. O valor está protegido pelo tipo literal `6` de ATRASO_ALVO_TICKS (e4.0),
+      pela revisão e pelo smoke humano. Ver E41-TST-003.
+  - id: 'Definição única, nenhum literal novo (ACs 4, 5)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnw INPUT_DELAY_TICKS src/` → rc=1. `grep -rnw ATRASO_ALVO_TICKS src/` → declaração só em
+      net/protocolo.ts:38 (`= 6`). Os usos estão em client/main.ts:8 (import), :305 (comentário) e :309
+      (`tick: world.tick + ATRASO_ALVO_TICKS`), mais duas menções em comentários de protocolo.ts. As
+      linhas adicionadas no diff não têm o literal `6`: o comentário diz "~100ms" e não o número de ticks.
+  - id: 'Setas (architecture-e4 §2.2)'
+    verdict: PASS
+    evidence: >-
+      A tabela diz `client/ → todos`, então `client/ → net/` é permitido. net/protocolo.ts só tem
+      `import type` de match/types.ts e de sim/types.ts, e nada de runtime entra no cliente além da
+      constante. `grep -rnE "from '\.\./client/"` em net/, sim/, match/, bot/, shop/ e chars/ não acha
+      nada. A única ocorrência é src/tools/telemetria.ts → client/. Ela é ANTERIOR a esta story (desvio
+      já julgado no gate de e3.5), não entrou neste commit e o sim:check não a carrega.
+  - id: 'Comentário no ponto de uso (main.ts:305-308)'
+    verdict: PASS
+    evidence: >-
+      O comentário está correto em todas as afirmações que conferi. Diz que é o mesmo atraso que o
+      servidor soma no 1v1 (§4.1). Diz que só o EFEITO atrasa e que a mira continua em input.ts: input.ts
+      não tem diff, e o carimbo que chega ao sim é regravado para `w.tick` na entrega, main.ts:403. Diz
+      que os bots carimbam view.tick e por isso o hash não se move (§4.2). Não cria um segundo `6`. Uma
+      omissão de pouca importância: ele não avisa que o HUD de recarga também passa a atrasar 6 ticks
+      (E41-UX-001).
+  - id: 'Quem mais lê o tick carimbado (replay, telemetria)'
+    verdict: PASS
+    evidence: >-
+      Rastreei todos os leitores. (a) main.ts:399-403: `pendentes` é filtrado por `c.tick <= w.tick` e
+      regravado para `tick: w.tick` antes do `step`. O `step` (sim/world.ts:635) só aceita
+      `c.tick === world.tick`, então o valor carimbado decide QUANDO o comando é entregue, e mais nada.
+      (b) abrirRodada zera `pendentes` (main.ts:198), então casts em voo no fim da rodada são descartados
+      e não vazam para a rodada seguinte. Pausa só adia a entrega. (c) castCommand (world.ts:456, 461,
+      469) protege bola morta, recarga e carga de ult, então um comando que envelheceu 6 ticks é
+      recusado com segurança. (d) Telemetria RF-36: o evento `cast` é gravado em `disparar()` no
+      INSTANTE DO INPUT e não tem campo `tick`. O `anguloErro` é medido contra o inimigo naquele
+      instante, que é a semântica de intenção documentada. Nada em client/telemetria.ts nem em
+      tools/telemetria.ts cruza com eventos do sim por tick, então não há mudança de comportamento, mas
+      há mudança de POPULAÇÃO (E41-TEL-002). (e) Replay: nenhum código de gravação/replay de rodada
+      humana existe no cliente. O `hash(w)` em ResultadoRodada muda para rodadas humanas, mas elas nunca
+      foram reproduzíveis (não se grava Command humano). A e4.6 (AC 4) já exige gravar o comando JÁ
+      carimbado pela sala, justamente para não depender de ATRASO_ALVO_TICKS. Nenhuma premissa
+      tick == world.tick foi quebrada.
+  - id: 'Handoff documental (AC 8)'
+    verdict: PASS
+    evidence: >-
+      O Dev Agent Record traz a frase do GDD §8, verbatim, e o handoff para o @architect. O @architect já
+      executou em 261c4ab (commit próprio, GDD.md + nota de atualização em architecture-e4.md §4.1), e
+      este gate não tocou nesses arquivos. architecture-e3.md §11.2 ficou intocado, corretamente
+      (registro histórico). Resíduo fora do inventário do AC 8: E41-DOC-004.
+  - id: 'ACs 6 e 7 — smoke no aparelho'
+    verdict: 'NOT MET (não executado)'
+    evidence: >-
+      Nenhum artefato do aparelho. O Dev Agent Record declara PENDENTE, com honestidade, e não afirma
+      nada sobre a sensação. A leitura de código dá só o que é possível dar sem jogar: input.ts e
+      render.ts sem diff e a mudança confinada a `disparar()`, que roda depois do disparo. Isso não
+      substitui o AC 6. Lição registrada deste projeto: em borda de plataforma (toque, Pointer Events),
+      raciocínio e fixture sintético herdam a premissa errada (TEL-E35-006). O que o usuário deve
+      conferir na rodada está em `pedido_ao_usuario` abaixo.
+  - id: 'CodeRabbit'
+    verdict: SKIPPED
+    evidence: >-
+      O CodeRabbit via WSL está indisponível neste ambiente (mesmo pulo registrado em e3.7 e na Dev
+      Agent Record). A revisão independente acima cobre o objetivo, e o diff de código tem 14 linhas.
+
+top_issues:
+  - id: 'E41-REQ-000'
+    severity: high
+    category: requirements
+    owner: 'usuário'
+    finding: >-
+      Os ACs 6 (RF-34: mira imediata ao arrastar, verificação manual obrigatória) e 7 (uma rodada
+      completa no aparelho alvo de P3.4, com a frase de impressão no Dev Agent Record) não foram
+      executados. É isto que segura a story em InReview. Não é retorno ao @dev: não há código a
+      corrigir.
+    suggested_action: >-
+      O usuário joga uma rodada completa no aparelho e escreve uma frase em "Impressão do smoke (AC 7)".
+      Depois, @qa refaz o gate curto. Se preferir não jogar agora, a alternativa é o usuário dispensar
+      explicitamente os ACs 6/7 (WAIVED, precedente e3.6).
+  - id: 'E41-TEL-002'
+    severity: medium
+    category: data
+    owner: '@po (roteamento) / @architect (forma do campo); mitigação imediata: usuário'
+    finding: >-
+      A telemetria não tem como separar sessões com atraso 0 de sessões com atraso 6. `versao` continua
+      'bb.telemetria.v1', nenhum evento traz o atraso, e o coletor espelha em localStorage, que
+      SOBREVIVE a trocas de build. Uma única exportação feita depois de b8e8a41 pode misturar rodadas
+      de antes e de depois sem nenhuma marca, e `exportadoEm` é a hora da exportação, não a hora do
+      jogo. Isso contamina justamente as comparações que esta story diz alimentar ("o dado que P4.4 vai
+      precisar comparar depois") e as medidas humanas de duração/erro de mira (P3.1, RF-36). Também
+      soma uma segunda variável de população à amostra ×6.0 que a debt.9 espera (lá a atribuição por
+      partida precisa ser "verificada, não assumida"). `limpar()` existe em client/telemetria.ts:145,
+      mas não tem chamador, e o usuário não consegue zerar pela UI.
+    suggested_action: >-
+      Não é retorno ao @dev de e4.1: o AC 9 proíbe tocar em telemetria.ts, e a omissão foi correta dentro
+      do escopo. Mitigação imediata (usuário), ANTES do smoke do AC 7: exportar (botão ou tecla `t`),
+      guardar o arquivo como "pré-e4.1" e zerar com
+      `localStorage.removeItem('bb.telemetria.v1')` no console. Assim tudo que for coletado dali em
+      diante é 100% atraso 6. Correção durável (@po escolhe a story, candidata natural e4.5 ou e4.6):
+      gravar o atraso efetivo, ou subir `versao` para v2, no arquivo exportado. Anotar a fronteira
+      (b8e8a41, 2026-09-21) em docs/evidence/telemetria/README.md.
+  - id: 'E41-UX-001'
+    severity: low
+    category: code
+    owner: 'usuário (observar no smoke) / @architect (e4.5)'
+    finding: >-
+      Existe agora uma janela de 6 ticks "em voo". Depois de soltar, o HUD de recarga/ult
+      (render.ts:365-370) lê o estado do sim e continua mostrando a habilidade como PRONTA. input.ts não
+      tem nenhuma trava de recarga, então um segundo arrasto nessa janela entra em `pendentes`, é
+      recusado em silêncio por castCommand (world.ts:461 / :469) e ainda gera um evento `cast` na
+      telemetria. Com atraso 0 essa janela era de ~1 tick. No modo conectado ela cresce para
+      RTT/2 + 100ms (§4.4).
+    suggested_action: >-
+      No smoke, observar se algum toque "some" logo depois de um cast. Se sumir, é informação para o
+      AC 7 e para a e4.5 (estado "em voo" no HUD). Nenhuma mudança em e4.1.
+  - id: 'E41-TST-003'
+    severity: low
+    category: tests
+    owner: '@architect (registro) — sem ação agora'
+    finding: >-
+      O sim:check é estruturalmente cego a client/main.ts. Com `world.tick + 600` a saída sai idêntica.
+      O "golden hash IDÊNTICO" do AC 2 é a resposta certa à pergunta do AC 3 (não há acoplamento), mas
+      não é guarda do valor do atraso. Hoje o valor só é protegido pelo tipo literal `6` de
+      ATRASO_ALVO_TICKS. É mais uma ocorrência do padrão "o call site nunca é testado" deste projeto: aqui
+      o call site é o carimbo humano.
+    suggested_action: >-
+      Nenhuma em e4.1. Quando a e4.3/e4.4 carimbar no servidor (`tickAtual + ATRASO_ALVO_TICKS`), a
+      guarda headless da sala deve afirmar o valor do carimbo (agendado − tick atual === 6), porque ali
+      o caminho É testável.
+  - id: 'E41-DOC-004'
+    severity: low
+    category: docs
+    owner: '@pm'
+    finding: >-
+      docs/prd.md:219 (tabela do portão) ainda diz "P4.1 | `INPUT_DELAY_TICKS = 6` ativo (hoje é 0 —
+      desvio consciente da Fase 0)", e prd.md:317 (RF-38) nomeia uma constante que não existe mais. O
+      inventário do AC 8 listava só GDD §8 e architecture-e3 §11.2. prd.md:689 e brief.md:92 são
+      contexto histórico e estão corretos como estão.
+    suggested_action: >-
+      Emenda do @pm em commit próprio, no mesmo padrão do 261c4ab: "hoje é 0" → ativo desde e4.1, e
+      RF-38 passa a citar ATRASO_ALVO_TICKS (net/protocolo.ts). Não bloqueia.
+
+pedido_ao_usuario:
+  - 'Antes de jogar: exportar e zerar a telemetria (E41-TEL-002).'
+  - 'No aparelho alvo de P3.4, jogar uma rodada completa no modo local.'
+  - 'AC 6: ao arrastar, a linha de mira aparece e segue o dedo sem atraso. Se o arrasto tiver lag, a story reprova.'
+  - 'AC 7: o efeito sai perceptivelmente depois do toque (~100ms). Isso atrapalha ou não?'
+  - 'E41-UX-001: algum toque dado logo depois de um cast "sumiu"?'
+  - 'Escrever uma frase em "Impressão do smoke (AC 7)" no Dev Agent Record e acionar o @qa para o re-gate.'
+
+waiver: { active: false }
+updated: '2026-09-21T15:00:00Z'
