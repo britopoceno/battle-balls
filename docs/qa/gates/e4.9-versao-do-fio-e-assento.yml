@@ -1,0 +1,271 @@
+schema: 1
+story: 'e4.9'
+story_title: '`net/protocolo.ts` + `net/codec.ts` — a versão do fio e o assento no `{t:''sala''}`'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 12 ACs estão MET, e o código está correto. Conferi tudo do zero, sem confiar no Dev Agent Record.
+  check, sim:check e build saíram com rc=0, e o golden hash ficou idêntico. O diff da saída inteira do
+  sim:check contra um worktree de 6f2f56c^ (d378ca5) tem só a linha nova `versão fio`, além do cabeçalho
+  do npm. Os dois greps de pureza deram rc=1. `git show --stat 6f2f56c` lista só os três arquivos do AC
+  12, e nenhum hunk de codec.ts cai na seção ENTRADA (:28-161) nem em T_DO_SERVIDOR. Refiz os quatro
+  contrafactuais do AC 10, e todos deram rc=1. Das minhas 10 mutações, 6 foram pegas, entre elas o `==`
+  no lugar de `===` (o "1" passa e a guarda acusa). Fica em CONCERNS, e não PASS, por um MEDIUM de
+  alcance de teste (E49-TST-001). A guarda cobre exatamente os casos mínimos do AC 10 (ausente, 0, 7,
+  "30"), mas dois dos quatro termos do predicado do AC 7 (b) não têm regressão. Sem
+  `Number.isInteger(hz)`, 7.5 é aceito. Sem `hz > 0`, -30 é aceito. Nos dois casos o sim:check fica
+  verde. O segundo termo é o que um refactor removeria primeiro, porque `60 % 0` já dá NaN e o 0 continua
+  reprovado, o que faz `hz > 0` parecer redundante. O código de hoje rejeita 7.5, -30 e 60.5 (sondado).
+  Há ainda três LOW, cada um com dono.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:6f2f56c (implementação). O pai é d378ca5, commit só de docs do @sm (debt.12 e debt.13). `git
+  diff --stat c5459e0 d378ca5` lista só duas stories, então o src/ de d378ca5 é idêntico ao de c5459e0,
+  a base citada na pré-condição. O commit 502d12b (registro do @dev) toca só a story. Seus hunks ficam em
+  Status, checkbox do CodeRabbit, Tasks, Testing (Dev Notes), Dev Agent Record, File List e Change Log.
+  AC e escopo estão intocados. `git diff --stat 6f2f56c HEAD -- src` está vazio. 6f2f56c NÃO está em
+  origin/master (merge-base --is-ancestor rc=1): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2, 11)'
+    verdict: PASS
+    evidence: >-
+      Rodei na árvore principal (src/ limpo naquele momento, idêntico a 6f2f56c), em Node 24.13.1.
+      `npm run check` deu rc=0, `npm run sim:check` rc=0 e `npm run build` rc=0. A saída mostra "golden
+      hash ✓ ok — 6 seeds batem o baseline". Rodei `node src/tools/determinism.ts` num worktree
+      descartável de 6f2f56c^ (rc=0). O `diff` das duas saídas inteiras tem um único bloco de conteúdo,
+      `26a31`: `versão fio ✓ … 4/4 … 6/6`. O outro bloco é o banner do `npm run`, ausente na chamada
+      direta. Nenhuma linha existente mudou de texto ou de veredito. `não-snap` continua "8 mensagens (7
+      variantes) … 7/7".
+  - id: 'Pureza (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnwE "ws|document|window|localStorage|Math\.random" src/net/` deu rc=1, e
+      `grep -rnE "Date\.now|performance\.now" src/net/` também deu rc=1. O critério foi o exit code.
+  - id: 'VERSAO_DO_FIO e {t:sala} estendido (ACs 4, 5)'
+    verdict: PASS
+    evidence: >-
+      protocolo.ts:65 tem `export const VERSAO_DO_FIO = 1`. O comentário traz a regra de quando sobe
+      (layout/quantização, forma de variante, significado/unidade), o que não a faz subir (SNAPSHOT_HZ,
+      deflate, com a razão do override de e4.7/AC 4) e o porquê de começar em 1. `DoServidor['sala']`
+      tem `versao: typeof VERSAO_DO_FIO` (literal), `assento: string` e `snapshotHz: number`. O
+      comentário de `DoCliente.entrar` agora aponta o campo de mesmo nome em `DoServidor['sala']`.
+  - id: 'Setas (AC 9)'
+    verdict: PASS
+    evidence: >-
+      protocolo.ts:1-2 são dois `import type` (match/types, sim/types), sem import de runtime. codec.ts:3
+      é `import { VERSAO_DO_FIO, type DoCliente, type DoServidor, type Snapshot } from './protocolo.ts'`,
+      com exatamente um valor e seta `net/ → net/`. As linhas 1-2 continuam `import type`.
+      `grep -rnE "from '\.\./(tools|client|server)/|sala\.ts'" src/net/` deu rc=1, então não há seta
+      `net → tools`. Não há ciclo de runtime, porque protocolo.ts não importa codec.ts. O cabeçalho
+      "Importa só TIPOS … mais um único VALOR" e o LAYOUT (que agora cita a §11.6.1, DescompassoDeVersao
+      e debt.12 no lugar de "risco aceito até haver deploy") foram atualizados.
+  - id: 'Escopo (AC 6, AC 12) — hunks do diff'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 6f2f56c` lista só src/net/codec.ts (+69/−), src/net/protocolo.ts e
+      src/tools/determinism.ts. Os hunks de `git diff -U0 6f2f56c^ 6f2f56c -- src/net/codec.ts`, com
+      numeração antiga, são `-3` (import), `-24,2` (cabeçalho), `-169,3` (LAYOUT), `+407,48` depois de
+      :402 (classe e conferirSala, inseridas depois do fechamento de T_DO_SERVIDOR), `-417` (doc do
+      decodificador) e `+480` depois de :425 (a chamada). No arquivo antigo, os marcadores `// ===
+      ENTRADA` e `// === SAÍDA` estão em :28 e :162. Nenhum hunk cai em :28-161, então objeto, campo,
+      naLista, finito, bit, parseDecisao, parseDoCliente, T_DO_CLIENTE, SLOTS e T_DECISAO estão intocados.
+      T_DO_SERVIDOR não tem linha no diff. conferirSala USA `Objeto` e `campo` sem editá-los, o que o AC 12
+      permite.
+  - id: 'DescompassoDeVersao (AC 7 a)'
+    verdict: PASS
+    evidence: >-
+      `readonly servidor: unknown` e `readonly cliente: number` estão declarados no corpo e atribuídos
+      incondicionalmente no construtor. Não há parameter properties: `grep -nE
+      "constructor\((public|private|protected|readonly)" src/net/codec.ts` deu rc=1. O Node 24.13.1 em
+      modo strip-only executa a classe (o sim:check roda). Uma sonda direta com a forma de hoje dá name
+      'DescompassoDeVersao', `'servidor' in e` true e chaves próprias [servidor, cliente, name]. A
+      mensagem é "versão do fio undefined no servidor, 1 neste cliente — descompasso (architecture-e4.md
+      §11.6.1)", no padrão pedido. O target ES2022 do tsconfig implica useDefineForClassFields, então o
+      build do Vite também emite o campo. Mesmo sem isso, a atribuição é incondicional.
+  - id: 'Ordem do decodificador (AC 7 b, c, d)'
+    verdict: PASS
+    evidence: >-
+      Por leitura, `conferirSala` lê `versao` e lança DescompassoDeVersao antes de ler `snapshotHz` e
+      `assento`. `decodificarDoServidor` só a chama quando `t === 'sala'`, depois da checagem de `t`.
+      Pela guarda, a forma de hoje `{t:'sala', jogador:1, estado:'jogando'}` lança DescompassoDeVersao com
+      `servidor` undefined, e os 6 casos de snapshotHz/assento lançam Error que não é
+      DescompassoDeVersao. O contrafactual (iv) prova que a guarda enxerga a ordem.
+  - id: 'Contrafactuais do AC 10, refeitos em worktree descartável de 6f2f56c'
+    verdict: PASS
+    evidence: >-
+      O script aplica cada substituição com o fim de linha normalizado para CRLF (o arquivo é CRLF, e a
+      primeira rodada deu "NAO APLICADA" em duas mutações multilinha até eu corrigir isso), roda o
+      sim:check e restaura no finally. O arquivo ficou byte-idêntico, e o `git status` do worktree ficou
+      limpo. (i) Sem a checagem de versão: rc=1, `0/4`. (ii) Sem a de snapshotHz: rc=1, `2/6`. (iii)
+      Sem a de assento: rc=1, `4/6`. (iv) Versão depois das outras duas: rc=1, `3/4`, "forma de hoje
+      lançou, mas não DescompassoDeVersao". O golden hash ficou ✓ em todas, como esperado: a guarda nova
+      é quem acusa.
+  - id: 'Mutações próprias (além das 4 do AC 10)'
+    verdict: CONCERNS
+    evidence: >-
+      PEGAS (6):
+      Q4, `versao != VERSAO_DO_FIO` (igualdade frouxa): rc=1, "versao \"1\" não lançou".
+      Q1, sem o termo `60 % hz === 0` (aceita não-divisor): rc=1, "snapshotHz 7 não lançou".
+      Q9, `hz <= 60` no lugar do divisor: rc=1, pelo 7.
+      Q7, `this.cliente = servidor`: rc=1, 0/4.
+      Q8, conferirSala só quando `versao` está presente: rc=1, "versao ausente" e "forma de hoje" não
+      lançaram.
+      Q6b, sem a declaração `readonly servidor` e com atribuição só se definido: rc=1, 2/4. É a asserção
+      `'servidor' in erro` que acusa.
+      NÃO PEGAS, e nocivas (3):
+      Q3, sem `hz > 0`: rc=0. snapshotHz -30 é aceito (60 % -30 === 0), e a cadência `60/snapshotHz` e o
+      buffer de e4.5/AC 7 ficam negativos.
+      Q2, sem `Number.isInteger(hz)`: rc=0. 7.5, 2.5 e 0.5 são aceitos (60 % 7.5 === 0).
+      Q5, assento checado só por ausente/vazio (`assento === undefined || assento === ''`): rc=0.
+      `assento: 123` é aceito.
+      NÃO PEGAS e equivalentes (1):
+      Q6, `if (servidor !== undefined) this.servidor = servidor` mantendo a declaração no corpo: rc=0.
+      Pela semântica de class fields, a propriedade já existe valendo undefined, então o comportamento
+      observável é idêntico. Não é lacuna da guarda. Ver avaliacoes_pedidas.asercao_servidor_in.
+      Sonda do código de hoje: 7.5, 60.5, -30 e assento 123 lançam Error. 60, 1 e 1e1 são aceitos.
+      Ver E49-TST-001 e E49-TST-002.
+  - id: 'Contrafactuais pedidos pelo lead, que não são mutantes com significado'
+    verdict: PASS
+    evidence: >-
+      "Aceitar snapshotHz 60.5": o termo do divisor rejeita 60.5 sozinho (60 % 60.5 = 60), com ou sem
+      isInteger. O mutante que importa é Q2 (7.5), acima. "Aceitar assento só de espaços": o código de
+      hoje aceita '   ', e isso está correto. Ver avaliacoes_pedidas.assento_em_branco. "Decoder
+      devolvendo o sala com campos extras": não é mutação, é o comportamento atual, herdado de e4.8
+      (M-3 da §11.6.1). Ver E49-REQ-004.
+
+top_issues:
+  - id: 'E49-TST-001'
+    severity: medium
+    category: tests
+    owner: '@po (rota; cabe no escopo de debt.12, só determinism.ts, no mesmo bloco do codec, que é a próxima story a abrir esse bloco depois de e4.3), @dev executa'
+    finding: >-
+      A guarda de snapshotHz cobre a LISTA de casos do AC 10 (ausente, 0, 7, "30"), não os TERMOS do
+      predicado do AC 7 (b), "inteiro positivo que divide 60". Dois dos quatro termos não têm regressão:
+      sem `hz > 0`, -30 passa (Q3, rc=0), e sem `Number.isInteger(hz)`, 7.5 passa (Q2, rc=0). Q3 é a
+      armadilha concreta: como `60 % 0` já dá NaN e o caso 0 continua reprovado, `hz > 0` parece
+      redundante a quem simplificar a expressão, e o sim:check fica verde. Um snapshotHz negativo chegaria
+      à cadência (`60 / snapshotHz`, e4.3/AC 10) e ao buffer do cliente (e4.5/AC 7). O decodificador é a
+      única checagem de runtime da forma desse campo no cliente, e o valor pode vir do override de
+      operação de e4.7/AC 4, sem rebuild. O código de hoje está correto. É a mesma lição de E48-TST-001
+      e DEBT11-TST-001: guarda por caso do AC não é guarda por campo nem por termo.
+    suggested_action: >-
+      Não reprova: a lista literal do AC 10 está 100% na guarda, e o código cumpre o AC 7. Acrescentar à
+      lista `formaRuim` da linha `versão fio`, cada um como a amostra válida com um campo alterado:
+      snapshotHz -30, snapshotHz 7.5 e snapshotHz 120 (que prende o termo do divisor pelo lado de cima).
+      São três linhas numa lista que já existe, e o contador 6/6 passa a 9/9. Contrafactual: Q2 e Q3 com
+      rc=1.
+  - id: 'E49-TST-002'
+    severity: low
+    category: tests
+    owner: '@po (rota, mesmo pacote de E49-TST-001), @dev executa'
+    finding: >-
+      A guarda de assento cobre ausente e '', mas não o termo `typeof assento !== 'string'`. Trocar a
+      checagem por `assento === undefined || assento === ''` (Q5) passa verde, e `assento: 123` entra. O
+      impacto é menor que em E49-TST-001: o cliente reapresentaria o número em `{t:'entrar', assento}`, e o
+      parseDoCliente do servidor recusa assento que não é string (sondado no gate de e4.8). Mesmo assim, o
+      erro apareceria longe da causa.
+    suggested_action: 'Acrescentar `assento: 123` à mesma lista `formaRuim`. Contrafactual: Q5 com rc=1.'
+  - id: 'E49-TST-003'
+    severity: low
+    category: tests
+    owner: '@dev (opcional, quem abrir o bloco a seguir, no mesmo pacote de E49-TST-001)'
+    finding: >-
+      A mensagem de diagnóstico da guarda junta três condições (`'servidor' in e`, `Object.is` e
+      `cliente`) numa só linha. Quando só o `in` falha, ela imprime "servidor undefined (esperado
+      undefined)", o que a Q6b mostrou. Quem ler o ✗ não vê qual condição falhou.
+    suggested_action: 'Quando `!(''servidor'' in e)`, imprimir "sem a propriedade servidor" no lugar do par de valores.'
+  - id: 'E49-REQ-004'
+    severity: low
+    category: requirements
+    owner: '@architect (decide se o fio de descida passa a ser estrito na próxima revisão da §11.6.1; nada a fazer agora)'
+    finding: >-
+      O `{t:'sala'}` que passa pelas três checagens volta por `m as DoServidor`, com campos extras
+      preservados e `jogador`/`estado` sem conferência. Na sonda, `{…válida, extra:'zz', jogador:7}` e
+      `estado:'xx'` são aceitos. Não é defeito desta story: o AC 7 pede três checagens, o comportamento
+      vem de e4.8 (M-3 da §11.6.1), e o emissor é o nosso servidor, cuja forma o `satisfies` da amostra
+      e a guarda de e4.3/AC 11 (e) prendem. Mas a regra "muda a forma de uma variante ⇒ sobe a versão"
+      só é conferida no campo `versao`: um servidor que acrescente um campo sem subir a versão passa
+      calado no cliente.
+    suggested_action: >-
+      Registrar na §11.6.1 que a descida é permissiva de propósito (JSON com nomes degrada com
+      elegância, §5.5), ou decidir por uma checagem estrita de `jogador ∈ {0,1}` e `estado` na lista
+      fechada, junto com a próxima mudança de protocolo. Não bloqueia e4.3.
+
+avaliacoes_pedidas:
+  segundo_import_em_determinism: >-
+    Está dentro do escopo. O AC 12 permite em determinism.ts "o import de VERSAO_DO_FIO de
+    net/protocolo.ts, a amostra `sala` e a guarda desta story". O AC 10 exige conferir que o erro "é"
+    DescompassoDeVersao, e a única forma direta é `instanceof`, que precisa da classe. Então o import da
+    classe é parte da "guarda desta story", e a enumeração do AC 12 fala dos imports de protocolo.ts, não
+    de codec.ts. A seta é a mesma `tools/ → net/`, que já existia para codec.ts. Linha nova no lugar de
+    editar a existente deixa o diff só com acréscimos, o que ajuda na árvore compartilhada com e4.3. Não
+    há lint no projeto que acuse import duplicado do mesmo módulo. Juntar as linhas é cosmético e não vale
+    um achado.
+  asercao_servidor_in: >-
+    Não é achado. A asserção não é tautológica: ela prende a DECLARAÇÃO do campo. Na Q6b (sem `readonly
+    servidor` no corpo e atribuição só se definido), ela acusa, com rc=1 e 2/4. O que ela não pega é a
+    Q6 (atribuição condicional mantendo a declaração), mas a Q6 é um mutante equivalente. Pela semântica
+    de class fields (Node strip-only, e target ES2022 no Vite), a propriedade existe valendo undefined, e
+    nenhum observador distingue os dois programas. Não há o que uma guarda devesse pegar ali. O contrato
+    do AC 7 (a), "o campo existe mesmo valendo undefined", está garantido pela linguagem e pela guarda
+    juntas. O dono da redação da asserção seria o @po (AC 10), e não há nada a mudar. O único resíduo é a
+    mensagem de diagnóstico (E49-TST-003, low, @dev, opcional). O @dev agiu certo ao registrar o limite
+    no Dev Agent Record em vez de enfeitar.
+  vocabulario_fechado: >-
+    Registrado corretamente. O comentário da variante `sala` em protocolo.ts diz "Extensão deliberada do
+    vocabulário fechado (`e4.0`/AC 10)" e cita a §11.6.1 (Decisão 2 e decisão O-1 do @po) como a revisão
+    que o AC exige, além de "Nenhum `t` novo: só campos numa variante existente". T_DO_SERVIDOR, DoCliente
+    e parseDoCliente estão sem linha no diff. O cabeçalho "Vocabulário FECHADO… estender é ato deliberado"
+    da união ficou intocado, o que está certo: a regra continua valendo, e esta é uma instância dela.
+  regra_por_assento: >-
+    Rastreável. O comentário ⚠️ SEGURANÇA na variante `sala` diz "por assento, nunca broadcast", cita
+    e4.3/AC 8 (a mesma regra do visao) e e4.4/AC 7 (segredo válido derruba a conexão antiga), e termina em
+    "Contrato que `net/sala.ts` (`e4.3`) enforca, provado pela guarda de `e4.3`/AC 11 (e)". Conferi
+    e4.3.sala-pura.story.md:225-236. O AC 11 (e), acrescentado em v1.6.0, exige, em toda a Bo5, que todo
+    `{t:'sala'}` saia por assento com o segredo do próprio destinatário e nunca do outro, com `versao ===
+    VERSAO_DO_FIO` e `snapshotHz` igual à configuração, e que seja o primeiro envio a um assento recém
+    assentado. A seção de riscos de e4.3 (:330, :480) repete a regra. Aqui ela é contrato, não
+    implementação, como o AC 8 manda. Ver observacoes (gate de e4.3).
+  commit_pai_d378ca5: >-
+    Inofensivo. `git show --stat d378ca5` lista só duas stories novas (debt.12 e debt.13, +811 linhas em
+    docs/stories). `git diff --stat c5459e0 d378ca5` não tem nada em src/. O código sob o qual 6f2f56c foi
+    feito é o mesmo da pré-condição (HEAD c5459e0, determinism.ts limpo). Rodei a baseline do sim:check
+    exatamente em 6f2f56c^ = d378ca5, e o diff contra 6f2f56c é só a linha nova. O @dev registrou o pai no
+    Dev Agent Record e no Change Log. O mesmo vale para 9ba0657 (@po, validação de debt.12/debt.13),
+    que entrou depois de 502d12b e também é só docs.
+  assento_em_branco: >-
+    [AUTO-DECISION] O decodificador deve rejeitar assento só de espaços? → Não (razão: o assento é segredo
+    opaco gerado pelo servidor, "stream próprio" como o id da sala, e o cliente só o devolve byte a byte.
+    O AC 7 (c) pede "string não vazia", e '   ' é string não vazia. A força do segredo (tamanho,
+    entropia, alfabeto) é propriedade do GERADOR, e4.3/e4.4, não do decodificador de forma. Rejeitar
+    espaços aqui seria critério inventado, contra o Artigo IV. O lugar certo de cobrar é o gate de e4.4,
+    que gera o segredo).
+
+observacoes:
+  - >-
+    O Status estava "Ready for Review", e o canônico de story-lifecycle.md é "InReview". Não afeta o gate.
+    A transição registrada é Ready for Review → Done, como em e4.8.
+  - >-
+    CodeRabbit não roda nesta máquina (WSL). A cobertura veio de check, sim:check e build, da leitura
+    linha a linha do diff dos três arquivos, dos hunks de `git diff -U0` contra os marcadores, de 11
+    sondas diretas no decodificador e de 14 mutações de runtime (as 4 do AC 10 e 10 minhas).
+  - >-
+    Durante o gate apareceram modificações não commitadas em src/tools/guarda-telemetria.ts e
+    src/tools/telemetria.ts, de trabalho paralelo, provavelmente debt.13. Elas não existiam quando rodei
+    check, sim:check e build (`git status --short src` estava vazio), não fazem parte de 6f2f56c e não
+    foram tocadas nem incluídas no commit deste gate.
+  - >-
+    Gate de e4.3: cobrar o AC 11 (e) em execução, e não só o tipo: o `{t:'sala'}` por assento com o
+    segredo do destinatário, o primeiro envio no assentamento e no reassentamento, e `snapshotHz` igual à
+    configuração. A mutação que vale repetir é o `{t:'sala'}` emitido uma vez para os dois assentos com o
+    segredo do assento 0.
+  - >-
+    Gate de e4.5 (lição recorrente de que o call site nunca é testado): o cliente tem de distinguir
+    DescompassoDeVersao de erro comum por `instanceof` e ler `servidor`/`cliente` dos campos para escolher
+    entre "recarregue" e "aguarde o servidor". `servidor === undefined` é "aguarde". Se o call site fizer
+    `catch (e) { mostrar(e.message) }`, os campos que esta story pôs viram decorativos. Cobrar os três
+    ramos (servidor > cliente, servidor < cliente, servidor undefined ou não numérico) no gate de e4.5.
+
+waiver: { active: false }
+updated: '2026-09-21T09:30:00Z'
