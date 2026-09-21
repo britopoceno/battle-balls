@@ -1,4 +1,4 @@
-import type { Ball, World } from '../sim/types.ts'
+import type { BolaVisivel, VisaoDoMundo } from '../net/projecao.ts'
 import { SUDDEN_DEATH_MS } from '../sim/world.ts'
 import { ARENA_H, ARENA_W, botoes, paraTela, transform } from './layout.ts'
 import type { Entrada } from './input.ts'
@@ -18,7 +18,7 @@ const CHAO = '#151a24'
 export interface OpcoesRender {
   entrada: Entrada
   flutuantes: Flutuante[]
-  minhasBolas: Ball[]
+  minhasBolas: BolaVisivel[]
   agora: number
   pausado: boolean
   /**
@@ -41,7 +41,7 @@ export function desenhar(
   g: CanvasRenderingContext2D,
   cw: number,
   ch: number,
-  world: World,
+  world: VisaoDoMundo,
   o: OpcoesRender,
 ): void {
   const t = transform(cw, ch)
@@ -60,7 +60,7 @@ export function desenhar(
 
 // ------------------------------------------------------------------ arena
 
-function desenharArena(g: CanvasRenderingContext2D, t: ReturnType<typeof transform>, world: World) {
+function desenharArena(g: CanvasRenderingContext2D, t: ReturnType<typeof transform>, world: VisaoDoMundo) {
   const pad = world.arena.pad
   const [x0, y0] = paraTela(t, 0, 0)
   g.save()
@@ -94,7 +94,7 @@ function desenharArena(g: CanvasRenderingContext2D, t: ReturnType<typeof transfo
   g.restore()
 }
 
-function desenharZonas(g: CanvasRenderingContext2D, t: ReturnType<typeof transform>, world: World) {
+function desenharZonas(g: CanvasRenderingContext2D, t: ReturnType<typeof transform>, world: VisaoDoMundo) {
   for (const z of world.zones) {
     const [sx, sy] = paraTela(t, z.x, z.y)
     if (z.kind === 'wall') {
@@ -128,7 +128,7 @@ function desenharZonas(g: CanvasRenderingContext2D, t: ReturnType<typeof transfo
   }
 }
 
-function desenharProjeteis(g: CanvasRenderingContext2D, t: ReturnType<typeof transform>, world: World) {
+function desenharProjeteis(g: CanvasRenderingContext2D, t: ReturnType<typeof transform>, world: VisaoDoMundo) {
   for (const p of world.projectiles) {
     const [sx, sy] = paraTela(t, p.x, p.y)
     const [tx, ty] = paraTela(t, p.x - p.vx * 0.035, p.y - p.vy * 0.035)
@@ -152,8 +152,8 @@ function desenharProjeteis(g: CanvasRenderingContext2D, t: ReturnType<typeof tra
 function desenharBola(
   g: CanvasRenderingContext2D,
   t: ReturnType<typeof transform>,
-  world: World,
-  b: Ball,
+  world: VisaoDoMundo,
+  b: BolaVisivel,
   agora: number,
 ) {
   const def = world.chars[b.charId]
@@ -258,7 +258,7 @@ function desenharFlutuantes(
 function desenharMiras(
   g: CanvasRenderingContext2D,
   t: ReturnType<typeof transform>,
-  world: World,
+  world: VisaoDoMundo,
   o: OpcoesRender,
 ) {
   for (const mira of o.entrada.miras.values()) {
@@ -298,7 +298,7 @@ function desenharHud(
   g: CanvasRenderingContext2D,
   cw: number,
   ch: number,
-  world: World,
+  world: VisaoDoMundo,
   o: OpcoesRender,
 ) {
   g.textAlign = 'left'

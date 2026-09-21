@@ -6,17 +6,32 @@ import { dummyCommands } from '../bot/dummy.ts'
 import { botCommands, createBot } from '../bot/heuristic.ts'
 import {
   createWorld,
+  step,
+  TICK_HZ,
   TICK_MS,
   MIN_ABILITY_CD_MS,
   type RoundSetup,
   type PickSetup,
 } from '../sim/world.ts'
 import { SIGMA_MAX } from '../sim/stats.ts'
-import type { Command } from '../sim/types.ts'
+import type { Command, SimEvent, World } from '../sim/types.ts'
+// e4.2 — seta `tools/ → net/`, declarada no AC 11 da story (pedido de emenda do Anexo A de
+// `architecture-e4.md` registrado no Dev Agent Record, para o @architect). É a guarda de
+// ida-e-volta abaixo: provar a serialização inteira sem servidor e sem navegador.
+import { SNAPSHOT_HZ, type EstaticoDaRodada, type Snapshot } from '../net/protocolo.ts'
+import {
+  criarProdutorDeSnapshot,
+  estaticoDaRodada,
+  EPS_ANGULO_RAD,
+  EPS_POSICAO_PX,
+} from '../net/snapshot.ts'
+import { projetar, type VisaoDoMundo } from '../net/projecao.ts'
 // `hash` também mora em `./harness.ts` (AC 4), mas este arquivo o consome apenas através de
 // `RoundResult.hash` — importá-lo aqui só para "cumprir a lista" seria import não usado, e
 // `noUnusedLocals` reprova o `npm run check`. Ver Dev Agent Record da story e2.0.
-import { runRound, type RoundDriver, type RoundResult } from './harness.ts'
+// `e4.2`: a guarda de ida-e-volta do fio passou a usá-lo direto (hash da rodada observada tick a
+// tick contra o hash do arnês), junto com `MAX_ROUND_TICKS` — daí o import agora.
+import { hash, MAX_ROUND_TICKS, runRound, type RoundDriver, type RoundResult } from './harness.ts'
 // Regra 3 de `architecture-e3.md` §2.5 (story `e3.2`): partida Bo5 inteira, invariante M-1 e
 // invariante de economia RF-23. Mora em arquivo próprio porque é uma bateria sobre `match/`, não
 // sobre `sim/` — e porque este arquivo já é o mais longo de `tools/`.
@@ -380,6 +395,337 @@ function guardaBot001(): string[] {
 
 const problemasBot001 = guardaBot001()
 
+// --------------------------------- QA-D8-01 (herdado de debt.8, pago em e4.2) — empate coberto
+
+/**
+ * Asserção ESTRUTURAL, não de valor: o `BASELINE` tem que conter ao menos uma seed de empate. A
+ * cobertura do ramo `winner === -1` já se perdeu uma vez em silêncio (re-baseline de `e3.6`), porque
+ * um baseline sem empate bate consigo mesmo perfeitamente. Com isto, "temos uma seed de empate" deixa
+ * de ser fato histórico e vira invariante conferida a cada `sim:check`.
+ */
+const seedsDeEmpate = BASELINE.filter((b) => b.winner === -1).map((b) => b.seed)
+
+// ----------------------------------- ida-e-volta do fio (e4.2) — World → Snapshot → projeção
+
+/**
+ * Guarda de `e4.2` (AC 4, 5, 7, 9): prova, sem servidor e sem navegador, que o cliente conectado
+ * consegue desenhar a rodada a partir do fio — `projetar(snapshot, estatico, CHARS)` reproduz o `World`
+ * em TODO campo que `client/render.ts` lê (lista fechada do Dev Notes da story), a cada tick.
+ *
+ * Composição e seeds de `architecture-e4.md` §1 (`[golem, vex]` idx 0 dos dois lados, bot heurístico,
+ * seeds 1/1001/2001/3001/379), para que o orçamento de bytes seja comparável ao de §1.2. As ults dessa
+ * composição exercitam Muralha e vórtice, a Lâmina do Vex exercita projétil, e as 5 rodadas passam de
+ * 60s, então a arena encolhe (`pad > 0`) — o canário de cobertura abaixo confere que tudo isso de fato
+ * apareceu, senão a guarda estaria comparando listas vazias e passaria sem provar nada.
+ *
+ * O laço é uma SEGUNDA cópia do de `harness.ts`, porque `runRound` não expõe o mundo a cada tick. A
+ * cópia não pode divergir em silêncio: o hash final da rodada observada tem que ser IGUAL ao do arnês
+ * para a mesma seed e o mesmo driver — o que prova ao mesmo tempo que o laço é o mesmo e que
+ * produzir snapshot não escreve no `World` (AC 2).
+ *
+ * Dois produtores por rodada: um a 60 Hz (fidelidade campo a campo em todo tick, e o orçamento
+ * comparável ao "B/tick" de §1.2) e um na cadência de `SNAPSHOT_HZ` (acumulação de eventos, AC 5, e o
+ * orçamento "como produzido", AC 9). O de cadência emite também no tick final — é o flush de fim de
+ * rodada que o servidor de `e4.4` precisa fazer.
+ */
+const SEEDS_FIO = [1, 1001, 2001, 3001, 379]
+const INTERVALO_SNAPSHOT = TICK_HZ / SNAPSHOT_HZ
+/** §5.1, classe 3 — nomes que NUNCA podem aparecer no JSON do fio (AC 4). */
+const CLASSE_3 = ['memory', 'ax', 'ay', 'contact', 'base', 'bonusPassive', 'bonusItem', 'nextId', 'phase', 'rng', 'chars']
+/** folga de ponto flutuante sobre o meio-passo de quantização; não é banda de tolerância */
+const FOLGA_FP = 1e-9
+const MAX_MENSAGENS_FIO = 12
+
+function chavesDoJson(valor: unknown, acc: Set<string> = new Set()): Set<string> {
+  if (Array.isArray(valor)) {
+    for (const v of valor) chavesDoJson(v, acc)
+  } else if (valor !== null && typeof valor === 'object') {
+    for (const [k, v] of Object.entries(valor)) {
+      acc.add(k)
+      chavesDoJson(v, acc)
+    }
+  }
+  return acc
+}
+
+/** Nomes da classe 3 presentes como CHAVE em qualquer nível do JSON serializado. */
+function vazamentosClasse3(serializado: string): string[] {
+  const chaves = chavesDoJson(JSON.parse(serializado))
+  return CLASSE_3.filter((n) => chaves.has(n))
+}
+
+function bytes(valor: unknown): number {
+  return Buffer.byteLength(JSON.stringify(valor), 'utf8')
+}
+
+interface Achados {
+  fidelidade: string[]
+  tripwire: string[]
+  presenca: string[]
+  totalFidelidade: number
+  totalTripwire: number
+  totalPresenca: number
+}
+
+function anotar(lista: string[], msg: string): void {
+  if (lista.length < MAX_MENSAGENS_FIO) lista.push(msg)
+}
+
+function mesmosIds(rotulo: string, a: { id: number }[], b: { id: number }[]): string | null {
+  const ia = a.map((x) => x.id).join(',')
+  const ib = b.map((x) => x.id).join(',')
+  return ia === ib ? null : `${rotulo}: projeção [${ia}] ≠ World [${ib}]`
+}
+
+/** AC 7 — todo campo da lista fechada do Dev Notes de `e4.2`, e a presença; AC 4 — a tripwire. */
+function compararComMundo(world: World, v: VisaoDoMundo, est: EstaticoDaRodada, seed: number, a: Achados): void {
+  const onde = `seed ${seed} tick ${world.tick}`
+  const falha = (campo: string, proj: unknown, real: unknown) => {
+    a.totalFidelidade++
+    anotar(a.fidelidade, `  ✗ fio ${onde}: ${campo} projeção ${String(proj)} ≠ World ${String(real)}`)
+  }
+  const exato = (campo: string, proj: unknown, real: unknown) => {
+    if (proj !== real) falha(campo, proj, real)
+  }
+  const perto = (campo: string, proj: number, real: number, passo: number) => {
+    if (!(Math.abs(proj - real) <= passo / 2 + FOLGA_FP)) falha(campo, proj, real)
+  }
+
+  exato('time', v.time, world.time)
+  exato('over', v.over, world.over)
+  exato('winner', v.winner, world.winner)
+  exato('arena.w', v.arena.w, world.arena.w)
+  exato('arena.h', v.arena.h, world.arena.h)
+  exato('arena.pad', v.arena.pad, world.arena.pad)
+  if (v.chars !== CHARS) falha('chars', 'outro objeto', 'o CHARS injetado')
+
+  // presença: mesmo número e mesmos `id`, na mesma ordem. Sem ela, o campo a campo abaixo compararia
+  // entidades diferentes, então este tick para aqui.
+  let presencaOk = true
+  for (const erro of [
+    mesmosIds('bolas', v.balls, world.balls),
+    mesmosIds('projéteis', v.projectiles, world.projectiles),
+    mesmosIds('zonas', v.zones, world.zones),
+  ]) {
+    if (erro) {
+      presencaOk = false
+      a.totalPresenca++
+      anotar(a.presenca, `  ✗ fio ${onde}: ${erro}`)
+    }
+  }
+  if (!presencaOk) return
+
+  world.balls.forEach((b, i) => {
+    const p = v.balls[i]
+    const r = `bola ${b.id}`
+    exato(`${r}.charId`, p.charId, b.charId)
+    exato(`${r}.team`, p.team, b.team)
+    perto(`${r}.x`, p.x, b.x, EPS_POSICAO_PX)
+    perto(`${r}.y`, p.y, b.y, EPS_POSICAO_PX)
+    perto(`${r}.facing`, p.facing, b.facing, EPS_ANGULO_RAD)
+    exato(`${r}.hp`, p.hp, b.hp)
+    exato(`${r}.alive`, p.alive, b.alive)
+    exato(`${r}.ultCharge`, p.ultCharge, b.ultCharge)
+    exato(`${r}.ultThreshold`, p.ultThreshold, b.ultThreshold)
+    exato(`${r}.effects[].kind`, p.effects.map((e) => e.kind).join(','), b.effects.map((e) => e.kind).join(','))
+    exato(`${r}.stat.radius`, p.stat.radius, b.stat.radius)
+    exato(`${r}.stat.maxHp`, p.stat.maxHp, b.stat.maxHp)
+    exato(`${r}.abilityReadyAt`, p.abilityReadyAt, b.abilityReadyAt)
+    exato(`${r}.abilityIndex`, p.abilityIndex, b.abilityIndex)
+    if (!CHARS[p.charId]) falha(`${r}: chars[charId]`, 'ausente', p.charId)
+
+    // tripwire (AC 4): estáticos por VERIFICAÇÃO. No dia em que uma passiva mudar raio ou vida máxima
+    // no meio da rodada, isto apita aqui, e não no HP bar do adversário em produção.
+    const s = est.balls.find((e) => e.id === b.id)
+    if (!s || s.stat.maxHp !== b.stat.maxHp || s.stat.radius !== b.stat.radius) {
+      a.totalTripwire++
+      anotar(
+        a.tripwire,
+        `  ✗ tripwire ${onde} bola ${b.id}: World stat.maxHp/radius ${b.stat.maxHp}/${b.stat.radius} ≠ estático ${s?.stat.maxHp}/${s?.stat.radius}`,
+      )
+    }
+  })
+
+  world.projectiles.forEach((q, i) => {
+    const p = v.projectiles[i]
+    const r = `projétil ${q.id}`
+    perto(`${r}.x`, p.x, q.x, EPS_POSICAO_PX)
+    perto(`${r}.y`, p.y, q.y, EPS_POSICAO_PX)
+    exato(`${r}.vx`, p.vx, q.vx)
+    exato(`${r}.vy`, p.vy, q.vy)
+    exato(`${r}.radius`, p.radius, q.radius)
+    exato(`${r}.color`, p.color, q.color)
+  })
+
+  world.zones.forEach((z, i) => {
+    const p = v.zones[i]
+    const r = `zona ${z.id}`
+    exato(`${r}.kind`, p.kind, z.kind)
+    perto(`${r}.x`, p.x, z.x, EPS_POSICAO_PX)
+    perto(`${r}.y`, p.y, z.y, EPS_POSICAO_PX)
+    perto(`${r}.angle`, p.angle, z.angle, EPS_ANGULO_RAD)
+    exato(`${r}.halfLen`, p.halfLen, z.halfLen)
+    exato(`${r}.radius`, p.radius, z.radius)
+    exato(`${r}.pull`, p.pull, z.pull)
+    exato(`${r}.ownerColor`, p.ownerColor, z.ownerColor)
+  })
+}
+
+interface Orcamento {
+  quadro: number[]
+  eventosQuadro: number[]
+  tick60: number[]
+  estatico: number[]
+}
+
+function guardaFio(): { linhas: string[]; problemas: string[] } {
+  const achados: Achados = {
+    fidelidade: [],
+    tripwire: [],
+    presenca: [],
+    totalFidelidade: 0,
+    totalTripwire: 0,
+    totalPresenca: 0,
+  }
+  const problemas: string[] = []
+  const orc: Orcamento = { quadro: [], eventosQuadro: [], tick60: [], estatico: [] }
+  const vazados = new Set<string>()
+  const cobertura = { projeteis: 0, muralhas: 0, vortices: 0, efeitos: 0, mortes: 0, arenaEncolhida: 0 }
+  let ticksTotais = 0
+  let hitsProduzidos = 0
+  let hitsEntregues = 0
+  let eventosProduzidos = 0
+  const tiposDeEvento = new Set<string>()
+  let hashesIguais = 0
+
+  if (!Number.isInteger(INTERVALO_SNAPSHOT)) {
+    problemas.push(`  ✗ fio: TICK_HZ/SNAPSHOT_HZ = ${INTERVALO_SNAPSHOT} não é inteiro — a cadência da guarda não se aplica`)
+    return { linhas: [], problemas }
+  }
+
+  const contarHits = (evs: SimEvent[]) => evs.filter((e) => e.t === 'hit').length
+
+  for (const seed of SEEDS_FIO) {
+    const s = setup(seed)
+    const world = createWorld(CHARS, s)
+    const driver = heuristicDriver(s)
+    const estatico = estaticoDaRodada(world)
+    const jsonEstatico = JSON.stringify(estatico)
+    orc.estatico.push(Buffer.byteLength(jsonEstatico, 'utf8'))
+    for (const n of vazamentosClasse3(jsonEstatico)) vazados.add(`estático:${n}`)
+    if (chavesDoJson(estatico).has('color')) vazados.add('estático:color')
+
+    const porTick = criarProdutorDeSnapshot(world)
+    const naCadencia = criarProdutorDeSnapshot(world)
+    const produzidos: SimEvent[] = []
+    const entregues: SimEvent[] = []
+
+    const conferir = (snap: Snapshot) => {
+      compararComMundo(world, projetar(snap, estatico, CHARS), estatico, seed, achados)
+    }
+    conferir(porTick.snapshot(world)) // tick 0, antes do primeiro step
+
+    while (!world.over && world.tick < MAX_ROUND_TICKS) {
+      step(world, driver(world))
+      produzidos.push(...world.events)
+
+      porTick.observar(world)
+      const snap60 = porTick.snapshot(world)
+      const json60 = JSON.stringify(snap60)
+      orc.tick60.push(Buffer.byteLength(json60, 'utf8'))
+      for (const n of vazamentosClasse3(json60)) vazados.add(`snapshot:${n}`)
+      conferir(snap60)
+
+      naCadencia.observar(world)
+      const fimDaRodada = world.over || world.tick >= MAX_ROUND_TICKS
+      if (world.tick % INTERVALO_SNAPSHOT === 0 || fimDaRodada) {
+        const snap = naCadencia.snapshot(world)
+        const json = JSON.stringify(snap)
+        orc.quadro.push(Buffer.byteLength(json, 'utf8'))
+        orc.eventosQuadro.push(bytes(snap.events))
+        for (const n of vazamentosClasse3(json)) vazados.add(`snapshot:${n}`)
+        entregues.push(...snap.events)
+      }
+
+      if (world.projectiles.length > 0) cobertura.projeteis++
+      if (world.zones.some((z) => z.kind === 'wall')) cobertura.muralhas++
+      if (world.zones.some((z) => z.kind === 'vortex')) cobertura.vortices++
+      if (world.balls.some((b) => b.effects.length > 0)) cobertura.efeitos++
+      if (world.balls.some((b) => !b.alive)) cobertura.mortes++
+      if (world.arena.pad > 0) cobertura.arenaEncolhida++
+    }
+
+    ticksTotais += world.tick
+    hitsProduzidos += contarHits(produzidos)
+    hitsEntregues += contarHits(entregues)
+    eventosProduzidos += produzidos.length
+    for (const e of produzidos) tiposDeEvento.add(e.t)
+    // AC 5 — mais forte que a soma de `hit`: a sequência inteira de eventos, de todos os tipos, na ordem
+    if (JSON.stringify(produzidos) !== JSON.stringify(entregues)) {
+      problemas.push(
+        `  ✗ eventos seed ${seed}: ${produzidos.length} produzido(s) pela rodada, ${entregues.length} nos snapshots a ${SNAPSHOT_HZ} Hz (ou sequência diferente)`,
+      )
+    }
+
+    const hashArnes = runRound(CHARS, s, heuristicDriver).hash
+    if (hash(world) === hashArnes) hashesIguais++
+    else {
+      problemas.push(
+        `  ✗ fio seed ${seed}: hash da rodada observada ${hash(world)} ≠ arnês ${hashArnes} — o laço da guarda divergiu de harness.ts, ou produzir snapshot escreveu no World`,
+      )
+    }
+
+    // o contrato do acumulador falha alto: observar o mesmo tick de novo tem que lançar
+    let lancou = false
+    try {
+      naCadencia.observar(world)
+    } catch {
+      lancou = true
+    }
+    if (!lancou) problemas.push(`  ✗ fio seed ${seed}: observar() duas vezes no mesmo tick não lançou — eventos duplicariam`)
+  }
+
+  // canário do detector de classe 3: no `World` do motor ele TEM que acusar os nomes (menos `rng`,
+  // que é função e não serializa). Se não acusar, a checagem de vazamento acima morreu em silêncio.
+  const mundoCru = createWorld(CHARS, setup(SEEDS_FIO[0]))
+  const acusados = vazamentosClasse3(JSON.stringify(mundoCru))
+  const esperadosNoCanario = CLASSE_3.filter((n) => n !== 'rng')
+  const faltandoNoCanario = esperadosNoCanario.filter((n) => !acusados.includes(n))
+  if (faltandoNoCanario.length) {
+    problemas.push(`  ✗ classe 3: o detector não acusa [${faltandoNoCanario.join(', ')}] nem no World do motor — perdeu poder discriminante`)
+  }
+  if (vazados.size) problemas.push(`  ✗ classe 3 vazou no fio: ${[...vazados].join(', ')}`)
+
+  const semCobertura = Object.entries(cobertura).filter(([, n]) => n === 0).map(([k]) => k)
+  if (semCobertura.length) {
+    problemas.push(`  ✗ fio: canário de cobertura — nenhum tick com [${semCobertura.join(', ')}]; a guarda compararia listas vazias`)
+  }
+  if (hitsProduzidos === 0) problemas.push('  ✗ fio: canário — nenhum evento hit nas rodadas; o teste do AC 5 não mede nada')
+
+  problemas.push(...achados.presenca, ...achados.fidelidade, ...achados.tripwire)
+  if (achados.totalPresenca + achados.totalFidelidade + achados.totalTripwire > 0) {
+    problemas.push(
+      `  ✗ fio: ${achados.totalPresenca} divergência(s) de presença, ${achados.totalFidelidade} de campo, ${achados.totalTripwire} de tripwire (mostradas até ${MAX_MENSAGENS_FIO} de cada)`,
+    )
+  }
+
+  const media = (xs: number[]) => xs.reduce((t, x) => t + x, 0) / xs.length
+  const pico = (xs: number[]) => Math.max(...xs)
+  const f1 = (x: number) => x.toFixed(1)
+  const linhas = [
+    `fio snapshot   ${problemas.length === 0 ? '✓ ok' : '✗ falhou'} — ${SEEDS_FIO.length} rodadas (heuristic), ${ticksTotais} ticks: projetar(snapshot) bate o World em todo campo que render.ts lê, com presença e ids iguais (ε ${EPS_POSICAO_PX} px · ${EPS_ANGULO_RAD} rad)`,
+    `  tripwire estático ${achados.totalTripwire === 0 ? '✓' : '✗'} stat.maxHp/stat.radius do World = EstaticoDaRodada em todo tick`,
+    `  eventos      ${hitsProduzidos === hitsEntregues ? '✓' : '✗'} ${hitsProduzidos} hit produzidos ${hitsProduzidos === hitsEntregues ? '=' : '≠'} ${hitsEntregues} nos snapshots a ${SNAPSHOT_HZ} Hz · ${eventosProduzidos} eventos de ${tiposDeEvento.size} tipos [${[...tiposDeEvento].sort().join(',')}], sequência idêntica`,
+    `  classe 3     ${vazados.size === 0 && faltandoNoCanario.length === 0 ? '✓' : '✗'} nenhum nome no JSON do fio · o detector acusa ${acusados.length}/${esperadosNoCanario.length} no World do motor (rng não serializa)`,
+    `  hash         ${hashesIguais === SEEDS_FIO.length ? '✓' : '✗'} observar a rodada não a altera (${hashesIguais}/${SEEDS_FIO.length} hashes = arnês)`,
+    `  orçamento    ${SNAPSHOT_HZ} Hz: média ${f1(media(orc.quadro))} B/quadro (${f1(media(orc.quadro) / INTERVALO_SNAPSHOT)} B/tick) · pico ${pico(orc.quadro)} B · dos quais events: média ${f1(media(orc.eventosQuadro))} B, pico ${pico(orc.eventosQuadro)} B`,
+    `               60 Hz, 1 snapshot/tick: média ${f1(media(orc.tick60))} B/tick · pico ${pico(orc.tick60)} B · estático ${pico(orc.estatico)} B uma vez por rodada (JSON com nomes de campo; §1.2 mediu 263/433 B sem eles)`,
+  ]
+  return { linhas, problemas }
+}
+
+const { linhas: linhasFio, problemas: problemasFio } = guardaFio()
+
 // ---------------------------------------------- Pilar 3 (debt.6) — Camada 1: estática
 
 /**
@@ -525,6 +871,9 @@ if (desvios.length) for (const d of desvios) console.log(d)
 console.log(
   `golden hash    ${desvios.length === 0 ? `✓ ok — ${BASELINE.length} seeds batem o baseline` : `✗ ${desvios.length} desvio(s)`}`,
 )
+console.log(
+  `empate coberto ${seedsDeEmpate.length > 0 ? `✓ ok — BASELINE contém winner === -1 (seed ${seedsDeEmpate.join(', ')}) · QA-D8-01` : '✗ BASELINE sem nenhuma seed de empate (QA-D8-01)'}`,
+)
 if (desviosBuild.length) for (const d of desviosBuild) console.log(d)
 console.log(
   `build coverage ${desviosBuild.length === 0 ? `✓ ok — ${BUILD_BASELINE.length} variantes batem` : `✗ ${desviosBuild.length} desvio(s)`}`,
@@ -547,6 +896,8 @@ if (problemasBot001.length) for (const p of problemasBot001) console.log(p)
 console.log(
   `guarda BOT-001 ${problemasBot001.length === 0 ? '✓ ok — VE = NaN não casta (limiar no sentido positivo)' : `✗ ${problemasBot001.length} problema(s)`}`,
 )
+for (const linha of linhasFio) console.log(linha)
+if (problemasFio.length) for (const p of problemasFio) console.log(p)
 console.log('')
 for (const linha of linhasPartida) console.log(linha)
 console.log('')
@@ -564,6 +915,13 @@ if (desvios.length > 0) {
     `comportamento divergiu do baseline em ${desvios.length} campo(s). ` +
       'Os passos 1 a 7 da migração (docs/architecture.md §6.1) exigem hash IDÊNTICO. ' +
       'Se a mudança foi intencional, o novo baseline precisa de justificativa no commit.',
+  )
+}
+if (seedsDeEmpate.length === 0) {
+  throw new Error(
+    'QA-D8-01: o BASELINE não contém nenhuma seed com winner === -1 — o ramo de empate de ' +
+      '`checkEnd` ficou sem cobertura de regressão (mesmo defeito que `debt.8` corrigiu). ' +
+      'Re-fixar uma seed de empate por BUSCA, como a 379 foi achada.',
   )
 }
 if (desviosBuild.length > 0) {
@@ -608,6 +966,14 @@ if (problemasPartida.length > 0) {
       'aplicando decisão pela metade em vez de rejeitar com `erro`; `setupDaRodada` lendo algo que ' +
       'não veio do estado; BotState reusado entre rodadas (M-1); ou crédito de ouro por vitória ' +
       '(RF-23).',
+  )
+}
+if (problemasFio.length > 0) {
+  throw new Error(
+    `guarda de ida-e-volta do fio (e4.2) falhou em ${problemasFio.length} ponto(s) — ver acima. ` +
+      'Suspeitos: campo que render.ts lê e net/snapshot.ts não produz (ou produz fora do ε declarado); ' +
+      'evento descartado entre snapshots (AC 5); nome da classe 3 no JSON do fio (AC 4); passiva ' +
+      'mudando stat.maxHp/stat.radius no meio da rodada (tripwire — reclassificar o campo, não silenciar).',
   )
 }
 if (problemasBot001.length > 0) {
