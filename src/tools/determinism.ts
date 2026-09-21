@@ -1621,6 +1621,10 @@ interface ConferenciaDeEnvios {
   assentamentos: number
   visoes: number
   pelaFronteira: number
+  /** debt.14, AC 4 — passos em que a `partida` mudou de identidade com a sala `jogando` */
+  transicoes: number
+  /** debt.14, AC 4 — rodadas fechadas com `rodadaFim`/`rodadaInicio` conferidos por assento */
+  rodadasFechadas: number
 }
 
 /** Toda chamada a `passo()` da guarda passa por aqui, e o AC 11 (e) e o AC 8 são conferidos em TODO passo. */
@@ -1630,13 +1634,64 @@ interface Condutor {
   rotulo: string
   problemas: string[]
   conf: ConferenciaDeEnvios
+  /** debt.14, AC 4 — a rodada em curso já vista, e quantos `rodadaInicio` cada assento recebeu nela */
+  rodadaVista: RodadaEmCurso | null
+  inicios: Map<string, number>
 }
 
 function novoCondutor(sala: Sala, rotulo: string, problemas: string[]): Condutor {
-  return { sala, hz: sala.config.snapshotHz, rotulo, problemas, conf: { salas: 0, assentamentos: 0, visoes: 0, pelaFronteira: 0 } }
+  return {
+    sala, hz: sala.config.snapshotHz, rotulo, problemas,
+    conf: { salas: 0, assentamentos: 0, visoes: 0, pelaFronteira: 0, transicoes: 0, rodadasFechadas: 0 },
+    rodadaVista: null, inicios: new Map(),
+  }
+}
+
+/**
+ * `debt.14`, AC 4 (`E43-TST-002`) — a COBERTURA da entrega, não só a projeção de quem recebeu. Conta os envios
+ * do passo POR TIPO e por assento (nunca a lista completa: `e4.10` acrescenta `{t:'evento'}` depois das visões):
+ *  - passo em que `partida` muda de identidade e a sala termina `jogando` → pelo menos um `{t:'visao'}` a cada
+ *    assento conectado (a queda no draft devolve a sala a `aguardando`, §6, e fica fora pela condição);
+ *  - passo que fecha rodada → exatamente um `rodadaFim` por rodada fechada a cada assento conectado, nenhum ao
+ *    vago (R-02), e pelo menos um `rodadaInicio` na rodada a cada assento conectado (o reassentado recebe dois).
+ */
+function conferirCobertura(c: Condutor, antes: Sala, porTipo: Map<string, Map<string, number>>, falha: (m: string) => void): void {
+  const s = c.sala
+  const conta = (k: string, t: string) => porTipo.get(k)?.get(t) ?? 0
+  if (s.partida !== antes.partida && s.fase === 'jogando') {
+    c.conf.transicoes++
+    for (const j of JOGADORES_SALA) {
+      const k = s.assentos[j]
+      if (k !== null && s.conectados[j] && conta(k, 'visao') === 0) {
+        falha(`a partida mudou (fase ${s.partida.fase}) e o assento conectado do jogador ${j} não recebeu {t:'visao'} no passo (debt.14 AC 4)`)
+      }
+    }
+  }
+  if (s.rodada !== null && s.rodada !== c.rodadaVista) {
+    c.rodadaVista = s.rodada
+    c.inicios = new Map()
+  }
+  for (const [k, m] of porTipo) {
+    const n = m.get('rodadaInicio') ?? 0
+    if (n > 0) c.inicios.set(k, (c.inicios.get(k) ?? 0) + n)
+  }
+  const fechadas = Math.max(0, s.partida.historico.length - antes.partida.historico.length)
+  for (const j of JOGADORES_SALA) {
+    const k = s.assentos[j]
+    if (k === null) continue
+    const esperado = s.conectados[j] ? fechadas : 0
+    if (conta(k, 'rodadaFim') !== esperado) {
+      falha(`${conta(k, 'rodadaFim')} rodadaFim ao assento do jogador ${j} (${s.conectados[j] ? 'conectado' : 'vago'}) num passo que fechou ${fechadas} rodada(s), esperado ${esperado} (debt.14 AC 4)`)
+    }
+    if (fechadas > 0 && s.conectados[j] && (c.inicios.get(k) ?? 0) < 1) {
+      falha(`rodada fechada sem nenhum rodadaInicio ao assento conectado do jogador ${j} (debt.14 AC 4)`)
+    }
+  }
+  c.conf.rodadasFechadas += fechadas
 }
 
 function conduzir(c: Condutor, agora: number, entrada: EntradaDaSala[]): Envio[] {
+  const antes = c.sala
   const r = passo(c.sala, agora, entrada)
   c.sala = r.sala
   const s = r.sala
@@ -1650,7 +1705,11 @@ function conduzir(c: Condutor, agora: number, entrada: EntradaDaSala[]): Envio[]
   c.conf.assentamentos += aguardando.size
   const salasVistas = new Set<DoServidor>()
   const ultimaVisao = new Map<string, VisaoPartida>()
+  const porTipo = new Map<string, Map<string, number>>()
   for (const { assento, msg } of r.envios) {
+    const m = porTipo.get(assento) ?? new Map<string, number>()
+    m.set(msg.t, (m.get(msg.t) ?? 0) + 1)
+    porTipo.set(assento, m)
     if (aguardando.has(assento)) {
       if (msg.t !== 'sala') falha(`primeiro envio ao assento recém-assentado '${assento}' foi {t:'${msg.t}'}, não {t:'sala'} (AC 11 e)`)
       aguardando.delete(assento)
@@ -1679,6 +1738,7 @@ function conduzir(c: Condutor, agora: number, entrada: EntradaDaSala[]): Envio[]
       falha(`{t:'visao'} endereçado a '${assento}' não é visaoPara(estado, jogador ${j}) — broadcast ou projeção alheia (AC 8)`)
     }
   }
+  conferirCobertura(c, antes, porTipo, falha)
   return r.envios
 }
 
@@ -2170,6 +2230,190 @@ function salaNegativos(problemas: string[]): { linha: string; conf: ConferenciaD
   return { linha, conf: confs }
 }
 
+/**
+ * `debt.14` — o que a Bo5 não pode exercitar sem mudar a partida comparada com o arnês, em salas descartáveis:
+ *  - AC 3 (`E43-TST-001`): a recusa de `d.jogador` alheio para `build`, `buildPadrao` e `pronto` (na única janela
+ *    de `builds`, a que o draft abre) e para `compra`, `trocaDeBuild` e `pronto` (na primeira `loja` em que
+ *    `aplicar()` aceita a compra e a troca — escolhida pelo PREDICADO, não por índice, porque a economia é D-09,
+ *    provisória). Cada caso só vale se `aplicar()` aceitaria a decisão naquele estado, e tem o controle positivo:
+ *    a MESMA decisão, do assento dono, é aceita. Compra e troca vão em jogadores diferentes (uma consome o ouro
+ *    que a outra precisaria);
+ *  - AC 5 (`E43-TST-003`): (i) teto de ticks pequeno — snap final no tick do teto, com `over:false`, e
+ *    `rodadaFim` com `ticks === tetoDeTicks`; (ii) reassentamento em `builds` → `{t:'prazo'}` com o restante;
+ *    (iii) queda em `builds` (nos primeiros 10 s, antes de o prazo de R-02 alcançar o de RF-04) e na `loja`
+ *    abrindo a pausa por conta própria, com o W.O. da fase no estouro.
+ */
+function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas: string; conf: ConferenciaDeEnvios[] } {
+  const falha = (m: string) => anotar(problemas, `  ✗ sala debt.14: ${m}`)
+  const [K0, K1] = CHAVES_SALA
+  const confs: ConferenciaDeEnvios[] = []
+  const TETO = 30
+  const nova = (rotulo: string, config: Partial<ConfigDaSala>) => {
+    const c = novoCondutor(criarSala({ id: `guarda-debt.14-${rotulo}`, seed: 777, pool: POOL_SALA, chars: CHARS, hashDoMundo: hash, config }), rotulo, problemas)
+    confs.push(c.conf)
+    return c
+  }
+  const decidirPor = (c: Condutor, chave: string, d: Decisao, agora: number) => conduzir(c, agora, pelaFronteira(c, chave, { t: 'decisao', d }))
+  /** assenta os dois e faz o draft pelas decisões de cada dono: a sala sai em `builds`, com o prazo de RF-04 correndo */
+  const ateBuilds = (c: Condutor, agora: number) => {
+    conduzir(c, agora, [{ assento: K0, conexao: 'assentou' }])
+    conduzir(c, agora, [{ assento: K1, conexao: 'assentou' }])
+    const draft: Decisao[] = [
+      { t: 'draft', jogador: 0, charId: 'golem' },
+      { t: 'draft', jogador: 1, charId: 'golem' },
+      { t: 'draft', jogador: 1, charId: 'vex' },
+      { t: 'draft', jogador: 0, charId: 'vex' },
+    ]
+    for (const d of draft) decidirPor(c, CHAVES_SALA[d.jogador], d, agora)
+    if (c.sala.partida.fase !== 'builds' || c.sala.prazoDeBuilds === null) falha(`o draft não abriu a fase builds com prazo em '${c.rotulo}'`)
+  }
+  /** AC 3 — recusa pelo assento alheio (1 {t:'erro'} só a ele, estado intacto, log intacto) e controle positivo */
+  const aceitas: string[] = []
+  const recusaEControle = (c: Condutor, d: Decisao, agora: number): void => {
+    const dono = CHAVES_SALA[d.jogador]
+    const alheio = CHAVES_SALA[d.jogador === 0 ? 1 : 0]
+    const p = c.sala.partida
+    const nLog = c.sala.decisoes.length
+    const oraculo = aplicar(p, d).erro
+    if (oraculo !== undefined) {
+      falha(`${d.t}/j${d.jogador} num momento em que aplicar() já recusaria (${oraculo}) — o caso não testaria a checagem da sala (AC 3)`)
+      return
+    }
+    const env = decidirPor(c, alheio, d, agora)
+    if (c.sala.partida !== p || c.sala.decisoes.length !== nLog) {
+      falha(`${d.t} em nome do jogador ${d.jogador} vinda do assento do outro chegou a aplicar() / mudou o estado (AC 3)`)
+      return
+    }
+    if (env.length !== 1 || env[0].msg.t !== 'erro' || env[0].assento !== alheio) {
+      falha(`${d.t} com d.jogador alheio: esperado 1 {t:'erro'} só ao remetente, veio ${JSON.stringify(env.map((e) => [e.assento, e.msg.t]))} (AC 3)`)
+      return
+    }
+    const env2 = decidirPor(c, dono, d, agora)
+    if (c.sala.partida === p || errosPara(env2).length !== 0 || c.sala.decisoes.length !== nLog + 1) {
+      falha(`controle positivo: ${d.t}/j${d.jogador} do assento DONO não foi aceita (partida ${c.sala.partida === p ? 'intacta' : 'mudou'}, ${errosPara(env2).length} erro(s)) (AC 3)`)
+      return
+    }
+    aceitas.push(d.t)
+  }
+
+  // ---- AC 3, fase builds (a única janela): build e buildPadrao do jogador 1, depois pronto do 0 abre a rodada 0
+  const v = nova('variantes', { tetoDeTicks: TETO })
+  let agora = T0_SALA
+  ateBuilds(v, agora)
+  agora += 100
+  recusaEControle(v, { t: 'build', jogador: 1, slot: 0, abilityIndex: 1, passiveIndex: 1 }, agora)
+  recusaEControle(v, { t: 'buildPadrao', jogador: 1 }, agora)
+  recusaEControle(v, { t: 'pronto', jogador: 0 }, agora)
+  const prazoRf04 = v.sala.config.prazoDeBuildsMs
+  if (agora - T0_SALA >= prazoRf04) falha('os casos de builds rodaram depois do prazo de RF-04 (AC 3)')
+
+  // ---- AC 5 (i): a rodada 0 vai até o teto; snap final no tick do teto (over:false) e rodadaFim com ticks = teto
+  let tetoTxt = 'teto ✗'
+  const r0 = v.sala.rodada
+  if (r0 === null) falha('builds encerrada e a rodada 0 não abriu na sala de variantes')
+  else {
+    agora = agoraDoTick(r0, TETO)
+    const env = conduzir(v, agora, [])
+    const iSnap = env.map((e) => e.assento === K0 && e.msg.t === 'snap').lastIndexOf(true)
+    const iFim = env.findIndex((e) => e.assento === K0 && e.msg.t === 'rodadaFim')
+    const snapFinal = iSnap >= 0 ? env[iSnap].msg : null
+    const fins = env.filter((e) => e.msg.t === 'rodadaFim').map((e) => (e.msg.t === 'rodadaFim' ? e.msg.resultado.ticks : -1))
+    const ok =
+      v.sala.rodada === null && snapFinal !== null && snapFinal.t === 'snap' && tickDoSnap(snapFinal.s) === TETO && !snapFinal.s.over &&
+      iSnap < iFim && fins.length === 2 && fins.every((t) => t === TETO) && v.sala.partida.historico[0]?.ticks === TETO
+    if (!ok) {
+      falha(
+        `teto de ${TETO} ticks: rodada ${v.sala.rodada === null ? 'fechada' : `aberta no tick ${r0.world.tick}`}, snap final ` +
+          `${snapFinal?.t === 'snap' ? `no tick ${tickDoSnap(snapFinal.s)} over:${snapFinal.s.over}` : 'ausente'} (índice ${iSnap}), ` +
+          `rodadaFim ${JSON.stringify(fins)} (índice ${iFim}) (AC 5 i)`,
+      )
+    } else tetoTxt = `teto de ${TETO} ticks: snap final no tick ${TETO} (over:false) antes do rodadaFim com ticks ${TETO}, aos 2 assentos`
+  }
+
+  // ---- AC 3, fase loja: a primeira loja em que aplicar() aceita a compra do jogador 1 E a troca do jogador 0
+  const compra: Decisao = { t: 'compra', jogador: 1, slot: 0, itemId: 'chumbo' }
+  const troca: Decisao = { t: 'trocaDeBuild', jogador: 0, slot: 0, abilityIndex: 1, passiveIndex: 0 }
+  const aceitaria = (d: Decisao) => aplicar(v.sala.partida, d).erro === undefined
+  let lojas = 0
+  for (let volta = 0; volta < 12; volta++) {
+    const p = v.sala.partida
+    if (p.fase === 'loja') {
+      lojas++
+      if (aceitaria(compra) && aceitaria(troca)) break
+      agora += 100
+      for (const j of JOGADORES_SALA) decidirPor(v, CHAVES_SALA[j], { t: 'pronto', jogador: j }, agora)
+    } else if (p.fase === 'rodada' && v.sala.rodada !== null) {
+      agora = agoraDoTick(v.sala.rodada, TETO)
+      conduzir(v, agora, [])
+    } else break
+  }
+  const ouro = v.sala.partida.jogadores.map((x) => x.ouro).join(',')
+  if (v.sala.partida.fase !== 'loja' || !aceitaria(compra) || !aceitaria(troca)) {
+    falha(`nenhuma loja alcançável em que aplicar() aceite compra e trocaDeBuild (fase ${v.sala.partida.fase}, ouro [${ouro}]) — escalar ao @po (AC 3)`)
+  } else {
+    agora += 100
+    recusaEControle(v, compra, agora)
+    recusaEControle(v, troca, agora)
+    recusaEControle(v, { t: 'pronto', jogador: 1 }, agora)
+  }
+
+  // ---- AC 5 (iii), loja: sem pausa anterior, o jogador 0 (não pronto) cai; a queda abre a pausa sozinha, e no
+  // estouro de R-02 o ausente recebe {t:'pronto'} (a rodada seguinte abre, com a pausa renovada)
+  const prazoR02 = v.sala.config.desconexao.prazoMs
+  let lojaTxt = 'loja ✗'
+  const pronta = (c: Condutor) => c.sala.partida.fase === 'loja' && c.sala.pausa === null && !c.sala.partida.prontos[0] && c.sala.partida.prontos[1]
+  if (pronta(v)) {
+    agora += 100
+    conduzir(v, agora, [{ assento: K0, conexao: 'caiu' }])
+    const abriu = v.sala.pausa?.desde === agora
+    const pLoja = v.sala.partida
+    conduzir(v, agora + prazoR02 - 1, [])
+    const antesDoPrazo = v.sala.partida === pLoja
+    agora += prazoR02
+    conduzir(v, agora, [])
+    const ult = v.sala.decisoes[v.sala.decisoes.length - 1]
+    const woOk = ult?.t === 'pronto' && ult.jogador === 0 && v.sala.partida.fase === 'rodada' && v.sala.pausa?.desde === agora
+    if (!abriu || !antesDoPrazo || !woOk) {
+      falha(`queda na loja: pausa aberta pela queda ${abriu}, estado intacto antes do prazo ${antesDoPrazo}, W.O. ${JSON.stringify(ult)} fase ${v.sala.partida.fase} pausa ${v.sala.pausa?.desde} (AC 5 iii)`)
+    } else lojaTxt = 'loja → W.O. pronto do ausente'
+  } else falha(`a sala de variantes não chegou à loja pronta para a queda (fase ${v.sala.partida.fase}, pausa ${v.sala.pausa !== null}) (AC 5 iii)`)
+
+  // ---- AC 5 (iii) builds + (ii): queda 2 s depois de builds abrir (antes dos 10 s em que R-02 alcança RF-04),
+  // W.O. buildPadrao do ausente no estouro da pausa, e o reassentamento ainda em builds recebe o prazo RESTANTE
+  const b = nova('builds', {})
+  const t0 = T0_SALA
+  ateBuilds(b, t0)
+  const prazoB = b.sala.prazoDeBuilds ?? t0
+  let buildsTxt = 'builds ✗'
+  let prazoTxt = 'prazo ✗'
+  const tQueda = t0 + 2_000
+  if (prazoB - tQueda <= prazoR02) falha(`a queda em builds a ${tQueda - t0} ms não deixa o prazo de R-02 estourar antes do de RF-04 (AC 5 iii)`)
+  conduzir(b, tQueda, [{ assento: K1, conexao: 'caiu' }])
+  const abriuB = b.sala.pausa?.desde === tQueda
+  const pB = b.sala.partida
+  conduzir(b, tQueda + prazoR02 - 1, [])
+  const intactoB = b.sala.partida === pB
+  const tWo = tQueda + prazoR02
+  conduzir(b, tWo, [])
+  const ultB = b.sala.decisoes[b.sala.decisoes.length - 1]
+  const woB = ultB?.t === 'buildPadrao' && ultB.jogador === 1 && b.sala.partida.fase === 'builds' && b.sala.partida.prontos[1] && !b.sala.partida.prontos[0] && tWo < prazoB
+  if (!abriuB || !intactoB || !woB) {
+    falha(`queda em builds: pausa aberta pela queda ${abriuB}, estado intacto antes do prazo ${intactoB}, W.O. ${JSON.stringify(ultB)} fase ${b.sala.partida.fase} (AC 5 iii)`)
+  } else buildsTxt = `builds (queda a ${tQueda - t0} ms) → W.O. buildPadrao do ausente a ${tWo - t0} ms, antes do RF-04`
+  const tVolta = t0 + 25_000
+  const envVolta = conduzir(b, tVolta, [{ assento: K1, conexao: 'assentou' }])
+  const prazos = envVolta.filter((e) => e.assento === K1 && e.msg.t === 'prazo').map((e) => (e.msg.t === 'prazo' ? e.msg.terminaEmMs : -1))
+  const restante = prazoB - tVolta
+  if (b.sala.partida.fase !== 'builds' || prazos.length !== 1 || prazos[0] !== restante) {
+    falha(`reassentamento em builds a ${tVolta - t0} ms: {t:'prazo'} ao reassentado [${prazos.join(',')}], esperado exatamente um com o restante ${restante} ms (AC 5 ii)`)
+  } else prazoTxt = `reassentamento em builds a ${tVolta - t0} ms → 1 {t:'prazo'} com o restante (${restante} ms)`
+
+  const variantes = `d.jogador alheio recusado com 1 {t:'erro'} só ao remetente, estado e log intactos, num estado em que aplicar() aceitaria, ` +
+    `com controle positivo do assento dono: ${aceitas.join(', ')} (${aceitas.length}/6 casos; compra e trocaDeBuild na ${lojas}ª loja, ouro [${ouro}], sala descartável) · draft na Bo5`
+  const bordas = `${tetoTxt} · ${prazoTxt} · queda sem pausa anterior abre a pausa sozinha: ${buildsTxt}; ${lojaTxt}`
+  return { variantes, bordas, conf: confs }
+}
+
 function guardaSala(): { linhas: string[]; problemas: string[] } {
   const problemas: string[] = []
   const linhas: string[] = []
@@ -2199,7 +2443,8 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
   const b = bo5PelaSala(gravada, problemas)
   const nProblemasBo5 = problemas.length
   const neg = salaNegativos(problemas)
-  const confs = [b.conf, ...neg.conf]
+  const vb = salaVariantesEBordas(problemas)
+  const confs = [b.conf, ...neg.conf, ...vb.conf]
   const soma = (k: keyof ConferenciaDeEnvios) => confs.reduce((s, x) => s + x[k], 0)
   const ok = (n: number) => (problemas.length === 0 && n === 0 ? '✓' : '✗')
   linhas.push(
@@ -2214,6 +2459,10 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
     `  autoridade   ${ok(nProblemasBo5)} decisão com d.jogador alheio recusada só ao remetente, estado intacto (AC 16) · cast de bola morta descartado · ${soma('pelaFronteira')} mensagens pela fronteira ` +
       '(parseDoCliente(JSON.parse(JSON.stringify(msg))), AC 16)',
     neg.linha,
+    `  variantes    ${ok(0)} ${vb.variantes} (debt.14, E43-TST-001)`,
+    `  cobertura    ${ok(0)} ${soma('transicoes')} transição(ões) de partida com a sala jogando → ≥1 {t:'visao'} a cada assento conectado · ${soma('rodadasFechadas')} rodada(s) fechada(s): ` +
+      "1 rodadaFim a cada assento conectado e nenhum ao vago, ≥1 rodadaInicio na rodada (reassentado: o da largada + o da volta) · queda no draft → só {t:'sala'} (§6) · contagem por tipo e por assento (debt.14, E43-TST-002)",
+    `  bordas       ${ok(0)} ${vb.bordas} (debt.14, E43-TST-003)`,
   )
   return { linhas, problemas }
 }
