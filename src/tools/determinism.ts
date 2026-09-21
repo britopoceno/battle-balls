@@ -18,7 +18,11 @@ import type { Command, SimEvent, World } from '../sim/types.ts'
 // e4.2 — seta `tools/ → net/`, declarada no AC 11 da story (pedido de emenda do Anexo A de
 // `architecture-e4.md` registrado no Dev Agent Record, para o @architect). É a guarda de
 // ida-e-volta abaixo: provar a serialização inteira sem servidor e sem navegador.
-import { SNAPSHOT_HZ, type EstaticoDaRodada, type Snapshot } from '../net/protocolo.ts'
+import { SNAPSHOT_HZ, type DoServidor, type EstaticoDaRodada, type Snapshot } from '../net/protocolo.ts'
+// e4.8 — o codec do fio (AC 4, 5, 6). Mesma seta `tools/ → net/` de `e4.2`; `match/` entra para produzir
+// uma `VisaoPartida` real para a ida-e-volta das variantes não-`snap` (AC 5 (d)).
+import { codificarDoServidor, decodificarDoServidor, parseDoCliente } from '../net/codec.ts'
+import { aplicar, criarPartida, visaoPara } from '../match/index.ts'
 import {
   criarProdutorDeSnapshot,
   estaticoDaRodada,
@@ -201,13 +205,17 @@ for (const esperado of BASELINE) {
 
 // ------------------------------------------------------ cobertura de build
 
+/** O time de uma variante de `BUILD_BASELINE` — usado aqui e na guarda do fio (`e4.8`, AC 6 (a)). */
+function timeDaVariante(v: (typeof BUILD_BASELINE)[number]): PickSetup[] {
+  return [
+    { charId: 'golem', abilityIndex: v.golemAbility, passiveIndex: v.golemPassive },
+    { charId: 'vex', abilityIndex: v.vexAbility, passiveIndex: v.vexPassive },
+  ]
+}
+
 const desviosBuild: string[] = []
 for (const esperado of BUILD_BASELINE) {
-  const team: PickSetup[] = [
-    { charId: 'golem', abilityIndex: esperado.golemAbility, passiveIndex: esperado.golemPassive },
-    { charId: 'vex', abilityIndex: esperado.vexAbility, passiveIndex: esperado.vexPassive },
-  ]
-  const obtido = rodar(esperado.seed, team)
+  const obtido = rodar(esperado.seed, timeDaVariante(esperado))
   const campos: [string, string | number, string | number][] = [
     ['hash', esperado.hash, obtido.hash],
     ['ticks', esperado.ticks, obtido.ticks],
@@ -578,7 +586,163 @@ interface Orcamento {
   estatico: number[]
 }
 
-function guardaFio(): { linhas: string[]; problemas: string[] } {
+/**
+ * `e4.8`, AC 6 (a) — as rodadas que a guarda do fio observa. As 5 da §1 (`referencia`, bot heurístico)
+ * são as de sempre, e só elas alimentam as linhas de contagem e de orçamento já impressas por `e4.2`,
+ * que por isso não mudam. As 5 variantes de `BUILD_BASELINE` entram com a seed e o driver congelado da
+ * própria variante — é a MESMA rodada que o bloco "cobertura de build" acima já roda, agora observada
+ * tick a tick. Sem elas a guarda era cega à 2ª ativa e à 2ª passiva de cada personagem (E42-TST-003:
+ * as mutações Q1 e Q3 do gate de `e4.2` passavam verdes). O hash de cada uma é comparado com o do arnês
+ * NA MESMA EXECUÇÃO, nunca com o número congelado da tabela (AC 6 (d)).
+ */
+interface RodadaDoFio {
+  rotulo: string
+  seed: number
+  team: PickSetup[]
+  driver: RoundDriver
+  referencia: boolean
+}
+
+function rodadasDoFio(): RodadaDoFio[] {
+  return [
+    ...SEEDS_FIO.map((seed) => ({ rotulo: `seed ${seed}`, seed, team: TIME, driver: heuristicDriver, referencia: true })),
+    ...BUILD_BASELINE.map((v) => ({
+      rotulo: `"${v.label}" seed ${v.seed}`,
+      seed: v.seed,
+      team: timeDaVariante(v),
+      driver: dummyDriver,
+      referencia: false,
+    })),
+  ]
+}
+
+/**
+ * Igualdade profunda estrita: mesmos tipos, mesmas chaves próprias, primitivos por `===`. Não é
+ * `Object.is` de propósito: JSON não carrega `-0` (sai `0`), e `net/snapshot.ts` produz `-0` legítimo ao
+ * quantizar um `facing` negativo pequeno — nada que o render leia depende do sinal de um zero.
+ */
+function profundamenteIgual(a: unknown, b: unknown): boolean {
+  if (typeof a !== 'object' || a === null || typeof b !== 'object' || b === null) return a === b
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const ka = Object.keys(a)
+  const kb = Object.keys(b)
+  if (ka.length !== kb.length) return false
+  return ka.every(
+    (k) => Object.hasOwn(b, k) && profundamenteIgual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+  )
+}
+
+/** `e4.8`, AC 5 (a) — o que a ida-e-volta pelo codec acumula ao longo do laço do fio. */
+interface AchadosCodec {
+  fidelidade: string[]
+  total: number
+  quadros: number
+  amostrasProntidao: number
+  quadro: number[]
+  eventosQuadro: number[]
+}
+
+/** Passo `q` da §5.5 — só para as tolerâncias abaixo; a regra de quantização é de `net/codec.ts`. */
+const PASSO_FIO = 0.01
+
+/**
+ * `e4.8`, AC 5 (a) — `projetar(decodificar(codificar(m)))` contra o `World`, com as tolerâncias do
+ * texto do @architect: `x/y/facing/angle` IDÊNTICOS ao snapshot (o codec os repassa), demais números a
+ * ±0,005, `ultCharge` em `[u − 0,01, u]`, `abilityReadyAt` a ±0,015 quando não pronto, e os dois
+ * predicados de prontidão idênticos aos do `World`.
+ */
+function compararCodecComMundo(
+  world: World,
+  v: VisaoDoMundo,
+  original: Snapshot,
+  decodificado: Snapshot,
+  onde: string,
+  a: AchadosCodec,
+): void {
+  const falha = (campo: string, obtido: unknown, esperado: unknown) => {
+    a.total++
+    anotar(a.fidelidade, `  ✗ codec ${onde} tick ${world.tick}: ${campo} decodificado ${String(obtido)} ≠ ${String(esperado)}`)
+  }
+  const exato = (campo: string, obtido: unknown, esperado: unknown) => {
+    if (obtido !== esperado) falha(campo, obtido, esperado)
+  }
+  const meioPasso = (campo: string, obtido: number, real: number) => {
+    if (!(Math.abs(obtido - real) <= PASSO_FIO / 2 + FOLGA_FP)) falha(`${campo} (±${PASSO_FIO / 2})`, obtido, real)
+  }
+
+  meioPasso('time', v.time, world.time)
+  exato('over', v.over, world.over)
+  exato('winner', v.winner, world.winner)
+  exato('arena.w', v.arena.w, world.arena.w)
+  exato('arena.h', v.arena.h, world.arena.h)
+  meioPasso('arena.pad', v.arena.pad, world.arena.pad)
+  if (!profundamenteIgual(decodificado.events, original.events)) falha('events', 'outra sequência', 'os do snapshot')
+
+  for (const erro of [
+    mesmosIds('bolas', v.balls, world.balls),
+    mesmosIds('projéteis', v.projectiles, world.projectiles),
+    mesmosIds('zonas', v.zones, world.zones),
+  ]) {
+    if (erro) {
+      falha('presença', erro, 'mesmos ids')
+      return
+    }
+  }
+
+  world.balls.forEach((b, i) => {
+    const p = v.balls[i]
+    const s = original.balls[i]
+    const r = `bola ${b.id}`
+    exato(`${r}.x`, p.x, s.x)
+    exato(`${r}.y`, p.y, s.y)
+    exato(`${r}.facing`, p.facing, s.facing)
+    meioPasso(`${r}.hp`, p.hp, b.hp)
+    exato(`${r}.alive`, p.alive, b.alive)
+    exato(`${r}.charId`, p.charId, b.charId)
+    exato(`${r}.team`, p.team, b.team)
+    exato(`${r}.abilityIndex`, p.abilityIndex, b.abilityIndex)
+    exato(`${r}.ultThreshold`, p.ultThreshold, b.ultThreshold)
+    exato(`${r}.effects[].kind`, p.effects.map((e) => e.kind).join(','), b.effects.map((e) => e.kind).join(','))
+    if (!(p.ultCharge <= b.ultCharge && p.ultCharge >= b.ultCharge - PASSO_FIO - FOLGA_FP)) {
+      falha(`${r}.ultCharge (em [u − ${PASSO_FIO}, u])`, p.ultCharge, b.ultCharge)
+    }
+    const prontaNoMundo = world.time >= b.abilityReadyAt
+    if (!prontaNoMundo && !(Math.abs(p.abilityReadyAt - b.abilityReadyAt) <= 1.5 * PASSO_FIO + FOLGA_FP)) {
+      falha(`${r}.abilityReadyAt (±${1.5 * PASSO_FIO}, não pronta)`, p.abilityReadyAt, b.abilityReadyAt)
+    }
+    a.amostrasProntidao++
+    exato(`${r} prontidão da habilidade (time >= abilityReadyAt)`, v.time >= p.abilityReadyAt, prontaNoMundo)
+    exato(`${r} prontidão da ult (ultCharge >= ultThreshold)`, p.ultCharge >= p.ultThreshold, b.ultCharge >= b.ultThreshold)
+  })
+
+  world.projectiles.forEach((pw, i) => {
+    const p = v.projectiles[i]
+    const s = original.projectiles[i]
+    const r = `projétil ${pw.id}`
+    exato(`${r}.x`, p.x, s.x)
+    exato(`${r}.y`, p.y, s.y)
+    meioPasso(`${r}.vx`, p.vx, pw.vx)
+    meioPasso(`${r}.vy`, p.vy, pw.vy)
+    meioPasso(`${r}.radius`, p.radius, pw.radius)
+    exato(`${r}.color`, p.color, pw.color)
+  })
+
+  world.zones.forEach((z, i) => {
+    const p = v.zones[i]
+    const s = original.zones[i]
+    const r = `zona ${z.id}`
+    exato(`${r}.kind`, p.kind, z.kind)
+    exato(`${r}.x`, p.x, s.x)
+    exato(`${r}.y`, p.y, s.y)
+    exato(`${r}.angle`, p.angle, s.angle)
+    meioPasso(`${r}.halfLen`, p.halfLen, z.halfLen)
+    meioPasso(`${r}.radius`, p.radius, z.radius)
+    meioPasso(`${r}.pull`, p.pull, z.pull)
+    exato(`${r}.ownerColor`, p.ownerColor, z.ownerColor)
+  })
+}
+
+function guardaFio(): { linhas: string[]; problemas: string[]; codec: AchadosCodec } {
   const achados: Achados = {
     fidelidade: [],
     tripwire: [],
@@ -587,6 +751,7 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
     totalTripwire: 0,
     totalPresenca: 0,
   }
+  const codec: AchadosCodec = { fidelidade: [], total: 0, quadros: 0, amostrasProntidao: 0, quadro: [], eventosQuadro: [] }
   const problemas: string[] = []
   const orc: Orcamento = { quadro: [], eventosQuadro: [], tick60: [], estatico: [] }
   const vazados = new Set<string>()
@@ -597,33 +762,78 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
   let eventosProduzidos = 0
   const tiposDeEvento = new Set<string>()
   let hashesIguais = 0
+  // E42-TST-004 — o ✓ e o texto da linha `eventos` saem DAQUI, da comparação de sequência
+  let sequenciasDivergentes = 0
+  // AC 6 (a) — as variantes de BUILD_BASELINE, contadas à parte das 5 rodadas de referência
+  let variantes = 0
+  let ticksVariantes = 0
+  let sequenciasDivergentesVariantes = 0
+  let hashesIguaisVariantes = 0
+  // AC 6 (b) — canário de composição
+  let ticksComAbilityIndex1 = 0
+  const passivasEquipadas = new Set<string>()
 
   if (!Number.isInteger(INTERVALO_SNAPSHOT)) {
     problemas.push(`  ✗ fio: TICK_HZ/SNAPSHOT_HZ = ${INTERVALO_SNAPSHOT} não é inteiro — a cadência da guarda não se aplica`)
-    return { linhas: [], problemas }
+    return { linhas: [], problemas, codec }
   }
 
   const contarHits = (evs: SimEvent[]) => evs.filter((e) => e.t === 'hit').length
 
-  for (const seed of SEEDS_FIO) {
-    const s = setup(seed)
+  for (const rodada of rodadasDoFio()) {
+    const { seed, referencia } = rodada
+    const s = setup(seed, rodada.team)
     const world = createWorld(CHARS, s)
-    const driver = heuristicDriver(s)
+    const driver = rodada.driver(s)
     const estatico = estaticoDaRodada(world)
     const jsonEstatico = JSON.stringify(estatico)
-    orc.estatico.push(Buffer.byteLength(jsonEstatico, 'utf8'))
+    if (referencia) orc.estatico.push(Buffer.byteLength(jsonEstatico, 'utf8'))
     for (const n of vazamentosClasse3(jsonEstatico)) vazados.add(`estático:${n}`)
     if (chavesDoJson(estatico).has('color')) vazados.add('estático:color')
+    for (const b of world.balls) passivasEquipadas.add(`${b.charId}:${b.passiveIndex}`)
 
     const porTick = criarProdutorDeSnapshot(world)
     const naCadencia = criarProdutorDeSnapshot(world)
     const produzidos: SimEvent[] = []
     const entregues: SimEvent[] = []
+    let seq = 0
 
     const conferir = (snap: Snapshot) => {
       compararComMundo(world, projetar(snap, estatico, CHARS), estatico, seed, achados)
     }
     conferir(porTick.snapshot(world)) // tick 0, antes do primeiro step
+
+    // AC 5 (a) — o mesmo quadro que sai na cadência, agora pelo fio de verdade: codificar → texto →
+    // decodificar → projetar, contra o World do mesmo tick.
+    const conferirCodec = (snap: Snapshot) => {
+      const msg: DoServidor = { t: 'snap', s: snap, seq }
+      const texto = codificarDoServidor(msg)
+      codec.quadros++
+      if (referencia) {
+        codec.quadro.push(Buffer.byteLength(texto, 'utf8'))
+        codec.eventosQuadro.push(bytes(snap.events))
+      }
+      if (seq === 0) {
+        const envelope = Object.keys(JSON.parse(texto) as object).join(',')
+        if (envelope !== 't,seq,s') {
+          codec.total++
+          anotar(codec.fidelidade, `  ✗ codec ${rodada.rotulo}: envelope do snap com chaves [${envelope}], esperado [t,seq,s]`)
+        }
+      }
+      try {
+        const volta = decodificarDoServidor(texto)
+        if (volta.t !== 'snap' || volta.seq !== seq) {
+          codec.total++
+          anotar(codec.fidelidade, `  ✗ codec ${rodada.rotulo} tick ${world.tick}: voltou t=${volta.t}, seq ${volta.t === 'snap' ? volta.seq : '—'} (esperado snap, seq ${seq})`)
+        } else {
+          compararCodecComMundo(world, projetar(volta.s, estatico, CHARS), snap, volta.s, rodada.rotulo, codec)
+        }
+      } catch (e) {
+        codec.total++
+        anotar(codec.fidelidade, `  ✗ codec ${rodada.rotulo} tick ${world.tick}: decodificar lançou — ${(e as Error).message}`)
+      }
+      seq++
+    }
 
     while (!world.over && world.tick < MAX_ROUND_TICKS) {
       step(world, driver(world))
@@ -632,7 +842,7 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
       porTick.observar(world)
       const snap60 = porTick.snapshot(world)
       const json60 = JSON.stringify(snap60)
-      orc.tick60.push(Buffer.byteLength(json60, 'utf8'))
+      if (referencia) orc.tick60.push(Buffer.byteLength(json60, 'utf8'))
       for (const n of vazamentosClasse3(json60)) vazados.add(`snapshot:${n}`)
       conferir(snap60)
 
@@ -641,10 +851,13 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
       if (world.tick % INTERVALO_SNAPSHOT === 0 || fimDaRodada) {
         const snap = naCadencia.snapshot(world)
         const json = JSON.stringify(snap)
-        orc.quadro.push(Buffer.byteLength(json, 'utf8'))
-        orc.eventosQuadro.push(bytes(snap.events))
+        if (referencia) {
+          orc.quadro.push(Buffer.byteLength(json, 'utf8'))
+          orc.eventosQuadro.push(bytes(snap.events))
+        }
         for (const n of vazamentosClasse3(json)) vazados.add(`snapshot:${n}`)
         entregues.push(...snap.events)
+        conferirCodec(snap)
       }
 
       if (world.projectiles.length > 0) cobertura.projeteis++
@@ -653,26 +866,38 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
       if (world.balls.some((b) => b.effects.length > 0)) cobertura.efeitos++
       if (world.balls.some((b) => !b.alive)) cobertura.mortes++
       if (world.arena.pad > 0) cobertura.arenaEncolhida++
+      if (world.balls.some((b) => b.abilityIndex !== 0)) ticksComAbilityIndex1++
     }
 
-    ticksTotais += world.tick
-    hitsProduzidos += contarHits(produzidos)
-    hitsEntregues += contarHits(entregues)
-    eventosProduzidos += produzidos.length
-    for (const e of produzidos) tiposDeEvento.add(e.t)
     // AC 5 — mais forte que a soma de `hit`: a sequência inteira de eventos, de todos os tipos, na ordem
-    if (JSON.stringify(produzidos) !== JSON.stringify(entregues)) {
+    const sequenciaIgual = JSON.stringify(produzidos) === JSON.stringify(entregues)
+    if (!sequenciaIgual) {
       problemas.push(
-        `  ✗ eventos seed ${seed}: ${produzidos.length} produzido(s) pela rodada, ${entregues.length} nos snapshots a ${SNAPSHOT_HZ} Hz (ou sequência diferente)`,
+        `  ✗ eventos ${rodada.rotulo}: ${produzidos.length} produzido(s) pela rodada, ${entregues.length} nos snapshots a ${SNAPSHOT_HZ} Hz (ou sequência diferente)`,
       )
     }
 
-    const hashArnes = runRound(CHARS, s, heuristicDriver).hash
-    if (hash(world) === hashArnes) hashesIguais++
-    else {
+    const hashArnes = runRound(CHARS, s, rodada.driver).hash
+    const hashIgual = hash(world) === hashArnes
+    if (!hashIgual) {
       problemas.push(
-        `  ✗ fio seed ${seed}: hash da rodada observada ${hash(world)} ≠ arnês ${hashArnes} — o laço da guarda divergiu de harness.ts, ou produzir snapshot escreveu no World`,
+        `  ✗ fio ${rodada.rotulo}: hash da rodada observada ${hash(world)} ≠ arnês ${hashArnes} — o laço da guarda divergiu de harness.ts, ou produzir snapshot escreveu no World`,
       )
+    }
+
+    if (referencia) {
+      ticksTotais += world.tick
+      hitsProduzidos += contarHits(produzidos)
+      hitsEntregues += contarHits(entregues)
+      eventosProduzidos += produzidos.length
+      for (const e of produzidos) tiposDeEvento.add(e.t)
+      if (!sequenciaIgual) sequenciasDivergentes++
+      if (hashIgual) hashesIguais++
+    } else {
+      variantes++
+      ticksVariantes += world.tick
+      if (!sequenciaIgual) sequenciasDivergentesVariantes++
+      if (hashIgual) hashesIguaisVariantes++
     }
 
     // o contrato do acumulador falha alto: observar o mesmo tick de novo tem que lançar
@@ -682,7 +907,7 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
     } catch {
       lancou = true
     }
-    if (!lancou) problemas.push(`  ✗ fio seed ${seed}: observar() duas vezes no mesmo tick não lançou — eventos duplicariam`)
+    if (!lancou) problemas.push(`  ✗ fio ${rodada.rotulo}: observar() duas vezes no mesmo tick não lançou — eventos duplicariam`)
   }
 
   // canário do detector de classe 3: no `World` do motor ele TEM que acusar os nomes (menos `rng`,
@@ -702,6 +927,18 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
   }
   if (hitsProduzidos === 0) problemas.push('  ✗ fio: canário — nenhum evento hit nas rodadas; o teste do AC 5 não mede nada')
 
+  // AC 6 (b) — as duas contagens de composição. A lista de passivas é DERIVADA do roster: um
+  // personagem novo (Fase 5) que não entre numa rodada da guarda reprova aqui, em vez de passar a
+  // tripwire em silêncio como a Fantasma passava (Q1).
+  const passivasDoRoster = Object.values(CHARS).flatMap((c) => c.passives.map((p, i) => ({ chave: `${c.id}:${i}`, nome: `${c.id}:${p.id}` })))
+  const passivasFora = passivasDoRoster.filter((p) => !passivasEquipadas.has(p.chave)).map((p) => p.nome)
+  if (ticksComAbilityIndex1 === 0) {
+    problemas.push('  ✗ fio: canário de composição — nenhum tick com bola de abilityIndex ≠ 0; a guarda não vê a 2ª ativa (E42-TST-003, Q3)')
+  }
+  if (passivasFora.length) {
+    problemas.push(`  ✗ fio: canário de composição — passiva(s) do roster sem rodada na guarda: [${passivasFora.join(', ')}] (E42-TST-003, Q1)`)
+  }
+
   problemas.push(...achados.presenca, ...achados.fidelidade, ...achados.tripwire)
   if (achados.totalPresenca + achados.totalFidelidade + achados.totalTripwire > 0) {
     problemas.push(
@@ -712,19 +949,271 @@ function guardaFio(): { linhas: string[]; problemas: string[] } {
   const media = (xs: number[]) => xs.reduce((t, x) => t + x, 0) / xs.length
   const pico = (xs: number[]) => Math.max(...xs)
   const f1 = (x: number) => x.toFixed(1)
+  const variantesOk = sequenciasDivergentesVariantes === 0 && hashesIguaisVariantes === variantes
   const linhas = [
     `fio snapshot   ${problemas.length === 0 ? '✓ ok' : '✗ falhou'} — ${SEEDS_FIO.length} rodadas (heuristic), ${ticksTotais} ticks: projetar(snapshot) bate o World em todo campo que render.ts lê, com presença e ids iguais (ε ${EPS_POSICAO_PX} px · ${EPS_ANGULO_RAD} rad)`,
     `  tripwire estático ${achados.totalTripwire === 0 ? '✓' : '✗'} stat.maxHp/stat.radius do World = EstaticoDaRodada em todo tick`,
-    `  eventos      ${hitsProduzidos === hitsEntregues ? '✓' : '✗'} ${hitsProduzidos} hit produzidos ${hitsProduzidos === hitsEntregues ? '=' : '≠'} ${hitsEntregues} nos snapshots a ${SNAPSHOT_HZ} Hz · ${eventosProduzidos} eventos de ${tiposDeEvento.size} tipos [${[...tiposDeEvento].sort().join(',')}], sequência idêntica`,
+    `  eventos      ${sequenciasDivergentes === 0 ? '✓' : '✗'} ${hitsProduzidos} hit produzidos ${hitsProduzidos === hitsEntregues ? '=' : '≠'} ${hitsEntregues} nos snapshots a ${SNAPSHOT_HZ} Hz · ${eventosProduzidos} eventos de ${tiposDeEvento.size} tipos [${[...tiposDeEvento].sort().join(',')}], ${sequenciasDivergentes === 0 ? 'sequência idêntica' : `sequência DIVERGENTE em ${sequenciasDivergentes}/${SEEDS_FIO.length} rodada(s)`}`,
     `  classe 3     ${vazados.size === 0 && faltandoNoCanario.length === 0 ? '✓' : '✗'} nenhum nome no JSON do fio · o detector acusa ${acusados.length}/${esperadosNoCanario.length} no World do motor (rng não serializa)`,
     `  hash         ${hashesIguais === SEEDS_FIO.length ? '✓' : '✗'} observar a rodada não a altera (${hashesIguais}/${SEEDS_FIO.length} hashes = arnês)`,
     `  orçamento    ${SNAPSHOT_HZ} Hz: média ${f1(media(orc.quadro))} B/quadro (${f1(media(orc.quadro) / INTERVALO_SNAPSHOT)} B/tick) · pico ${pico(orc.quadro)} B · dos quais events: média ${f1(media(orc.eventosQuadro))} B, pico ${pico(orc.eventosQuadro)} B`,
     `               60 Hz, 1 snapshot/tick: média ${f1(media(orc.tick60))} B/tick · pico ${pico(orc.tick60)} B · estático ${pico(orc.estatico)} B uma vez por rodada (JSON com nomes de campo; §1.2 mediu 263/433 B sem eles)`,
+    `  variantes    ${variantesOk ? '✓' : '✗'} ${variantes} de BUILD_BASELINE (driver congelado, seed da variante), ${ticksVariantes} ticks: entram na fidelidade, na tripwire e na classe 3 acima · eventos em sequência idêntica ${variantes - sequenciasDivergentesVariantes}/${variantes} · hash = arnês ${hashesIguaisVariantes}/${variantes}`,
+    `  composição   ${ticksComAbilityIndex1 > 0 && passivasFora.length === 0 ? '✓' : '✗'} ${ticksComAbilityIndex1} ticks com bola de abilityIndex ≠ 0 · passivas do roster equipadas em alguma rodada ${passivasDoRoster.length - passivasFora.length}/${passivasDoRoster.length} [${passivasDoRoster.map((p) => p.nome).join(', ')}]`,
+  ]
+  return { linhas, problemas, codec }
+}
+
+const { linhas: linhasFio, problemas: problemasFio, codec: achadosCodec } = guardaFio()
+
+// ------------------------------------------ parser de entrada (e4.8, AC 4) — parseDoCliente
+
+/**
+ * `e4.8`, AC 4 — o fio de ENTRADA fechado em runtime. Os casos "→ null" são a lista do AC, cada um
+ * provado contra a fonte (`aimFrom`, `castCommand`, `aplicar`). O lado "→ parse OK" existe para o
+ * parser não passar por rejeitar tudo: toda variante válida volta profundamente igual pela ida-e-volta
+ * JSON, e `tick`/extra somem por construção (descarte, não recusa).
+ */
+function guardaParser(): { linha: string; problemas: string[] } {
+  const problemas: string[] = []
+  const cast = { t: 'cast', ballIndex: 0, slot: 'ability', dx: 0.6, dy: -0.8, mag: 0.5 }
+  const herdado: object = Object.create({ t: 'pong', id: 1 })
+  const nulos: [string, unknown][] = [
+    ['raw null', null],
+    ['raw array', [cast]],
+    ['raw string', 'cast'],
+    ['raw número', 42],
+    ['t desconhecido', { t: 'voar' }],
+    ['t só herdado do protótipo', herdado],
+    ['dx NaN', { ...cast, dx: NaN }],
+    ['dx de JSON.parse 1e999', JSON.parse('{"t":"cast","ballIndex":0,"slot":"ability","dx":1e999,"dy":0,"mag":1}')],
+    ['mag -Infinity', { ...cast, mag: -Infinity }],
+    ['dx "1"', { ...cast, dx: '1' }],
+    ["slot 'passive'", { ...cast, slot: 'passive' }],
+    ['ballIndex 2', { ...cast, ballIndex: 2 }],
+    ['ballIndex 0.5', { ...cast, ballIndex: 0.5 }],
+    ['d.jogador 2', { t: 'decisao', d: { t: 'pronto', jogador: 2 } }],
+    ['d.t desconhecido', { t: 'decisao', d: { t: 'banir', jogador: 0 } }],
+    ['cast sem mag', { t: 'cast', ballIndex: 0, slot: 'ability', dx: 1, dy: 0 }],
+    ['entrar sem sala', { t: 'entrar' }],
+    ['entrar com assento número', { t: 'entrar', sala: 'abc', assento: 7 }],
+    ['pong sem id', { t: 'pong' }],
+    ['pong id Infinity', { t: 'pong', id: Infinity }],
+    ['decisao sem d', { t: 'decisao' }],
+    ['build sem passiveIndex', { t: 'decisao', d: { t: 'build', jogador: 0, slot: 0, abilityIndex: 1 } }],
+    ['compra com itemId número', { t: 'decisao', d: { t: 'compra', jogador: 1, slot: 0, itemId: 3 } }],
+  ]
+  for (const [rotulo, raw] of nulos) {
+    const r = parseDoCliente(raw)
+    if (r !== null) problemas.push(`  ✗ parser: "${rotulo}" devolveu ${JSON.stringify(r)} em vez de null`)
+  }
+
+  // → parse OK, com descarte (AC 4 (c))
+  const comExtra = { t: 'cast', ballIndex: 1, slot: 'ult', dx: 0, dy: 1, mag: 1, tick: 5, extra: 1 }
+  const limpo = parseDoCliente(comExtra)
+  if (limpo === null || 'tick' in limpo || 'extra' in limpo || (limpo as unknown) === comExtra) {
+    problemas.push(`  ✗ parser: {t:'cast', …, tick: 5, extra: 1} devolveu ${JSON.stringify(limpo)} — tick/extra têm de sumir num objeto novo`)
+  } else if (!profundamenteIgual(limpo, { t: 'cast', ballIndex: 1, slot: 'ult', dx: 0, dy: 1, mag: 1 })) {
+    problemas.push(`  ✗ parser: o cast com extra perdeu campos conhecidos — ${JSON.stringify(limpo)}`)
+  }
+  const semAssento = parseDoCliente({ t: 'entrar', sala: 'abc' })
+  if (semAssento === null || 'assento' in semAssento) {
+    problemas.push(`  ✗ parser: entrar sem assento devolveu ${JSON.stringify(semAssento)} — ausente tem de continuar ausente`)
+  }
+
+  const validos: unknown[] = [
+    { t: 'entrar', sala: 'abc' },
+    { t: 'entrar', sala: 'abc', assento: 'segredo' },
+    { t: 'decisao', d: { t: 'draft', jogador: 0, charId: 'golem' } },
+    { t: 'decisao', d: { t: 'build', jogador: 1, slot: 0, abilityIndex: 1, passiveIndex: 0 } },
+    { t: 'decisao', d: { t: 'buildPadrao', jogador: 0 } },
+    { t: 'decisao', d: { t: 'compra', jogador: 1, slot: 1, itemId: 'lamina' } },
+    { t: 'decisao', d: { t: 'trocaDeBuild', jogador: 0, slot: 1, abilityIndex: 0, passiveIndex: 1 } },
+    { t: 'decisao', d: { t: 'pronto', jogador: 1 } },
+    cast,
+    { ...cast, ballIndex: 1, slot: 'ult' },
+    { t: 'pong', id: 3 },
+  ]
+  for (const msg of validos) {
+    const r = parseDoCliente(JSON.parse(JSON.stringify(msg)))
+    if (!profundamenteIgual(r, msg)) problemas.push(`  ✗ parser: ${JSON.stringify(msg)} válido voltou ${JSON.stringify(r)}`)
+  }
+
+  const linha = `  parser       ${problemas.length === 0 ? '✓' : '✗'} parseDoCliente: ${nulos.length} casos → null (não-objeto, t/slot/d.t desconhecidos, não-finitos inclusive 1e999, número-como-string, faixas, campo ausente) · tick e extra descartados num objeto novo · ${validos.length} mensagens válidas reconstruídas iguais`
+  return { linha, problemas }
+}
+
+// ---------------------------------------- codec de saída (e4.8, AC 5) — fronteira, roster, fio
+
+/**
+ * Um snapshot com uma entidade de cada tipo, para os casos sintéticos: a fronteira de prontidão (AC 5
+ * (b)) e a aridade divergente. Os valores de posição não importam; a bola é o sujeito.
+ */
+function snapshotSintetico(time: number, abilityReadyAt: number, ultCharge: number): Snapshot {
+  return {
+    time,
+    over: false,
+    winner: -1,
+    arena: { w: 960, h: 540, pad: 0 },
+    balls: [{ id: 1, x: 100, y: 200, facing: 0.5, hp: 500, alive: true, ultCharge, abilityReadyAt, effects: [{ kind: 'slow' }] }],
+    projectiles: [{ id: 2, x: 10, y: 20, vx: 300.123, vy: -40.5, radius: 5, color: '#b98cff' }],
+    zones: [{ id: 3, kind: 'wall', x: 30, y: 40, angle: 1.234, halfLen: 60, radius: 9, pull: 0, ownerColor: '#8a8' }],
+    events: [{ t: 'hit', x: 1, y: 2, amount: 3.14159, targetId: 1, crit: false }],
+  }
+}
+
+/**
+ * O CONTRAFACTUAL do AC 5 (b): um codec ingênuo que arredonda tudo a 0,01 — `time`, `abilityReadyAt`
+ * ABSOLUTO e `ultCharge` — e devolve os dois predicados que o cliente calcularia. Existe só para
+ * falhar: a rodada real não toca a fronteira (0 viradas em 46 340 amostras, §5.5), então é este caso
+ * que dá poder discriminante à guarda. Se ele passar a acertar tudo, a guarda perdeu o dente.
+ */
+function prontidaoIngenua(s: Snapshot, limiar: number): { habilidade: boolean; ult: boolean } {
+  const r = (v: number) => Math.round(v * 100) / 100
+  const b = s.balls[0]
+  return { habilidade: r(s.time) >= r(b.abilityReadyAt), ult: r(b.ultCharge) >= limiar }
+}
+
+function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] } {
+  const problemas: string[] = [...a.fidelidade]
+  if (a.total > 0) problemas.push(`  ✗ codec: ${a.total} divergência(s) na ida-e-volta das rodadas (mostradas até ${MAX_MENSAGENS_FIO})`)
+  if (a.quadros === 0 || a.amostrasProntidao === 0) problemas.push('  ✗ codec: canário — nenhum quadro passou pelo codec; a guarda (a) não mede nada')
+
+  // (c) tripwire do roster: o piso só preserva `u' ≥ thr ⇔ u ≥ thr` se o limiar for múltiplo de 0,01
+  const limiares = Object.values(CHARS).map((c) => ({ id: c.id, thr: c.ult.threshold }))
+  const foraDoPasso = limiares.filter((l) => Math.round(l.thr * 100) / 100 !== l.thr)
+  for (const l of foraDoPasso) {
+    problemas.push(`  ✗ codec: ult.threshold de ${l.id} = ${l.thr} não é múltiplo de 0,01 — o piso de ultCharge vira a prontidão da ult (§5.5)`)
+  }
+
+  // (b) fronteira: restante de +0,004, 0 e −0,004 ms; ultCharge em thr − 0,004 e thr
+  const tempos = [1, 7, 600, 4773].map((t) => t * TICK_MS)
+  let casos = 0
+  let viradasCodec = 0
+  let viradasIngenuoHabilidade = 0
+  let viradasIngenuoUlt = 0
+  for (const time of tempos) {
+    for (const { thr } of limiares) {
+      for (const restante of [0.004, 0, -0.004]) {
+        for (const ultCharge of [thr - 0.004, thr]) {
+          const snap = snapshotSintetico(time, time + restante, ultCharge)
+          const verdade = { habilidade: time >= time + restante, ult: ultCharge >= thr }
+          casos++
+          const volta = decodificarDoServidor(codificarDoServidor({ t: 'snap', s: snap, seq: 0 }))
+          if (volta.t !== 'snap') {
+            viradasCodec++
+            continue
+          }
+          const b = volta.s.balls[0]
+          if ((volta.s.time >= b.abilityReadyAt) !== verdade.habilidade || (b.ultCharge >= thr) !== verdade.ult) viradasCodec++
+          const ing = prontidaoIngenua(snap, thr)
+          if (ing.habilidade !== verdade.habilidade) viradasIngenuoHabilidade++
+          if (ing.ult !== verdade.ult) viradasIngenuoUlt++
+        }
+      }
+    }
+  }
+  if (viradasCodec > 0) problemas.push(`  ✗ codec: a regra da §5.5 virou a prontidão em ${viradasCodec}/${casos} casos na fronteira`)
+  if (viradasIngenuoHabilidade === 0 || viradasIngenuoUlt === 0) {
+    problemas.push(
+      `  ✗ codec: o contrafactual ingênuo NÃO falhou (habilidade ${viradasIngenuoHabilidade}, ult ${viradasIngenuoUlt} viradas) — os casos sintéticos perderam poder discriminante`,
+    )
+  }
+
+  // aridade divergente: acréscimo e remoção de campo, em cada nível da tupla, e `t` fora do vocabulário
+  const base = codificarDoServidor({ t: 'snap', s: snapshotSintetico(1000, 1200, 50), seq: 4 })
+  const mutacoes: [string, (s: unknown[]) => void][] = [
+    ['snap.s + 1', (s) => s.push(0)],
+    ['snap.s − 1', (s) => void s.pop()],
+    ['bola + 1', (s) => (s[6] as unknown[][])[0].push(0)],
+    ['bola − 1', (s) => void (s[6] as unknown[][])[0].pop()],
+    ['projétil + 1', (s) => (s[7] as unknown[][])[0].push(0)],
+    ['zona − 1', (s) => void (s[8] as unknown[][])[0].pop()],
+  ]
+  let lancou = 0
+  const aridadeCasos = mutacoes.length + 1
+  for (const [rotulo, mutar] of mutacoes) {
+    const m = JSON.parse(base) as { s: unknown[] }
+    mutar(m.s)
+    try {
+      decodificarDoServidor(JSON.stringify(m))
+      problemas.push(`  ✗ codec: aridade divergente (${rotulo}) não lançou`)
+    } catch {
+      lancou++
+    }
+  }
+  try {
+    decodificarDoServidor('{"t":"teleporte","seq":1}')
+    problemas.push("  ✗ codec: t fora do vocabulário de DoServidor não lançou")
+  } catch {
+    lancou++
+  }
+
+  // (d) toda variante que não é `snap` volta idêntica. O `satisfies` obriga uma amostra por variante:
+  // uma variante nova de DoServidor sem amostra aqui é erro de compilação.
+  const partida = criarPartida({ seed: 1, pool: Object.keys(CHARS) })
+  const aposDraft = aplicar(partida, { t: 'draft', jogador: 0, charId: Object.keys(CHARS)[0] }).estado
+  const amostras = {
+    sala: { t: 'sala', jogador: 1, estado: 'jogando' },
+    visao: { t: 'visao', v: visaoPara(partida, 0) },
+    prazo: { t: 'prazo', terminaEmMs: 29999.5 },
+    rodadaInicio: { t: 'rodadaInicio', estatico: estaticoDaRodada(createWorld(CHARS, setup(1))) },
+    rodadaFim: {
+      t: 'rodadaFim',
+      resultado: { indice: 0, seedDaRodada: 123, ladoDoJogador: [0, 1], vencedor: 1, ticks: 4773, hash: '327b60f3' },
+    },
+    erro: { t: 'erro', motivo: 'não é a sua vez' },
+    ping: { t: 'ping', id: 7 },
+  } satisfies { [K in Exclude<DoServidor['t'], 'snap'>]: Extract<DoServidor, { t: K }> }
+  const naoSnap: DoServidor[] = [...Object.values(amostras), { t: 'visao', v: visaoPara(aposDraft, 1) }]
+  let naoSnapFalhas = 0
+  for (const msg of naoSnap) {
+    try {
+      const volta = decodificarDoServidor(codificarDoServidor(msg))
+      if (!profundamenteIgual(volta, msg)) {
+        naoSnapFalhas++
+        problemas.push(`  ✗ codec: {t:'${msg.t}'} não voltou idêntica pela ida-e-volta`)
+      }
+    } catch (e) {
+      naoSnapFalhas++
+      problemas.push(`  ✗ codec: {t:'${msg.t}'} — decodificar lançou: ${(e as Error).message}`)
+    }
+  }
+
+  // (e) orçamento: alarme de regressão do codec, não detector de vazamento (esse é o de chaves, acima)
+  const media = a.quadro.length ? a.quadro.reduce((t, x) => t + x, 0) / a.quadro.length : NaN
+  const mediaEventos = a.eventosQuadro.length ? a.eventosQuadro.reduce((t, x) => t + x, 0) / a.eventosQuadro.length : NaN
+  if (!(media <= ORCAMENTO_SNAP_B)) {
+    problemas.push(`  ✗ codec: orçamento — média ${media.toFixed(1)} B/quadro do {t:'snap'} codificado passa de ${ORCAMENTO_SNAP_B} B (§5.5)`)
+  }
+
+  const f1 = (x: number) => x.toFixed(1)
+  const ok = (cond: boolean) => (cond ? '✓' : '✗')
+  const linhas = [
+    `  fidelidade   ${ok(a.total === 0 && a.quadros > 0)} ${a.quadros} quadros na cadência com flush (${rodadasDoFio().length} rodadas): projetar(decodificar(codificar(snap))) bate o World — x/y/facing/angle = snapshot, demais ±${PASSO_FIO / 2}, ultCharge em [u − ${PASSO_FIO}, u], abilityReadyAt ±${1.5 * PASSO_FIO} · prontidão idêntica em ${a.amostrasProntidao} amostras bola×quadro`,
+    `  fronteira    ${ok(viradasCodec === 0 && viradasIngenuoHabilidade > 0 && viradasIngenuoUlt > 0)} regra da §5.5 vira ${viradasCodec}/${casos} casos sintéticos · o codec ingênuo (arredondar a 0,01) vira ${viradasIngenuoHabilidade + viradasIngenuoUlt} (habilidade ${viradasIngenuoHabilidade}, ult ${viradasIngenuoUlt}) — tem de falhar`,
+    `  limiar ult   ${ok(foraDoPasso.length === 0)} todo ult.threshold do roster é múltiplo de 0,01 [${limiares.map((l) => `${l.id} ${l.thr}`).join(', ')}]`,
+    `  não-snap     ${ok(naoSnapFalhas === 0 && lancou === aridadeCasos)} ${naoSnap.length} mensagens (${Object.keys(amostras).length} variantes) voltam idênticas · aridade divergente e t desconhecido lançam em ${lancou}/${aridadeCasos}`,
+    `  orçamento    ${ok(media <= ORCAMENTO_SNAP_B)} ${SNAPSHOT_HZ} Hz, tupla: média ${f1(media)} B/quadro (≤ ${ORCAMENTO_SNAP_B}) · pico ${Math.max(...a.quadro)} B · dos quais events: média ${f1(mediaEventos)} B, pico ${Math.max(...a.eventosQuadro)} B (${SEEDS_FIO.length} rodadas de referência)`,
   ]
   return { linhas, problemas }
 }
 
-const { linhas: linhasFio, problemas: problemasFio } = guardaFio()
+/**
+ * §5.5 — média do `{t:'snap'}` codificado, por quadro, na cadência com flush. A 30 Hz, 450 B dão ~108
+ * kbit/s de carga útil, ~125 kbit/s com transporte: o "cabe em qualquer 3G" da §1.2. Alarme de
+ * regressão do CODEC, não detector de classe 3; o pico não tem teto (é `events` na morte súbita).
+ */
+const ORCAMENTO_SNAP_B = 450
+
+const { linha: linhaParser, problemas: problemasParser } = guardaParser()
+const { linhas: linhasCodecSaida, problemas: problemasCodecSaida } = guardaCodec(achadosCodec)
+const problemasCodec = [...problemasParser, ...problemasCodecSaida]
+const linhasCodec = [
+  `codec do fio   ${problemasCodec.length === 0 ? '✓ ok' : '✗ falhou'} — net/codec.ts: DoCliente fechado em runtime; {t:'snap'} em tupla posicional quantizada (architecture-e4.md §5.5)`,
+  linhaParser,
+  ...linhasCodecSaida,
+]
 
 // ---------------------------------------------- Pilar 3 (debt.6) — Camada 1: estática
 
@@ -898,6 +1387,8 @@ console.log(
 )
 for (const linha of linhasFio) console.log(linha)
 if (problemasFio.length) for (const p of problemasFio) console.log(p)
+for (const linha of linhasCodec) console.log(linha)
+if (problemasCodec.length) for (const p of problemasCodec) console.log(p)
 console.log('')
 for (const linha of linhasPartida) console.log(linha)
 console.log('')
@@ -974,6 +1465,15 @@ if (problemasFio.length > 0) {
       'Suspeitos: campo que render.ts lê e net/snapshot.ts não produz (ou produz fora do ε declarado); ' +
       'evento descartado entre snapshots (AC 5); nome da classe 3 no JSON do fio (AC 4); passiva ' +
       'mudando stat.maxHp/stat.radius no meio da rodada (tripwire — reclassificar o campo, não silenciar).',
+  )
+}
+if (problemasCodec.length > 0) {
+  throw new Error(
+    `guarda do codec do fio (e4.8) falhou em ${problemasCodec.length} ponto(s) — ver acima. ` +
+      'Suspeitos: parseDoCliente aceitando forma fora de DoCliente (número não finito, slot/t fora da lista, ' +
+      'campo extra devolvido) (AC 4); quantização fora da tabela de architecture-e4.md §5.5 — ultCharge sem ' +
+      'piso, abilityReadyAt absoluto ou arredondado —, aridade da tupla sem conferência, ou orçamento do snap ' +
+      'estourado (AC 5). Mudar o layout da tupla é mudança de protocolo (§11.6), não ajuste de teste.',
   )
 }
 if (problemasBot001.length > 0) {
