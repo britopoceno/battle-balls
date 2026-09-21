@@ -1,0 +1,343 @@
+schema: 1
+story: 'e4.3'
+story_title: '`net/sala.ts` — a máquina de estados da sala, pura, com relógio injetado'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 16 ACs estão MET, e o código da sala está correto em tudo o que conferi. Refiz tudo do zero, sem confiar
+  no Dev Agent Record. check, sim:check e build saíram com rc=0, e o golden hash ficou idêntico. O diff da
+  saída inteira do sim:check contra um worktree de 99f4ee3^ (a5d7858) tem só as 7 linhas da seção `sala
+  pura`, além do banner do npm. Os dois greps de pureza deram rc=1, e sala.ts não importa codec.ts.
+  `git show --stat 99f4ee3` lista só sala.ts (novo) e determinism.ts (+661, só inserção). Refiz 9 das 15
+  mutações do @dev, entre elas o broadcast do `{t:'sala'}` e a troca de `jogador`, e as 9 deram rc=1. Rodei
+  21 minhas: 12 foram pegas, 7 passaram, e 2 são os controles de um par que prova por EXECUÇÃO, e não só
+  por leitura, que a Bo5 passa pelo parser. Varri a Bo5 pelas 3 MATCH_SEEDS, e as 3 batem o arnês, inclusive a seed 2, que tem 4
+  rodadas e uma vitória do jogador 0. O veredito é CONCERNS, e não PASS, por dois MEDIUM de alcance da
+  guarda e dois MEDIUM de arquitetura que a sala revelou em stories posteriores:
+  (1) E43-TST-001: a recusa de `d.jogador` alheio só é testada com uma decisão de `draft`. Se a checagem
+  valer só no draft, o sim:check fica verde, e o assento 0 poderia mandar `{t:'buildPadrao', jogador: 1}`
+  e travar o oponente na build padrão.
+  (2) E43-TST-002: a guarda confere que cada `{t:'visao'}` que chega a um assento é a projeção certa, mas não
+  que TODO assento receba a sua. Visão só para o assento 0, `rodadaFim` só para o assento 0 e rodada sem
+  `rodadaInicio` passam verdes.
+  (3) E43-ARC-001: a e4.4 não tem de onde tirar o `hash` da rodada.
+  (4) E43-ARC-002: `EventoPartida` não tem mensagem no fio, e com isso o AC 10 da e4.5 não é implementável
+  dentro do escopo dela.
+  A política de desconexão está dentro do AC 13. É um placeholder marcado, e não uma decisão de produto
+  embutida.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:99f4ee3 (implementação). O pai é a5d7858, commit só de docs do @po (debt.13 Done), feito em
+  paralelo. O commit 084f897 (registro do @dev) toca só a story. Os hunks dele ficam em Status, checkboxes
+  das Tasks, Dev Agent Record, File List e Change Log. ACs e escopo estão intocados. `git diff --stat
+  99f4ee3 HEAD -- src` está vazio. 99f4ee3 NÃO está em origin/master (merge-base --is-ancestor rc=1): é
+  commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Rodei na árvore principal, com `git status --short src` vazio, em Node 24.13.1. `npm run check` deu
+      rc=0, `npm run sim:check` rc=0 e `npm run build` rc=0. A saída mostra "golden hash ✓ ok — 6 seeds
+      batem o baseline". Num worktree descartável de 99f4ee3^, `node src/tools/determinism.ts` deu rc=0. O
+      diff das duas saídas inteiras tem só o banner do npm (`1a2,5`) e `59a64,70`, as 7 linhas acrescentadas
+      (linha em branco, `sala pura`, bo5, flush, assentos, autoridade, negativos). Nenhuma linha existente
+      mudou de texto, de lugar ou de veredito.
+  - id: 'Pureza e setas (ACs 3, 14)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnwE "ws|document|window|localStorage|Math\.random" src/net/` deu rc=1, e `grep -rnE
+      "Date\.now|performance\.now" src/net/` também deu rc=1. `grep -n codec src/net/sala.ts` deu rc=1,
+      nem em comentário. Os imports de sala.ts são sim/world.ts (createWorld, step, TICK_HZ), sim/types.ts
+      (só tipo), match/index.ts, ./protocolo.ts e ./snapshot.ts, todos setas permitidas pela §2.2 e pelo AC
+      14. `grep -rnE "from '\.\./(client|tools|chars|bot|shop)/" src/net/` deu rc=1. O roster e o hash
+      entram injetados (OpcoesDaSala). Não há ciclo: `grep -rnE "from '\.\./(net|tools|chars|bot|client)/"
+      src/sim src/match src/shop` só casa um comentário em match/types.ts:19. A lista fechada `tools/ →
+      client/` continua com os dois arquivos declarados.
+  - id: 'Escopo (AC 15)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 99f4ee3`: src/net/sala.ts | 664 +, src/tools/determinism.ts | 661 +, "2 files changed,
+      1325 insertions(+)". protocolo.ts, codec.ts, snapshot.ts e projecao.ts não aparecem. Os 4 hunks de
+      determinism.ts são só `+`: imports (:44), o bloco da guarda depois de `linhasCodec` (:1277), a
+      impressão (:1463) e o throw final (:1556).
+  - id: 'Carimbo do tick (AC 6)'
+    verdict: PASS
+    evidence: >-
+      sala.ts:494-501: `tick: r.world.tick + ATRASO_ALVO_TICKS`, em que world.tick é o tick que o próximo
+      `step` vai simular (a mesma convenção do bot, `tick: view.tick`). O `{t:'cast'}` de DoCliente não tem
+      campo tick, e o parser o descarta. Não há clamp: os únicos `Math.max` de sala.ts ficam em msgPrazo e
+      retomar. A guarda afirma que a gravação não tem comando com tick < 6 e PULA a seed que tiver, sem
+      clampar. Ela confere o Command carimbado campo a campo contra o que o arnês executou. Mutações: +1
+      (D-M1), −6 (Q15, carimbo no tick corrente) e lado = jogador (D-M7) deram rc=1, com tick e bola exatos
+      na mensagem.
+  - id: 'Produtor, cadência e flush (ACs 10, 11 d)'
+    verdict: PASS
+    evidence: >-
+      Há um criarProdutorDeSnapshot por rodada, só em iniciarRodada. `observar` roda em todo avancarUmTick,
+      e um `passo()` avança quantos ticks forem devidos. O snap final sai em encerrarRodada ANTES de
+      registrarRodada/rodadaFim, e o tick de término não gera snap de cadência duplicado (return antes).
+      Pela guarda: 3/3 rodadas com o último snap `over:true` e com roundEnd antes de rodadaFim; events de
+      5683 snaps = world.events (1088 eventos, em ordem), com referência INDEPENDENTE da sala (replay dos
+      comandos gravados); 2 rodadas terminam fora da cadência, então o item (d) discrimina. Mutações:
+      observar pulado no tick 100 (Q1) derruba o sim:check pelo próprio produtor ("snapshot() no tick 100,
+      mas o último observado foi 99"). Sem snap final (D-M2), cadência deslocada (Q4 `=== 1`, Q4b `tick+1`) e
+      cadência pela constante (D-M5) deram rc=1.
+  - id: '{t:''sala''} por assento (AC 11 e + adendo do @architect)'
+    verdict: PASS
+    evidence: >-
+      msgSala cria um objeto NOVO por destinatário, com `assento: chave`, `jogador: j`, `versao:
+      VERSAO_DO_FIO` e `snapshotHz: n.config.snapshotHz`. O primeiro envio de todo assentamento é o sala,
+      tanto no assento novo (:384) quanto no reassentamento (:364). A guarda confere em TODO passo: nenhum
+      objeto sala repetido entre assentos, segredo = destinatário, `jogador === s.assentos.indexOf(assento)`,
+      versão, snapshotHz da config e primeiro envio. São 21 sala e 12 assentamentos, com reassentamento no
+      meio da rodada. Mutações: broadcast com o segredo do assento 0 (D-M3), o outro recebendo o sala do
+      recém-assentado (D-M3b), jogador trocado (D-M6) e reassentamento sem reenviar o sala (Q2) deram rc=1.
+  - id: 'Autoridade e decisões (ACs 5, 7, 16)'
+    verdict: PASS
+    evidence: >-
+      sala.ts:449 recusa toda decisão com `d.jogador !== j` antes de aplicar(), com erro só ao remetente.
+      Decisão recusada por aplicar() vira erro ao remetente, com estado intacto por referência. A bola sai
+      de `r.lados[j]`. Mutações: d.jogador alheio aceito (D-M4), sala confiando em d.jogador (Q3b), erro de
+      d.jogador enviado aos dois (Q10), bola morta aceita (Q11) e fase da sala não conferida (Q16) deram
+      rc=1. Lacuna na guarda: ver E43-TST-001.
+  - id: 'Caminho feliz pelo parser (AC 16) — provado por mutação, não só por leitura'
+    verdict: PASS
+    evidence: >-
+      O @dev registrou que o roteamento só era provável por leitura. Fiz o par de mutações. Q14 deixa o
+      parser estrito demais (recusa slot 'ult') em codec.ts. A guarda da SALA acusa por conta própria:
+      "parseDoCliente recusou {t:'cast', slot:'ult', …} — achado contra e4.8", e depois "a sala carimbou [],
+      o arnês executou [...]". Q14d aplica a MESMA mutação de parser com `pelaFronteira` desviado (`raw as
+      DoCliente`), e a linha `sala pura` fica ✓ (o rc=1 vem só da guarda do codec de e4.8). Q14c, só o
+      desvio, dá rc=0, o que confirma a observação do @dev de que o desvio sozinho é invisível. Então a Bo5
+      passa, em execução, pelo parseDoCliente real. Q14b (recusa `pronto`) também acusa na guarda da sala.
+  - id: 'Relógio de RF-04, controle e R-02 (ACs 9, 12, 13)'
+    verdict: PASS
+    evidence: >-
+      O prazo começa ao entrar em builds, e sai `{t:'prazo', terminaEmMs: 30000}` aos dois assentos. 1 ms
+      antes nada acontece. No prazo, sai buildPadrao de quem não está pronto, com EventoPartida buildPadrao.
+      registrarRodada recebe CONTROLE_1V1. A guarda confere `controle [humano,humano]` em todo rodadaFim
+      (D-M8 deu rc=1). R-02: POLITICA_DE_DESCONEXAO_PROVISORIA num lugar só, com aviso ⚠️ PROVISÓRIO que
+      aponta §12, lida só via ConfigDaSala.desconexao. W.O. na rodada dando a vitória ao AUSENTE (Q9) deu
+      rc=1. Ver avaliacoes_pedidas.politica_de_desconexao.
+  - id: 'Varredura da base de seed da Bo5'
+    verdict: PASS
+    evidence: >-
+      Com SEEDS_SALA = [2] e [12345] num worktree descartável, restaurado com checkout, a guarda inteira fica
+      ✓. Seed 2: 4 rodadas, placar 1-3, vencedores [1 0 1 1], hash/ticks/lado iguais em 4/4, 203 casts.
+      Seed 12345: 3/3, 158 casts. A seed 1, a usada, tem vencedores [1 1 1]. A seed 2 mostra que o veredito
+      não depende de uma partida em que só o jogador 1 vence.
+  - id: 'Mutações próprias — não pegas'
+    verdict: CONCERNS
+    evidence: >-
+      NÃO PEGAS, e nocivas (4):
+      Q3, `d.jogador !== j` conferido só quando `d.t === 'draft'`: rc=0. O caso "→ sala" da guarda usa só uma
+      decisão de draft (E43-TST-001).
+      Q5, visão enviada só ao assento 0: rc=0.
+      Q6, rodadaFim enviado só ao assento 0: rc=0.
+      Q7, rodada sem rodadaInicio: rc=0. Q5-Q7 estão em E43-TST-002.
+      NÃO PEGAS, de impacto baixo (3):
+      Q8, teto com `>` no lugar de `>=`: rc=0. Nenhuma rodada da Bo5 chega a 10 800 ticks, e a tripwire
+      confere o VALOR do teto, não a comparação.
+      Q12, reassentamento na fase builds sem o `{t:'prazo'}` restante: rc=0. O reassentamento só é
+      exercitado na rodada.
+      Q13, queda na loja ou em builds sem abrir pausa: rc=0. O W.O. da loja da guarda vem da pausa
+      encadeada pelo estouro anterior, não de uma queda na loja.
+      Ver E43-TST-003.
+      Todas as mutações rodaram num worktree de HEAD, com o fim de linha normalizado para CRLF. Cada arquivo
+      foi restaurado e conferido por sha256, e o `git status` do worktree ficou limpo antes da remoção.
+
+top_issues:
+  - id: 'E43-TST-001'
+    severity: medium
+    category: tests
+    owner: '@po (rota; só determinism.ts, no bloco da sala; cabe em debt.12, a próxima story a abrir o arquivo, ou numa debt própria, antes de a e4.4 ligar a sala ao socket), @dev executa'
+    finding: >-
+      A recusa de decisão com `d.jogador` alheio (AC 16) é testada com UMA variante, `draft`. Restringir a
+      checagem a `d.t === 'draft'` (Q3) deixa o sim:check verde. As outras cinco variantes de Decisao passam
+      então a ser aceitas em nome do outro jogador. O caso concreto: na fase builds, o assento 0 manda
+      `{t:'buildPadrao', jogador: 1}` com forma perfeita, aplicar() aceita porque o jogador 1 ainda não está
+      pronto, e o oponente fica travado na build padrão. O mesmo vale para `pronto`, `build`, `compra` e
+      `trocaDeBuild`. O código de hoje está correto: é uma comparação só, igual para todas as variantes. Mas é
+      exatamente a refatoração que um `switch (d.t)` por variante introduziria. É a lição de E48-TST-001:
+      guarda por caso do AC não é guarda por variante.
+    suggested_action: >-
+      Não reprova. Na guarda, repetir o caso "→ sala" para `build`, `buildPadrao`, `pronto` (fase builds),
+      `compra` e `trocaDeBuild` (fase loja), cada um em nome do jogador alheio no momento em que aplicar() o
+      ACEITARIA. Conferir erro só ao remetente, `partida` idêntica por referência e `decisoes` sem entrada
+      nova. Contrafactual: Q3 com rc=1.
+  - id: 'E43-TST-002'
+    severity: medium
+    category: tests
+    owner: '@po (rota, mesmo pacote de E43-TST-001), @dev executa'
+    finding: >-
+      A guarda confere que cada `{t:'visao'}` que chega a um assento é `visaoPara(estado, jogador daquele
+      assento)`, e pega o broadcast (M9 do @dev). Mas não confere que TODO assento conectado receba a sua.
+      Visão só para o assento 0 (Q5), rodadaFim só para o assento 0 (Q6) e rodada sem rodadaInicio (Q7)
+      passam verdes. O AC 8 manda emitir "individualmente para cada assento", e a §6 e a §5.6 fazem do
+      rodadaInicio/rodadaFim o que o cliente usa para montar e fechar a rodada. O teste manual de duas abas
+      da e4.4 veria isso uma vez, mas não protege contra regressão depois dele.
+    suggested_action: >-
+      Em `conduzir`: todo passo em que `c.sala.partida` mudou de identidade entrega exatamente um `{t:'visao'}`
+      a cada assento conectado. Por rodada: exatamente um rodadaInicio e um rodadaFim por assento conectado
+      (no assento que caiu, conta o do reassentamento). Contrafactuais: Q5, Q6 e Q7 com rc=1.
+  - id: 'E43-ARC-001'
+    severity: medium
+    category: architecture
+    owner: '@architect (decide de onde server/ tira o hash), @po (roteia para o AC 12/13 da e4.4 antes de ela sair de Draft)'
+    finding: >-
+      Item em aberto (a) do @dev, confirmado. A sala recebe `hashDoMundo` injetado, porque a única definição
+      é `hash()` de tools/harness.ts e o AC 14 proíbe `net/ → tools/`. O AC 12 da e4.4 proíbe `server/ →
+      tools/`, e o AC 13 proíbe src/net/ e src/tools/. Então a e4.4, como está, não tem nenhuma fonte legal
+      para o valor que registrarRodada grava em ResultadoRodada.hash. Um stub (string vazia, outro hash)
+      compilaria, e ficaria invisível até a e4.6, cujo replay compara exatamente esse hash com a execução ao
+      vivo. É a mesma classe do M-4 da §11.6.1: a contradição só aparece quando o produtor existe. Não bloqueia
+      agora, porque a e4.4 está bloqueada em R-05.
+    suggested_action: >-
+      Escolher entre três caminhos: (i) declarar a seta `server/ → tools/harness.ts` com lista fechada, no
+      molde de `tools/ → client/`; (ii) mover `hash` para um módulo puro que server/ já pode importar (o que
+      também mexe em client/main.ts); (iii) outro. A e4.4 precisa do texto antes de sair de Draft, e a
+      guarda da e4.6 tem de afirmar que o hash do servidor é o do arnês.
+  - id: 'E43-ARC-002'
+    severity: medium
+    category: architecture
+    owner: '@architect (forma no fio e filtro por assento), @po (roteia para a e4.5, AC 10/14, e confere a e4.7/AC 8)'
+    finding: >-
+      Item em aberto (c) do @dev, confirmado, e mais grave do que ele registrou. A §9 e a e4.5/AC 10 dizem que
+      `EventoPartida` "passa a chegar pelo fio" e que o coletor não muda. A verificação da e4.5 é "uma partida
+      conectada gera export com rodadaFim, compra e cast". Mas DoServidor não tem variante para isso: a sala
+      guarda os eventos em Sala.eventos e não os envia. O AC 14 da e4.5 proíbe src/net/, então o AC 10 dela
+      não é implementável no escopo. E a evidência de telemetria de P4.4 (e4.7/AC 8) depende de partidas
+      conectadas exportarem rodadaFim. Se o evento for para o fio, a regra do AC 8 vale para ele: cada
+      EventoPartida carrega `jogador`, e o filtro por destinatário tem de ser decidido (compra/trocaDeBuild do
+      oponente). Um broadcast ingênuo repetiria o erro que o AC 8 existe para impedir.
+    suggested_action: >-
+      Decidir entre (i) uma variante nova (p. ex. `{t:'evento', e}`) por assento, com a regra de filtro, que
+      é mudança de protocolo (VERSAO_DO_FIO, mais barata ANTES de a e4.5 publicar cliente), e a sala
+      passando a enviá-la (story própria ou emenda de protocolo, porque o AC 15 desta proíbe protocolo.ts);
+      ou (ii) o cliente derivar os eventos de rodadaFim/visao, com o AC 10 da e4.5 reescrito. Juntar com
+      E43-REQ-003 para abrir DoServidor uma vez só.
+  - id: 'E43-REQ-003'
+    severity: low
+    category: requirements
+    owner: '@pm (decide R-02; o usuário ratifica), depois @architect (protocolo)'
+    finding: >-
+      Item em aberto (b) do @dev, confirmado. A pausa de R-02 não aparece no fio: `{t:'sala'}.estado` só tem
+      aguardando | jogando | encerrada, e a sala não envia nada ao presente quando o outro cai. O presente vê
+      os snaps pararem por até `prazoMs`, sem motivo na tela. É a linha "o outro jogador espera sem saber se
+      volta" da tabela de R-02, agora concreta. Não é defeito desta story (o AC 13 pede o mecanismo, e o
+      protocolo é proibido aqui), e o custo depende de qual opção de R-02 for escolhida.
+    suggested_action: 'Incluir "como o presente é avisado" no pacote de decisão de R-02, e abrir DoServidor junto com E43-ARC-002.'
+  - id: 'E43-REQ-004'
+    severity: low
+    category: requirements
+    owner: '@pm (decisão de R-02, com ratificação do usuário), @po (registra a lista na §12/R-02 e na e4.4/AC 14)'
+    finding: >-
+      O default provisório de R-02 veio com detalhes de semântica que o AC 13 não fixa, e que a decisão de
+      R-02 precisa confirmar ou trocar. São eles: W.O. "por passo" (o ausente perde a rodada em curso, o
+      buildPadrao em builds e o pronto na loja, e o prazo recomeça até a partida acabar pelas regras de
+      match/); `prazoMs` de 20 s, não medido; queda no DRAFT tratada como "antes do início" da §6 (a partida
+      é recriada, o assento é liberado para qualquer um com o link, e o draft do presente é perdido); o
+      relógio de RF-04 continua durante a pausa; dois ausentes encerram a sala sem resultado; o snap que
+      precede o rodadaFim de um W.O. sai com over:false e sem roundEnd. Das 4 opções de R-02, três são
+      representáveis só pela configuração: W.O. imediato (prazoMs 0), pausa + W.O. (o default) e anular. "Bot
+      assume" exige story, porque o AC 14 proíbe bot/. Está tudo documentado no cabeçalho de sala.ts e no Dev
+      Agent Record. Não é decisão contrabandeada (ver avaliacoes_pedidas).
+    suggested_action: 'Anexar esta lista à pergunta de R-02, para que a resposta cubra também a semântica, e não só o nome da opção.'
+  - id: 'E43-TST-003'
+    severity: low
+    category: tests
+    owner: '@dev (opcional, no pacote de E43-TST-001/002)'
+    finding: >-
+      Três caminhos da sala sem regressão. (a) O teto de ticks: nenhuma rodada da Bo5 chega lá, e `>=` → `>`
+      passa (Q8). (b) O reassentamento em builds com o prazo restante: passa sem o `{t:'prazo'}` (Q12). (c) A
+      queda na loja ou em builds abrindo pausa: passa sem abrir (Q13).
+    suggested_action: >-
+      (a) Uma sala descartável com `tetoDeTicks` pequeno na configuração, conferindo o snap final e o
+      rodadaFim no tick do teto. (b) e (c) Queda e reassentamento em builds na sala descartável dos negativos.
+  - id: 'E43-REQ-005'
+    severity: low
+    category: requirements
+    owner: '@po'
+    finding: >-
+      A checagem de `jogador` por assento no `{t:'sala'}` (adendo da §11.6.1, commit 6c6b9a0) está
+      implementada e mutada (M6, rc=1), mas não está no texto do AC 11 (e). O @dev registrou isso sem editar
+      o AC.
+    suggested_action: 'Acrescentar ao AC 11 (e): "e o `jogador` daquele assento", com referência a 6c6b9a0.'
+  - id: 'E43-DOC-006'
+    severity: low
+    category: documentation
+    owner: '@architect'
+    finding: >-
+      A nota "Sem ciclo" da §2.2 diz que "`net/` importa só `sim/types.ts`, `match/types.ts` e a si mesmo".
+      Desde 99f4ee3, sala.ts importa em runtime sim/world.ts (createWorld, step, TICK_HZ) e match/index.ts.
+      As setas são permitidas pela tabela e pelo AC 14, e continua sem ciclo (conferido). Só a frase ficou
+      velha.
+    suggested_action: 'Na próxima emenda da §2.2, trocar a frase pela lista atual de imports de net/.'
+
+avaliacoes_pedidas:
+  politica_de_desconexao: >-
+    Está DENTRO dos ACs, e é placeholder, não decisão contrabandeada. O AC 13 pede textualmente o mecanismo
+    (detecção de assento vago, prazo, transições), a política num campo de configuração e o "default
+    provisório = pausa com prazo curto, W.O. no estouro (a recomendação de §12/R-02)", com marcação
+    estrutural no padrão de tuning.ts. Foi isso que o @dev entregou. POLITICA_DE_DESCONEXAO_PROVISORIA mora
+    num lugar só, abre com "⚠️ PROVISÓRIO … Nenhuma política de desconexão foi decidida. A decisão é do @pm",
+    é lida só via ConfigDaSala.desconexao e pode ser trocada por server/main.ts sem editar o fluxo. O
+    `'anular'` existe como valor do campo, com o aviso de incentivo perverso, e NÃO é o default. O AC 13
+    proíbe escolher anular "em silêncio", não representá-lo. O que o @dev decidiu além do texto (semântica
+    por fase, 20 s, o draft como "antes do início") ficou declarado como [AUTO-DECISION], e é o que um
+    placeholder precisa ter para funcionar. Isso vira a lista de E43-REQ-004, e não achado contra a story.
+    Dono de R-02: o @pm, com ratificação do usuário (§12 "devolve ao @pm / usuário"; R-02 bloqueia terminar a
+    fase). Uma decisão de R-02 substitui o default trocando o objeto, salvo "bot assume", que exige story. A
+    e4.4/AC 14 já diz que a atualização do default é em sala.ts, não no servidor.
+  itens_em_aberto_do_dev: >-
+    (a) Hash sem fonte para a e4.4: MEDIUM, @architect decide e @po roteia (E43-ARC-001). É contradição real
+    entre o AC 12/13 da e4.4 e a injeção, e um stub passaria calado até o replay da e4.6. (b) Pausa invisível
+    no fio: LOW, @pm primeiro (R-02) e depois @architect (E43-REQ-003). É UX, e o custo depende da opção
+    escolhida. (c) EventoPartida sem mensagem: MEDIUM, @architect e @po (E43-ARC-002). Torna a e4.5/AC 10
+    inimplementável no escopo dela, alcança a evidência de telemetria de P4.4 e tem uma pergunta de segredo
+    por assento. (d) R-02 ainda provisória: não é achado, é o estado correto (E43-REQ-004 lista o que a
+    decisão precisa cobrir).
+  reordenacao_do_timer_de_builds: >-
+    Aceitável. O AC 11 exige placar, sequência de vencedores e hashes iguais, não o mesmo log de decisões. A
+    reordenação é forçada pelo cenário: se a guarda segurasse o `pronto` do jogador 0 até o estouro, o relógio
+    produziria buildPadrao para os DOIS, e a partida mudaria. O RF-04 torna a ordem de prontos irrelevante
+    para o estado, e os hashes das 3 rodadas (e das 4 da seed 2) provam isso. A guarda não relaxou o log: ela
+    o compara com "o que foi enviado + o que o prazo produziu" e pega decisão inventada ou perdida. Nota para a
+    e4.6: o replay de uma partida em rede reproduz o log da SALA, e é contra ele (não contra tools/partida.ts)
+    que a verificação bit a bit tem de rodar.
+  roteamento_pelo_parser: >-
+    Deixou de depender só de leitura: está provado por execução (ver verificacao_independente, "Caminho feliz
+    pelo parser"). A mutação de PRODUÇÃO Q14 (parser estrito demais) é pega pela guarda da sala. A mesma
+    mutação com o desvio `raw as DoCliente` (Q14d) deixa a linha da sala verde. É o par "mutação de produção +
+    checagem desligada" (precedente de debt.13). Então o AC 16, "um parser estrito demais quebra a guarda do
+    placar", tem dente. O que a mutação da guarda sozinha (Q14c) não pega é a remoção do roteamento. Isso é
+    mutação do teste, e fica coberto pela leitura: toda EntradaDaSala com `msg` da Bo5 sai de pelaFronteira,
+    e a única exceção (ballIndex 2) está nos negativos, rotulada. Nenhuma ação.
+
+observacoes:
+  - >-
+    O Status estava "Ready for Review", e o canônico de story-lifecycle.md é "InReview". Não afeta o gate. A
+    transição registrada é Ready for Review → Done, como em e4.8 e e4.9.
+  - >-
+    CodeRabbit não roda nesta máquina (WSL). A cobertura veio de check, sim:check e build, da leitura linha a
+    linha de sala.ts e do diff de determinism.ts, da varredura de seeds e de 30 execuções de mutação (9 do
+    @dev refeitas e 21 minhas, inclusive o par do parser).
+  - >-
+    Para a e4.4: `passo()` processa as entradas ANTES de avançar o tempo, então um cast é carimbado contra o
+    tick da SIMULAÇÃO, que pode estar atrás do relógio de parede se o laço do servidor atrasar. O atraso
+    efetivo em parede encolhe pelo atraso do laço. Isso está conforme o AC 6 ("tickAtual" é o tick da
+    simulação), mas o laço de server/main.ts deve chamar passo() a cada iteração, sem acumular. Se a
+    telemetria de operação mostrar atraso de laço, é aqui que o 6 deixa de ser 6.
+  - >-
+    Para a e4.5: o rodadaFim de um W.O. de R-02 vem depois de um snap com over:false e sem roundEnd. O
+    cliente não pode depender de `snap.over` para trocar de tela. O gatilho é o rodadaFim.
+  - >-
+    Carry-forward de e4.8/e4.9: o AC 11 (e) está provado em execução, e o broadcast do `{t:'sala'}` com o
+    segredo do assento 0 é pego. O jogador por assento, recomendado pelo @architect, também é pego.
+    E48-TST-001 e E49-TST-001/002/003 continuam roteados à debt.12, e não foram cobrados aqui (v1.5.0 da
+    story). E4.4 e e4.5 devem cobrar no call site que nenhum `JSON.stringify(DoServidor)`/`as DoCliente`
+    exista.
+
+waiver: { active: false }
+updated: '2026-09-21T09:40:00Z'
