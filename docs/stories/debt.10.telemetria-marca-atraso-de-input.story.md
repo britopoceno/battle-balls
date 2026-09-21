@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+Ready for Review
 
 ## Executor Assignment
 
@@ -250,47 +250,47 @@ não existe (AC 4, 6, 7).
 
 ## Tasks / Subtasks
 
-- [ ] Task 0 — Pré-condição de sequência (AC: 2, 3)
-  - [ ] Confirmar que o commit de implementação de `e4.2` existe e que `git status --short` não mostra
+- [x] Task 0 — Pré-condição de sequência (AC: 2, 3)
+  - [x] Confirmar que o commit de implementação de `e4.2` existe e que `git status --short` não mostra
         `render.ts`, `determinism.ts`, `net/snapshot.ts` nem `net/projecao.ts` modificados ou não
         rastreados. Registrar no Dev Agent Record o hash de `e4.2` usado como base
 
-- [ ] Task 1 — Decidir a forma do carimbo (AC: 4, 8)
-  - [ ] Escolher: campo por evento, e/ou bump de `CHAVE`/`versao`; nome do(s) campo(s); se cobre
+- [x] Task 1 — Decidir a forma do carimbo (AC: 4, 8)
+  - [x] Escolher: campo por evento, e/ou bump de `CHAVE`/`versao`; nome do(s) campo(s); se cobre
         `ESCALA_HP` nesta story ou fica para outra — registrar a decisão e a justificativa no Dev Agent
         Record
-  - [ ] Se decidir que a forma deve ser fixada pelo @architect antes de implementar, registrar o handoff
-        (mesmo padrão de `e4.1`/`e4.2`) e parar aqui até resposta
+  - [ ] ~~Se decidir que a forma deve ser fixada pelo @architect antes de implementar, registrar o handoff
+        (mesmo padrão de `e4.1`/`e4.2`) e parar aqui até resposta~~ — não se aplica: forma decidida pelo @dev, sem handoff (ver Dev Agent Record)
 
-- [ ] Task 2 — `client/telemetria.ts` (AC: 4, 5, 7)
-  - [ ] Adicionar o(s) campo(s) decidido(s) na gravação por evento (`registrar`)
-  - [ ] Em `ler()`, tratar acúmulo anterior sem o campo como "desconhecido" na leitura — nunca reescrever
+- [x] Task 2 — `client/telemetria.ts` (AC: 4, 5, 7)
+  - [x] Adicionar o(s) campo(s) decidido(s) na gravação por evento (`registrar`)
+  - [x] Em `ler()`, tratar acúmulo anterior sem o campo como "desconhecido" na leitura — nunca reescrever
         com um valor assumido
 
-- [ ] Task 3 — `client/main.ts`, ligação (AC: 3, 4, 8, 10). **Pular se a forma escolhida carimbar dentro de
+- [ ] Task 3 — **PULADA** (forma preferida do AC 3: carimbo dentro de `registrar()`, `main.ts` fora do diff) — `client/main.ts`, ligação (AC: 3, 4, 8, 10). **Pular se a forma escolhida carimbar dentro de
       `registrar()`** (forma preferida do AC 3); nesse caso `main.ts` não aparece no diff
-  - [ ] Repassar `ATRASO_ALVO_TICKS` (import já existe, `main.ts:8`) ao coletor no ponto de gravação
-  - [ ] Se AC 8 estiver dentro do escopo: importar `ESCALA_HP` de `../chars/tuning.ts` e repassar do mesmo
-        jeito — nenhuma regra de jogo nova, só ligação
+  - [ ] ~~Repassar `ATRASO_ALVO_TICKS` (import já existe, `main.ts:8`) ao coletor no ponto de gravação~~ — pulada
+  - [ ] ~~Se AC 8 estiver dentro do escopo: importar `ESCALA_HP` de `../chars/tuning.ts` e repassar do mesmo
+        jeito — nenhuma regra de jogo nova, só ligação~~ — pulada (`ESCALA_HP` é importado em `client/telemetria.ts`)
 
-- [ ] Task 4 — `tools/telemetria.ts`, agregador (AC: 6, 7)
-  - [ ] Agrupar eventos por (atraso, escala) antes de calcular P3.1/P3.2/P3.3/RF-36
-  - [ ] Se houver mais de um grupo conhecido: reportar cada um separadamente, ou recusar o número
+- [x] Task 4 — `tools/telemetria.ts`, agregador (AC: 6, 7)
+  - [x] Agrupar eventos por (atraso, escala) antes de calcular P3.1/P3.2/P3.3/RF-36
+  - [x] Se houver mais de um grupo conhecido: reportar cada um separadamente, ou recusar o número
         combinado e avisar qual é a mistura — nunca calcular um número único misturando os dois
-  - [ ] Grupo "desconhecido" para dado sem o campo (AC 7), no mesmo padrão de aviso de `mag` ausente
+  - [x] Grupo "desconhecido" para dado sem o campo (AC 7), no mesmo padrão de aviso de `mag` ausente
         (`tools/telemetria.ts:154-158`)
 
-- [ ] Task 5 — Documentação (AC: 9)
-  - [ ] Anotar a fronteira `b8e8a41` / 2026-09-21 em `docs/evidence/telemetria/README.md`
+- [x] Task 5 — Documentação (AC: 9)
+  - [x] Anotar a fronteira `b8e8a41` / 2026-09-21 em `docs/evidence/telemetria/README.md`
 
-- [ ] Task 6 — Verificação (AC: 1, 2, 3, 10)
-  - [ ] `npm run check` — 0 erros
-  - [ ] `npm run sim:check` antes e depois da mudança — `diff` da saída completa vazio
-  - [ ] `git show --stat` do(s) commit(s) desta story, restrito ao escopo do AC 10: confirmar ausência de
+- [x] Task 6 — Verificação (AC: 1, 2, 3, 10)
+  - [x] `npm run check` — 0 erros
+  - [x] `npm run sim:check` antes e depois da mudança — `diff` da saída completa vazio
+  - [x] `git show --stat` do(s) commit(s) desta story, restrito ao escopo do AC 10: confirmar ausência de
         `src/net/snapshot.ts`, `src/net/projecao.ts`, `src/client/render.ts`, `src/tools/determinism.ts`
-  - [ ] Teste de aceitação do AC 5: fixture/export sintético com duas combinações (atraso, escala),
+  - [x] Teste de aceitação do AC 5: fixture/export sintético com duas combinações (atraso, escala),
         confirmar que dá para particionar só com o conteúdo do arquivo
-  - [ ] Teste de compatibilidade do AC 7: export sem os campos novos não quebra o agregador
+  - [x] Teste de compatibilidade do AC 7: export sem os campos novos não quebra o agregador
 
 ## Dev Notes
 
@@ -452,14 +452,103 @@ da bissecção de e3.6"]
 
 ## Dev Agent Record
 
+### Agent Model Used
+
+Claude Opus 5 (1M context), como Dex (@dev), em modo YOLO.
+
+### Task 0: base de sequência (AC 3)
+
+Commit de implementação de `e4.2` usado como base: **`b1c0668`** (`feat(net): snapshot e projeção`).
+No início, `git status --short` mostrava só `.claude/agent-memory/` modificado ou não rastreado. Nenhum
+de `render.ts`, `determinism.ts`, `net/snapshot.ts` ou `net/projecao.ts` estava na árvore. O `sim:check`
+"antes" foi capturado nesse estado, antes de qualquer edição.
+
 ### File List
 
-_(a preencher pelo @dev)_
+| Arquivo | Mudança |
+|---|---|
+| `src/client/telemetria.ts` | Importa `ATRASO_ALVO_TICKS` (`net/protocolo.ts`) e `ESCALA_HP` (`chars/tuning.ts`). `EventoRegistrado` ganha `atrasoTicks?`/`escalaHp?` (opcionais; ausente = desconhecido). `registrar()` carimba os dois em cada evento. `ler()` avisa quantos eventos do acúmulo estão sem carimbo e não os reescreve. O docblock de `CHAVE` explica por que não houve bump. |
+| `src/tools/telemetria.ts` | `agregar()` particiona por (atraso, escala) lidos do arquivo e roda o corpo original em cada população. O corpo virou `agregarPopulacao()`, sem mudança de cálculo. Três avisos novos: população desconhecida, mistura de populações e partida dividida entre populações. Com mais de uma população, os avisos de `mag`/`anguloErro` levam o rótulo dela. Imports inalterados. |
+| `docs/evidence/telemetria/README.md` | Seção nova "Fronteiras de atraso de input e do carimbo por evento (e4.1 → debt.10)" (AC 9). |
+| `docs/stories/debt.10.telemetria-marca-atraso-de-input.story.md` | Este registro. |
+
+**Não tocados:** `src/client/main.ts` (Task 3 pulada), `src/net/`, `src/chars/`, `src/client/render.ts`,
+`src/client/input.ts`, `src/tools/determinism.ts`, `src/sim/`, `src/match/`, `src/shop/`, `src/bot/`.
 
 ### Decisão de forma do carimbo (AC 4, 8)
 
-_(a preencher pelo @dev — nome de campo(s), por evento ou bump de versão, se `ESCALA_HP` entrou nesta story
-ou foi adiado, com justificativa)_
+- **Campo por evento, sem bump de chave.** Cada `EventoRegistrado` ganha dois campos numéricos:
+  `atrasoTicks` (= `ATRASO_ALVO_TICKS`) e `escalaHp` (= `ESCALA_HP`). Eles são gravados dentro de
+  `registrar()`, ao lado de `partida`, pelo mesmo mecanismo que já existia. O valor sai das constantes
+  importadas no momento do `push`. Não é inferido e não é carimbado no `exportar()`.
+- **Forma preferida do AC 3 adotada.** Os imports ficam em `client/telemetria.ts`, o que a regra
+  `client/ → todos` permite. `main.ts`, os três pontos de chamada e a assinatura `registrar(partida, eventos)`
+  não mudam.
+- **Campos opcionais no tipo; ausente = desconhecido.** O agregador lê arquivos pelo mesmo tipo, e um
+  arquivo antigo não tem esses campos. Torná-los obrigatórios mentiria sobre o dado lido. O agregador
+  trata `!Number.isFinite` (ausente, `null`, string) como desconhecido, **nunca** como 0 ou 1.0.
+- **`ESCALA_HP` entrou nesta story (AC 8)**, pelo mesmo mecanismo. É a mesma classe de defeito
+  (`E37-DOC-004`) e custa uma linha a mais, então não havia motivo para adiar.
+- **[AUTO-DECISION] Subir `CHAVE` para `v2`? → Não.** Motivo: a mudança só acrescenta campos, e a
+  ausência deles já marca "gravado antes do carimbo". O bump não separaria nada do que já foi gravado e
+  deixaria o acúmulo `v1` órfão, porque `ler()`/`exportar()` só enxergam a chave corrente. **Destino do
+  acúmulo `v1`: fica sob a mesma chave, é lido e exportado junto, e sai como população desconhecida.**
+  Nada é descartado nem perdido. O docblock de `CHAVE` registra esse desvio da intenção original
+  ("formato muda → v2").
+- **[AUTO-DECISION] Handoff ao @architect? → Não.** Motivo: a forma não cria seta nova de camada nem muda
+  contrato de `net/`. É um campo de dado local do coletor, dentro do que o AC 4 deixa ao @dev.
+- **Camadas (AC 10).** `tools/telemetria.ts` não importa nada novo. `atrasoTicks`/`escalaHp` chegam
+  como membros do tipo `EventoRegistrado`, que já era importado com `import type` (apagado na execução).
+  Não existe `tools/ → net/`: o agregador lê o valor gravado no arquivo.
+- **[AUTO-DECISION] Particionar ou recusar (AC 6)? → Particionar.** Cada população sai numa seção
+  própria, com seus P3.1/P3.2/P3.3/extras/RF-36. Antes das seções vêm o cabeçalho
+  `⚠ N populações … nenhum número combinado` e um `console.warn` que lista a mistura. As populações
+  conhecidas saem primeiro e a desconhecida por último. Acrescentei também um aviso para partida com
+  eventos em mais de uma população, porque aí o join de P3.3 (compra × `rodadaFim` da mesma partida)
+  seria cortado em silêncio. Com dado do coletor isso não acontece, já que uma partida vive num só
+  carregamento de página, mas pode acontecer com arquivo editado à mão.
+
+### Debug Log / Verificação
+
+Os artefatos ficaram no scratchpad da sessão, fora do repositório, porque a story não autoriza arquivo
+de teste novo (AC 10).
+
+| Prova | Resultado |
+|---|---|
+| `npm run check` | 0 erros |
+| `npm run sim:check` antes (base `b1c0668`, árvore limpa) × depois | Exit 0 nos dois. **O `diff` da saída completa (50 linhas) é vazio.** `golden hash ✓ ok — 6 seeds batem o baseline` |
+| `npm run build` | ok, 32 módulos |
+| Agregador × os 5 exports reais de `docs/evidence/telemetria/` (antes × depois) | Exit 0 nos 5. **Toda linha de métrica ficou idêntica.** O diff só acrescenta a linha `população: atraso desconhecido · ESCALA_HP desconhecida (…)` e o aviso `N evento(s) sem carimbo …`, com N = 14/32/154/197/372. **AC 7** |
+| Coletor real: `criarTelemetria` com `localStorage` falso contendo os 372 eventos do export definitivo | `ler()` avisa 372 eventos sem carimbo. Um `registrar()` novo grava `atrasoTicks=6` e `escalaHp=6`, iguais às constantes. Os 372 antigos continuam **sem** os campos, e `CHAVE` segue `bb.telemetria.v1`. **AC 4** |
+| Fixture misto: export definitivo com 992276418/670239056 → (6, 6), 12294565 → (0, 3), resto sem carimbo | A partição sai só do `JSON.parse` do arquivo: `?\|?` 154, `0\|3` 43, `6\|6` 175. **AC 5** |
+| CLI sobre o misto | 3 blocos P3.1 e 3 blocos RF-36. O `n` de P3.1 por seção é `[4, 7, 14]`: soma 25 e nenhum é 25 (o número combinado de antes). A seção (6, 6) reproduz a mediana ×6.0 do README (58.4s, n=7). A desconhecida vem por último. **AC 6** |
+| CLI sobre array cru com uma partida dividida | Aviso `1 partida(s) com eventos em mais de uma população (992276418)` |
+| **Bateria negativa** (perturbar, rodar, restaurar e conferir com `cmp`) | (1) Sem carimbo em `registrar()` → o teste de carimbo falha. (2) `agregar()` sem partição → 5 testes falham (AC 6/7). Os testes enxergam as duas regressões. Arquivos restaurados byte a byte, e os 11 testes voltam a passar. |
+| Imports | Os imports de `tools/telemetria.ts` não mudaram: `node:fs`, `client/input.ts` e `import type` de `client/telemetria.ts`. |
+
+### Completion Notes
+
+- CodeRabbit (Pre-Commit) **não rodou**: o CLI via WSL não está disponível nesta máquina. A cobertura
+  veio de `npm run check`, `sim:check` e dos testes dirigidos acima. A caixa de Quality Gate Tasks
+  ficou desmarcada de propósito.
+- O projeto não tem script `lint`; o gate estático é `npm run check` (`tsc --noEmit`).
+- A janela `b8e8a41` → `debt.10` (atraso 6, sem carimbo) **não é recuperável pelo arquivo**. O README a
+  registra junto com a mitigação manual do gate de `e4.1`.
+- O README cita o commit desta story por `git log --grep`, e não por hash, porque um commit não pode
+  conter o próprio hash. O hash vai no relatório de entrega e no gate.
+- AC 11/12: nada foi decidido sobre `debt.9`, e `debt.9` e `e4.1` não foram editadas.
+
+### Self-critique (checkpoints 5.5 / 6.5)
+
+- O carimbo acontece na gravação, não no export: ✓ (código, teste e perturbação 1).
+- Dado antigo nunca vira 0 ou 1.0: ✓ (`Number.isFinite` no agregador; `ler()` não reescreve).
+- Com mais de uma população, não sai número combinado: ✓ (perturbação 2).
+- Arquivo exportado antes da story não quebra o agregador: ✓ (5 exports reais, exit 0).
+- Escopo: 3 arquivos de código/doc mais a story. Nenhum dos 4 arquivos de `e4.2` foi tocado, e `main.ts`
+  também não.
+- Risco residual: um arquivo com carimbo parcial (só um dos dois campos) vira uma população própria,
+  rotulada com o campo que falta como desconhecido, e não é somado a uma conhecida. Isso é intencional,
+  e o coletor nunca produz esse caso.
 
 ## QA Results
 
@@ -471,3 +560,4 @@ _(a preencher pelo @qa)_
 |---|---|---|---|
 | 2026-09-21 | 1.0 | Story criada a partir do achado `E41-TEL-002` do gate `PENDING` de `e4.1` (`docs/qa/gates/e4.1-ativar-atraso-de-input.yml`, severidade medium), conforme roteamento do @po registrado no Change Log v1.4.0 de `docs/stories/e4.1.ativar-atraso-de-input.story.md`. Escopo: `client/telemetria.ts`, `client/main.ts` (ligação), `tools/telemetria.ts`, `docs/evidence/telemetria/README.md`. A forma exata do carimbo (nome de campo, por evento vs. bump de versão, cobertura de `ESCALA_HP`) é deixada como decisão do `@dev`/`@architect` (AC 4, 8), por não haver documento de arquitetura que a fixe hoje. Registrado o conflito de arquivo em andamento com `e4.2` (AC 3, 10): nenhum dos quatro arquivos que `e4.2` está implementando/restringindo é tocado. Não bloqueia o re-gate de `e4.1`; precede qualquer coleta humana usada como evidência de `debt.9` (pré-condição b) ou baseline de P4.4. Não decide a pergunta aberta de `debt.9` v1.1. | River (@sm) |
 | 2026-09-21 | 1.1 | **Validação @po: GO 10/10** (8/10 antes das correções: itens 5 "dependências" e 8 "riscos" estavam parciais). **Status: Draft → Ready.** **Conferido na fonte antes de emendar:** `client/telemetria.ts:25` (`CHAVE`), `:20-25` (docblock), `:87-95` (docblock de `EventoRegistrado`), `:132-136` (`registrar` carimba `partida`), `:137-144`/`:139` (`exportar`, `versao: CHAVE`), `:145` (`limpar`), `:161` (`ler` só lê a chave corrente); `tools/telemetria.ts:2-3` (import de valor de `client/input.ts` e **só de tipo** de `client/telemetria.ts`), `:154-158` (aviso de `mag`, TEL-E35-001), `:164-170` (`anguloErro`), `:201-202` (aceita `{versao,...}` ou array cru, não confere `versao`); `chars/tuning.ts:10` (`ESCALA_HP = 6.0`) e `chars/index.ts:3` (já o importa); `net/protocolo.ts:38` (`ATRASO_ALVO_TICKS = 6`); `client/main.ts:1`, `:8` e os três pontos de chamada de `registrar` (`:134`, `:238`, `:319`); `architecture-e4.md:279-287` (`client/ → todos` existe, `tools/ → net/` não existe, `tools/ → chars/` existe); `b8e8a41` (2026-09-21, só `main.ts` + story, troca o literal `INPUT_DELAY_TICKS = 0` por `ATRASO_ALVO_TICKS`); `docs/evidence/telemetria/README.md` (a seção de formato citada existe e nenhuma entrada de `b8e8a41` existe ainda, o que é correto: é o AC 9); as citações do gate `E41-TEL-002` e do Change Log v1.4.0 de `e4.1` conferem, com as elisões marcadas; `debt.9` v1.1 registra a pergunta aberta; `e4.2` AC 11 ("ninguém aprovou ainda") e AC 14 (proíbe `main.ts` **à própria `e4.2`**). **Correções no lugar:** **(1) Sequenciamento com `e4.2`, agora explícito no AC 3** (antes era "não depende"). A implementação de debt.10 começa só depois que o commit de implementação de `e4.2` existir; não é preciso esperar Done. O motivo é de prova: hoje `render.ts`/`determinism.ts` estão modificados e `net/snapshot.ts`/`net/projecao.ts` estão não rastreados na mesma árvore. Com isso, o `sim:check` antes/depois do AC 2 absorveria a guarda nova de `e4.2`, e `git diff --stat` mostraria os arquivos dela. Nova Task 0. A verificação de escopo passa de `git diff --stat` (árvore) para `git show --stat` do(s) commit(s) desta story, em `quality_gate_tools`, AC 3 e Task 6. **(2) `main.ts`:** vira "só se a forma exigir", em commit posterior ao de `e4.2`, e a conferência "main.ts intocado" de `e4.2` é feita sobre o commit de `e4.2`. Fica registrada a **forma preferida**, que elimina o contato: carimbar dentro de `registrar()` importando as duas constantes em `client/telemetria.ts`. A tabela de camadas permite, e como `tools/telemetria.ts:3` é `import type`, não nasce aresta de execução `tools/ → net/`. A decisão de forma continua do @dev/@architect (AC 4). Task 3 pode ser pulada. **(3) AC 4, risco que faltava:** um bump para `v2` deixa o acúmulo `v1` órfão, porque `ler`/`exportar` só enxergam a chave corrente. O destino desse acúmulo passa a ser declarado obrigatoriamente. **(4) AC 3 e "Depende de":** "um golden hash e uma guarda próprios" de `e4.2` estava impreciso. O golden hash é do projeto e `e4.2` o mantém idêntico; o que `e4.2` acrescenta é a guarda de ida-e-volta (AC 7) e a asserção QA-D8-01 (AC 13). **(5) AC 9:** `INPUT_DELAY_TICKS` 0→6 nomeava uma constante que não existe mais (E41-TST-003). Passa a descrever a troca real do `b8e8a41` e pede também a fronteira do commit desta story. **(6) Citações:** tabela de camadas `280-287` → `279-287` (3 lugares), `registrar` `:131-136` → `:132-136`, e a citação do gate em Dev Notes restaurada verbatim. **(7) "NÃO faz":** sem chamador de UI para `limpar()`; a mitigação continua no console, conforme o gate. Complexidade: o mandato diz tamanho S e a seção CodeRabbit diz "Medium"; os dois ficam, por medirem coisas diferentes (superfície e decisão de forma). | Pax (@po) |
+| 2026-09-21 | 1.2 | **Implementação @dev (YOLO). Status: Ready → InProgress → Ready for Review.** Base `e4.2` = `b1c0668` (Task 0). Forma escolhida: `atrasoTicks`/`escalaHp` por evento, gravados em `registrar()` de `client/telemetria.ts` a partir de `ATRASO_ALVO_TICKS`/`ESCALA_HP`. É a forma preferida do AC 3: `main.ts` fica intocado e a Task 3 foi pulada. Sem bump de `CHAVE`; o acúmulo `v1` continua exportável e sai como população desconhecida. `ESCALA_HP` coberto (AC 8). `tools/telemetria.ts` particiona por (atraso, escala) lidos do arquivo, sem número combinado e com avisos; imports inalterados, sem `tools/ → net/`. README ganha as fronteiras `13ee9d8`/`b8e8a41`/`debt.10` (AC 9). Verificação: `check` ok; `sim:check` com diff antes/depois vazio e golden hash idêntico; `build` ok; os 5 exports reais rodam sem crash e com métricas idênticas; fixture misto particionado; a bateria negativa detectou as 2 regressões plantadas. CodeRabbit indisponível na máquina. | Dex (@dev) |

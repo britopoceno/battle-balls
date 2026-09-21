@@ -1,4 +1,6 @@
+import { ESCALA_HP } from '../chars/tuning.ts'
 import type { EventoPartida } from '../match/index.ts'
+import { ATRASO_ALVO_TICKS } from '../net/protocolo.ts'
 
 /**
  * TELEMETRIA LOCAL (`docs/architecture-e3.md` §10, story `e3.5`).
@@ -21,6 +23,14 @@ import type { EventoPartida } from '../match/index.ts'
  * Chave VERSIONADA (AC 4). O sufixo não é decoração: o dia em que o formato do evento mudar, os
  * dados antigos ficam sob `v1` e o coletor novo escreve em `v2` — em vez de os dois formatos se
  * misturarem no mesmo array e a agregação somar maçãs com laranjas sem nada acusar.
+ *
+ * **Por que `debt.10` NÃO subiu para `v2`** (`E41-TEL-002`), embora tenha acrescentado campos ao
+ * evento: a mudança é ADITIVA (`atrasoTicks`/`escalaHp`, ver `EventoRegistrado`), e a ausência do
+ * campo já é, sozinha, a marca de "gravado antes do carimbo" — o agregador a lê como população
+ * desconhecida. O bump, ao contrário, não teria efeito sobre o que já está misturado sob `v1` e
+ * deixaria esse acúmulo ÓRFÃO: `ler()` e `exportar()` só enxergam a chave corrente, então as rodadas
+ * pré-`e4.1` que o gate manda exportar e guardar deixariam de ser exportáveis pelo jogo. Com a chave
+ * mantida, elas continuam saindo no mesmo arquivo, marcadas pela falta do carimbo.
  */
 export const CHAVE = 'bb.telemetria.v1'
 
@@ -91,8 +101,25 @@ export type EventoTelemetria = EventoPartida | EventoCast
  * e o AC 10 pede "trocas de build **por partida**" — inderivável de uma lista plana onde a 2ª rodada
  * de uma partida é indistinguível da 2ª rodada da seguinte. É o mínimo para desempatar, e é dado que
  * o cliente já tem em mãos.
+ *
+ * `atrasoTicks` e `escalaHp` (`debt.10`, achado `E41-TEL-002`) são o mesmo tipo de carimbo pelo
+ * mesmo motivo: o `localStorage` sobrevive a trocas de build, então um único export pode juntar
+ * rodadas jogadas com atraso 0 (antes de `b8e8a41`) e com atraso 6, ou com escalas de HP diferentes
+ * (a classe de `E37-DOC-004`). Por isso o valor é gravado **por evento, no instante do
+ * `registrar()`**, lido das constantes-fonte (`ATRASO_ALVO_TICKS`, `ESCALA_HP`), e nunca carimbado
+ * no `exportar()`, que atribuiria o valor ATUAL a eventos gravados sob outro.
+ *
+ * São **opcionais no tipo** porque o arquivo lido pode ter sido gravado antes deles existirem. Ausente
+ * significa DESCONHECIDO, nunca "atraso 0" nem "escala 1.0": todo evento gravado a partir de
+ * `debt.10` traz os dois, e quem ler o arquivo não pode completar o que falta com um palpite.
  */
-export type EventoRegistrado = EventoTelemetria & { partida: number }
+export type EventoRegistrado = EventoTelemetria & {
+  partida: number
+  /** `ATRASO_ALVO_TICKS` em vigor quando o evento foi gravado; ausente = desconhecido (pré-`debt.10`) */
+  atrasoTicks?: number
+  /** `ESCALA_HP` em vigor quando o evento foi gravado; ausente = desconhecida (pré-`debt.10`) */
+  escalaHp?: number
+}
 
 export interface ArquivoTelemetria {
   versao: string
@@ -131,7 +158,10 @@ export function criarTelemetria(): Telemetria {
   return {
     registrar(partida, novos) {
       if (novos.length === 0) return
-      for (const e of novos) eventos.push({ ...e, partida })
+      // carimbo no instante da gravação (debt.10): as constantes lidas AQUI, não no exportar()
+      for (const e of novos) {
+        eventos.push({ ...e, partida, atrasoTicks: ATRASO_ALVO_TICKS, escalaHp: ESCALA_HP })
+      }
       persistir()
     },
     exportar() {
@@ -164,6 +194,17 @@ function ler(): EventoRegistrado[] {
     if (!Array.isArray(dados)) {
       console.warn(`[telemetria] ${CHAVE} não continha um array — acúmulo anterior descartado`)
       return []
+    }
+    // debt.10: acúmulo gravado antes do carimbo fica COMO ESTÁ — sem atraso/escala, isto é,
+    // desconhecido. Reescrevê-lo com o valor de hoje seria inventar o dado que o carimbo existe para
+    // registrar. Só se avisa, para quem abrir o console saber que o próximo export sai misturado.
+    const semCarimbo = dados.filter(
+      (e: Partial<EventoRegistrado> | null) => e?.atrasoTicks === undefined || e?.escalaHp === undefined,
+    ).length
+    if (semCarimbo > 0) {
+      console.warn(
+        `[telemetria] ${semCarimbo} evento(s) em ${CHAVE} sem atraso/escala (gravados antes de debt.10) — mantidos como população desconhecida`,
+      )
     }
     return dados as EventoRegistrado[]
   } catch (err) {

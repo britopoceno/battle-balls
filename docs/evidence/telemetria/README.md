@@ -35,3 +35,23 @@ T-2 de `e3.6` exige como evidência P3.1. Os números da tabela de bissecção d
 As partidas 734981348 e 21386782 (~14s de mediana) não são citadas na tabela de bissecção — as
 medianas são consistentes com ×1.0 (jogadas antes do build ×2.0 publicado chegar ao navegador);
 ficam registradas sem atribuição de escala, como o arquivo as trouxe.
+
+## Fronteiras de atraso de input e do carimbo por evento (e4.1 → debt.10)
+
+Os cinco exports acima são todos de **atraso 0** (anteriores a `e4.1`) e **nenhum evento deles traz
+carimbo** — o agregador os reporta como população **desconhecida** (`debt.10`, AC 7). A escala de
+cada partida continua sendo a da linha do tempo acima, lida contra os commits; não está no arquivo.
+
+| Data/hora (−03) | Commit | O que muda para quem ler um export |
+|---|---|---|
+| 2026-08-05 03:45:58 | `13ee9d8` | `ESCALA_HP = 6.0` fica como valor de entrega (tabela acima) — ainda **sem** carimbo no evento |
+| 2026-09-21 03:24:48 | `b8e8a41` (`e4.1`) | sai o literal `INPUT_DELAY_TICKS = 0` de `client/main.ts`; o cast humano do modo local passa a ser agendado `ATRASO_ALVO_TICKS` (= 6, de `net/protocolo.ts`) à frente. Rodadas gravadas daqui em diante têm atraso 6 — **ainda sem carimbo**: no arquivo são indistinguíveis das de atraso 0 |
+| 2026-09-21 | commit `[debt.10]` (hash: `git log --oneline --grep='debt.10\]' -- src/client/telemetria.ts`) | `client/telemetria.ts` passa a gravar `atrasoTicks` e `escalaHp` **em cada evento, no instante do `registrar()`**, lidos de `ATRASO_ALVO_TICKS` e `ESCALA_HP`. A chave continua `bb.telemetria.v1`. O agregador separa as populações e não calcula número combinado |
+
+**A janela entre `b8e8a41` e `debt.10` não é recuperável pelo arquivo.** O que foi gravado nela (atraso 6)
+e o que foi gravado antes (atraso 0) saem juntos na população desconhecida, porque o carimbo não
+existia e o coletor não reescreve acúmulo antigo com um valor assumido. Para separar, só a mitigação
+manual do gate de `e4.1`: exportar, guardar como "pré-e4.1" e zerar
+(`localStorage.removeItem('bb.telemetria.v1')` no console) antes de jogar. Coleta humana que vá servir
+de evidência para `debt.9` (pré-condição b) ou de baseline de P4.4 (`e4.7`) deve ter **só** eventos
+carimbados.

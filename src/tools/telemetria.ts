@@ -50,8 +50,103 @@ function mediana(xs: readonly number[]): number {
 const pct = (n: number, total: number): string =>
   total === 0 ? '—' : `${((n / total) * 100).toFixed(1)}%`
 
+/**
+ * debt.10 / `E41-TEL-002` — a população de um evento: o (atraso de input, `ESCALA_HP`) GRAVADO nele
+ * pelo coletor no instante do `registrar()`.
+ *
+ * O agregador lê o valor do ARQUIVO e nunca importa as constantes-fonte: `tools/ → net/` não existe
+ * na tabela de camadas (`architecture-e4.md` §2.2), e o valor histórico certo é o que foi gravado, não
+ * o que a constante vale hoje. Campo ausente ou não-numérico é DESCONHECIDO — nunca atraso 0 nem escala
+ * 1.0 por omissão, mesmo molde do `mag` ausente (TEL-E35-001) mais abaixo.
+ */
+function populacaoDe(e: EventoRegistrado): { rotulo: string; conhecida: boolean } {
+  const atrasoOk = Number.isFinite(e.atrasoTicks)
+  const escalaOk = Number.isFinite(e.escalaHp)
+  return {
+    rotulo:
+      (atrasoOk ? `atraso ${e.atrasoTicks} tick(s)` : 'atraso desconhecido') +
+      ' · ' +
+      (escalaOk ? `ESCALA_HP ×${e.escalaHp}` : 'ESCALA_HP desconhecida'),
+    conhecida: atrasoOk && escalaOk,
+  }
+}
+
+/**
+ * Particiona os eventos por população (atraso, escala) ANTES de qualquer métrica, e calcula P3.1,
+ * P3.2, P3.3, os extras e RF-36 separadamente em cada uma (debt.10, AC 6). Um único número
+ * misturando rodadas com atraso 0 e com atraso 6, ou escalas de HP diferentes, é justamente a
+ * contaminação que `debt.9` (pré-condição b) e o baseline de P4.4 não podem receber — então, com mais
+ * de uma população no arquivo, não existe linha combinada: cada uma sai na sua seção, com aviso.
+ *
+ * Eventos sem carimbo (gravados antes de `debt.10`) formam a população desconhecida, reportada por
+ * último e com aviso — nunca somada a uma população conhecida (AC 7).
+ */
 export function agregar(eventos: readonly EventoRegistrado[]): string[] {
+  const grupos = new Map<string, { conhecida: boolean; eventos: EventoRegistrado[] }>()
+  for (const e of eventos) {
+    const { rotulo, conhecida } = populacaoDe(e)
+    if (!grupos.has(rotulo)) grupos.set(rotulo, { conhecida, eventos: [] })
+    grupos.get(rotulo)!.eventos.push(e)
+  }
+  // conhecidas primeiro, em ordem estável; desconhecidas por último
+  const ordem = [...grupos.entries()].sort(
+    ([ra, a], [rb, b]) => Number(!a.conhecida) - Number(!b.conhecida) || ra.localeCompare(rb),
+  )
+
+  const semCarimbo = ordem.filter(([, g]) => !g.conhecida).reduce((n, [, g]) => n + g.eventos.length, 0)
+  if (semCarimbo > 0) {
+    console.warn(
+      `[telemetria] ${semCarimbo} evento(s) sem carimbo de atraso/escala (gravados antes de debt.10) — reportados à parte como população desconhecida, nunca somados a uma população conhecida`,
+    )
+  }
+  const multiplas = ordem.length > 1
+  if (multiplas) {
+    console.warn(
+      `[telemetria] o arquivo mistura ${ordem.length} populações (atraso, escala): ` +
+        ordem.map(([r, g]) => `${r} (${g.eventos.length} evento(s))`).join('; ') +
+        ' — métricas reportadas por população, sem número combinado',
+    )
+  }
+  // Uma partida acontece inteira num carregamento de página, então cai inteira numa população. Se não
+  // cair, o join de P3.3 (compra × rodadaFim da mesma partida) seria cortado em silêncio — avisa.
+  const populacoesDaPartida = new Map<number, Set<string>>()
+  for (const [r, g] of ordem) {
+    for (const e of g.eventos) {
+      if (!populacoesDaPartida.has(e.partida)) populacoesDaPartida.set(e.partida, new Set())
+      populacoesDaPartida.get(e.partida)!.add(r)
+    }
+  }
+  const partidasPartidas = [...populacoesDaPartida.entries()].filter(([, ps]) => ps.size > 1)
+  if (partidasPartidas.length > 0) {
+    console.warn(
+      `[telemetria] ${partidasPartidas.length} partida(s) com eventos em mais de uma população (${partidasPartidas.map(([p]) => p).join(', ')}) — as métricas dessa(s) partida(s) ficam divididas entre as seções`,
+    )
+  }
+
+  if (ordem.length === 0) return agregarPopulacao([])
   const linhas: string[] = []
+  if (multiplas) {
+    linhas.push(
+      `⚠ ${ordem.length} populações (atraso, escala) neste arquivo — cada uma reportada à parte, nenhum número combinado`,
+    )
+    linhas.push('')
+  }
+  for (const [rotulo, g] of ordem) {
+    linhas.push(
+      `população: ${rotulo}` + (g.conhecida ? '' : ' (arquivo ou acúmulo anterior a debt.10)'),
+    )
+    linhas.push(...agregarPopulacao(g.eventos, multiplas ? rotulo : undefined))
+    if (multiplas) linhas.push('')
+  }
+  if (multiplas) linhas.pop()
+  return linhas
+}
+
+/** As métricas de UMA população — o corpo original de `agregar` (e3.5), sem mudança de cálculo. */
+function agregarPopulacao(eventos: readonly EventoRegistrado[], rotulo?: string): string[] {
+  const linhas: string[] = []
+  // com mais de uma população, cada aviso diz de qual seção veio
+  const deOnde = rotulo ? ` [${rotulo}]` : ''
 
   const rodadas = eventos.filter((e) => e.t === 'rodadaFim')
   const compras = eventos.filter((e) => e.t === 'compra')
@@ -154,7 +249,7 @@ export function agregar(eventos: readonly EventoRegistrado[]): string[] {
   const magAusente = casts.filter((c) => !Number.isFinite(c.mag)).length
   if (magAusente > 0) {
     console.warn(
-      `[telemetria] ${magAusente} cast(s) sem campo 'mag' (arquivo exportado antes da correção TEL-E35-001/006) — taxa de desperdício não inclui esses casts`,
+      `[telemetria] ${magAusente} cast(s) sem campo 'mag' (arquivo exportado antes da correção TEL-E35-001/006) — taxa de desperdício não inclui esses casts${deOnde}`,
     )
   }
   const semMiraReal = casts.filter(
@@ -166,7 +261,7 @@ export function agregar(eventos: readonly EventoRegistrado[]): string[] {
   ).length
   if (naoFinito > 0) {
     console.warn(
-      `[telemetria] ${naoFinito} cast(s) com anguloErro inválido (não-finito ou < -1) — descartado(s) da taxa de desperdício`,
+      `[telemetria] ${naoFinito} cast(s) com anguloErro inválido (não-finito ou < -1) — descartado(s) da taxa de desperdício${deOnde}`,
     )
   }
   const medidos = comMiraReal.filter(
