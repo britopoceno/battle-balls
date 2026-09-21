@@ -5,6 +5,7 @@ import { createWorld, step, TICK_MS } from '../sim/world.ts'
 import type { Ball, Command, World } from '../sim/types.ts'
 import type { StatBlock } from '../sim/stats.ts'
 import { hash } from '../tools/harness.ts'
+import { ATRASO_ALVO_TICKS } from '../net/protocolo.ts'
 import {
   aplicar,
   criarPartida,
@@ -49,13 +50,6 @@ import { anguloErroGraus, criarTelemetria } from './telemetria.ts'
  * As duas puxam em direções opostas de propósito, e o motivo está em `bot/partida.ts`: o bot de
  * COMBATE tem relógio, a política de PARTIDA não tem.
  */
-
-/**
- * Atraso de input em ticks. Na Fase 4 o servidor agenda os casts ~6 ticks à frente (~100ms). Aqui
- * fica 0 para o teste de diversão ser honesto — desvio consciente já registrado na arquitetura, e
- * P4.1 é da Fase 4. Não mexer nisto nesta story (AC 12).
- */
-const INPUT_DELAY_TICKS = 0
 
 /** RF-04 — 30 segundos para escolher a build. O relógio de parede mora no CLIENTE (§2.6). */
 const SEGUNDOS_DE_BUILD = 30
@@ -308,7 +302,11 @@ function disparar(d: Disparo): void {
   const bola = minhasBolas()[d.ballIndex]
   if (!bola || !bola.alive || world.over) return
   pendentes.push({
-    tick: world.tick + INPUT_DELAY_TICKS,
+    // P4.1 / `e4.1` — o cast humano é agendado ATRASO_ALVO_TICKS à frente (~100ms), o mesmo atraso
+    // que o servidor soma no 1v1 (`architecture-e4.md` §4.1): o solo é treino honesto para a rede. Só
+    // o EFEITO atrasa; a mira continua imediata em `input.ts` (RF-34). Os bots carimbam `view.tick`
+    // e não passam por aqui — por isso o golden hash não se move (§4.2).
+    tick: world.tick + ATRASO_ALVO_TICKS,
     ballId: bola.id,
     slot: d.slot,
     dx: d.dx,
