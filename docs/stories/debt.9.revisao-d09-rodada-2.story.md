@@ -70,6 +70,24 @@ insuficiente, e ~10× o n=3 que é toda a evidência ×6.0 hoje. Não é um núm
 n=11 falho, multiplicado por uma margem que a própria razão #5 pede implicitamente ("mais que o triplo do que
 já falhou"). É um **piso**, não um alvo: se a coleta natural render mais, usar mais.
 
+**PERGUNTA ABERTA para o usuário/@pm (registrada pelo @po em 2026-09-21, NÃO decidida): a pré-condição
+(b) deve passar a exigir "×6.0 E atraso de input 6"?** Desde `b8e8a41` (`e4.1`, 2026-09-21) o modo local
+aplica `ATRASO_ALVO_TICKS = 6` ao cast humano, e antes o atraso era 0. É uma segunda variável de população,
+da mesma natureza que a escala de HP que motivou esta pré-condição, e o gate de `e4.1` a registrou como
+E41-TEL-002: o arquivo exportado não distingue as duas populações (`versao` continua
+`bb.telemetria.v1`, nenhum evento traz o atraso, e o `localStorage` sobrevive a trocas de build). As duas
+leituras possíveis:
+- **exigir "×6.0 e atraso 6"**: mede o jogo que existe agora. As compras ×6.0 coletadas antes de
+  2026-09-21 deixam de contar para o piso de n≥30, e a atribuição de atraso por partida precisa ser
+  verificada, não assumida, pela mesma regra de E37-DOC-004 para a escala;
+- **aceitar dado misto explicitamente**: vale se o julgamento for que ~100ms de atraso no efeito do cast
+  não muda **o que o jogador compra** (esta story mede loja/economia, não mira). Mas precisa ser uma
+  decisão escrita, não uma omissão.
+
+A correção durável da telemetria, que marca o atraso no arquivo, está roteada para uma story nova (pedida
+ao @sm, ver Change Log de `e4.1` v1.4.0). Até ela existir, a única separação confiável é a manual: exportar
+e zerar na fronteira.
+
 Não depende funcionalmente de `debt.8` (achado independente, sobre a cobertura de regressão do caminho de
 empate na simulação) — as duas stories vivem na mesma numeração `debt.*` por serem follow-ups de gate de QA
 pós-`e3.6`/`e3.7`, não por ordem de execução entre si.
@@ -322,3 +340,4 @@ implementação).
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-08-16 | 1.0 | Story criada a partir do achado `E37-FUP-001` do gate `CONCERNS` de `e3.7` (`docs/qa/gates/e3.7-revisao-d09-d06.yml`), condicionada às duas pré-condições que o próprio achado nomeia (`REQ-101` de `e3.6` e amostra 100% ×6.0), com o piso de amostra (n≥30) justificado a partir do n=11 que `e3.7` já julgou insuficiente. Achado complementar `E37-EVD-002` (juros/teto nunca exercitados) incorporado como AC 7. | River (@sm) |
+| 2026-09-21 | 1.1 | **Nota @po, sem mudança de AC nem de status (continua Draft/BLOCKED).** Adicionada em "Depende de" (b) uma **pergunta aberta ao usuário/@pm**: a pré-condição passa a exigir "×6.0 **e** atraso de input 6", ou aceita dado misto explicitamente? Origem: E41-TEL-002 do gate de `e4.1` (`docs/qa/gates/e4.1-ativar-atraso-de-input.yml`). Desde `b8e8a41` o cast humano tem atraso 6 no modo local, e a telemetria não distingue as duas populações. O @po não decide: a pré-condição foi escrita a partir da decisão de produto sobre a amostra, e mudá-la é do usuário/@pm. Se a resposta for "exigir", o AC 1(b), o AC 5 e a Task de verificação de amostra ganham "e atraso 6" numa revisão seguinte. | @po |
