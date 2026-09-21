@@ -527,7 +527,8 @@ que ele entre de carona no substrato de telemetria da Fase 3.
 
 ## 8. Multiplayer e rede
 
-**Fase 4. Nada disto existe em código.** O que segue é o modelo aprovado (decisão #4).
+**Fase 4. Quase nada disto existe em código ainda. A exceção é o atraso de input, ativo no modo
+local (fim da seção).** O que segue é o modelo aprovado (decisão #4).
 
 **Servidor autoritativo.** Node + WebSocket, importando a **mesma** simulação que o cliente e o arnês
 rodam. Uma máquina define a verdade.
@@ -557,10 +558,22 @@ partida inteira: `seed da partida + lista de decisões + comandos por rodada`.
 > pré-computar a batalha inteira e enviar um replay. Isso morreu no instante em que entrou input ao
 > vivo: o servidor não pode conhecer o futuro.
 
-Hoje o cliente roda com `INPUT_DELAY_TICKS = 0` — desvio consciente da Fase 0, registrado, e ativá-lo
-em 6 é pré-condição do portão da Fase 4.
+**O atraso de input está ativo desde `e4.1`, em 6 ticks (~100ms).** No modo local, contra o bot, o
+cliente agenda o cast humano em `world.tick + ATRASO_ALVO_TICKS`. A constante mora em
+`net/protocolo.ts` e é a **definição única do projeto**: o modo local a lê hoje, e o servidor vai ler
+a mesma quando existir (`e4.4`). É isso que faz o solo ser treino honesto para o 1v1, com o mesmo
+atraso contra o bot e contra uma pessoa. No modo conectado quem soma o número é o servidor, não o
+cliente (`docs/architecture-e4.md` §4.1).
 
-*Fontes: `DESIGN.md` §5; `docs/prd.md` §1, §2 (E4), §3.5; `docs/architecture-e3.md` §2.3, §2.5.*
+Com isso fecha o desvio consciente da Fase 0 (`INPUT_DELAY_TICKS = 0`, que `docs/architecture-e3.md`
+§11.2 registra como verdade da Fase 3), e a pré-condição P4.1 do portão da Fase 4 está cumprida **em
+código**, com golden hash idêntico, como `docs/architecture-e4.md` §4.2 previa. **Falta a sensação:**
+o smoke no aparelho de `e4.1` (AC 6 e 7: a mira continua imediata ao arrastar, RF-34, e o cast sai
+depois do toque sem atrapalhar) ainda não foi jogado. Até lá, "um atraso de 100ms num cast é
+invisível" continua sendo argumento, não medição.
+
+*Fontes: `DESIGN.md` §5; `docs/prd.md` §1, §2 (E4), §3.5; `docs/architecture-e3.md` §2.3, §2.5;
+`docs/architecture-e4.md` §4; story `e4.1`.*
 
 ---
 

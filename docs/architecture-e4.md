@@ -389,6 +389,13 @@ Hoje o cliente decide o tick do próprio comando (`main.ts:311`):
 pendentes.push({ tick: world.tick + INPUT_DELAY_TICKS, ballId: bola.id, ... })
 ```
 
+> **Atualização (2026-09-21, `e4.1`):** o trecho acima é o código de quando este documento foi
+> escrito. O passo 1 da §10 foi executado: `INPUT_DELAY_TICKS` saiu de `src/client/main.ts`, e o
+> ponto de uso (agora `main.ts:309`) soma `ATRASO_ALVO_TICKS`, importado de `net/protocolo.ts`, com
+> valor 6. O argumento desta seção não muda. No modo local o cliente continua carimbando o próprio
+> tick; é no modo conectado que o campo sai do fio. A previsão da §4.2 se confirmou: o `sim:check`
+> rodado antes e depois da troca deu saída idêntica (Dev Agent Record de `e4.1`).
+
 No modo conectado, **o campo `tick` sai do fio**. O cliente envia intenção; o servidor carimba:
 
 ```
