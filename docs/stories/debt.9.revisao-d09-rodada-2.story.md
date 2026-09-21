@@ -88,6 +88,21 @@ A correção durável da telemetria, que marca o atraso no arquivo, está rotead
 ao @sm, ver Change Log de `e4.1` v1.4.0). Até ela existir, a única separação confiável é a manual: exportar
 e zerar na fronteira.
 
+**Pré-condição de COLETA da amostra (b) (v1.2, @po; mesma regra R10 que `e4.7` ganhou na v1.3.0): a amostra
+humana usada em (b) é coletada DEPOIS dos commits de implementação de `debt.10` e de `debt.11`.** Origem:
+validação de `debt.11` (v1.1, commit `3c6ab23`). O AC 13 de lá fixa o mesmo prazo do AC 11 de `debt.10`:
+as duas precisam estar concluídas antes da primeira coleta humana usada como evidência desta pré-condição.
+- `debt.10` (Done, `3de1cfe`) carimba nos eventos o atraso de input e a escala de HP. Sem o carimbo, a
+  atribuição por partida que (b) exige só é possível pela separação manual descrita acima.
+- `debt.11` (Ready, **sem commit de implementação em 2026-09-21**) é a guarda automática de que esse
+  carimbo continua saindo no export. Sem ela, um export que perdeu o carimbo passa calado.
+
+Consequência, independente da pergunta aberta acima: as partidas ×6.0 já existentes em
+`docs/evidence/telemetria/` (`992276418` e `670239056`, 3 compras humanas) **não contam** para o piso de
+n≥30, porque são anteriores aos dois commits. A pergunta aberta **continua não decidida**. A pré-condição de
+coleta garante que o atraso de cada evento seja **atribuível**, mas não responde se a amostra precisa ser
+"×6.0 e atraso 6" ou se aceita dado misto. Isso segue com o usuário/@pm.
+
 Não depende funcionalmente de `debt.8` (achado independente, sobre a cobertura de regressão do caminho de
 empate na simulação) — as duas stories vivem na mesma numeração `debt.*` por serem follow-ups de gate de QA
 pós-`e3.6`/`e3.7`, não por ordem de execução entre si.
@@ -97,7 +112,8 @@ pós-`e3.6`/`e3.7`, não por ordem de execução entre si.
 1. **Gate de entrada, BLOQUEANTE.** Antes de qualquer número de D-09 ser tocado, confirmar por evidência
    citável que (a) a re-adjudicação formal do Risco #1b (`REQ-101`) foi **concluída** — não apenas iniciada
    — e (b) existe amostra de telemetria com **n ≥ 30 compras humanas** coletada inteiramente em
-   `ESCALA_HP = 6.0`. Se **qualquer uma** das duas não estiver satisfeita no momento em que o `@dev` pegar
+   `ESCALA_HP = 6.0` **e inteiramente depois dos commits de implementação de `debt.10` e `debt.11`**
+   (pré-condição de coleta, v1.2, ver "Depende de" (b)). Se **qualquer uma** das duas não estiver satisfeita no momento em que o `@dev` pegar
    esta story, o desfecho legítimo é **declarar insuficiência de novo e não tocar nenhum número** — mesma
    disciplina do AC 3 de `e3.7` ("se a telemetria coletada até este ponto for insuficiente para uma revisão
    responsável, a story deve declarar isso e manter os provisórios como estão, documentando o motivo"). Isso
@@ -198,6 +214,9 @@ cada número revisado tem evidência por trás.
         devolver ao `@sm`
   - [ ] Localizar/coletar a amostra de telemetria 100% `ESCALA_HP=6.0` e contar compras humanas reais — se
         `n < 30`, **parar aqui**, declarar insuficiência (AC 1), documentar o `n` real obtido
+  - [ ] Confirmar que existem os commits de implementação de `debt.10` (`3de1cfe`) e de `debt.11`, e que
+        toda partida da amostra é posterior aos dois. Partida anterior não entra no `n`, mesmo que seja ×6.0
+        (AC 1(b), v1.2)
 
 - [ ] Task 2 — Se as duas pré-condições estiverem satisfeitas: preparar a amostra (AC: 5)
   - [ ] Filtrar os exports de `docs/evidence/telemetria/` (ou exports novos) só para partidas confirmadas em
@@ -341,3 +360,4 @@ implementação).
 |---|---|---|---|
 | 2026-08-16 | 1.0 | Story criada a partir do achado `E37-FUP-001` do gate `CONCERNS` de `e3.7` (`docs/qa/gates/e3.7-revisao-d09-d06.yml`), condicionada às duas pré-condições que o próprio achado nomeia (`REQ-101` de `e3.6` e amostra 100% ×6.0), com o piso de amostra (n≥30) justificado a partir do n=11 que `e3.7` já julgou insuficiente. Achado complementar `E37-EVD-002` (juros/teto nunca exercitados) incorporado como AC 7. | River (@sm) |
 | 2026-09-21 | 1.1 | **Nota @po, sem mudança de AC nem de status (continua Draft/BLOCKED).** Adicionada em "Depende de" (b) uma **pergunta aberta ao usuário/@pm**: a pré-condição passa a exigir "×6.0 **e** atraso de input 6", ou aceita dado misto explicitamente? Origem: E41-TEL-002 do gate de `e4.1` (`docs/qa/gates/e4.1-ativar-atraso-de-input.yml`). Desde `b8e8a41` o cast humano tem atraso 6 no modo local, e a telemetria não distingue as duas populações. O @po não decide: a pré-condição foi escrita a partir da decisão de produto sobre a amostra, e mudá-la é do usuário/@pm. Se a resposta for "exigir", o AC 1(b), o AC 5 e a Task de verificação de amostra ganham "e atraso 6" numa revisão seguinte. | @po |
+| 2026-09-21 | 1.2 | **Pré-condição de coleta de `debt.11` (R10, validação de `debt.11` v1.1, `3c6ab23`). Status permanece Draft/BLOCKED.** Emenda que a validação de `debt.11` registrou para esta story ("a mesma pré-condição de coleta vale para ela na próxima edição"). **(1) "Depende de" (b):** a amostra humana usada em (b) é coletada **depois** dos commits de implementação de `debt.10` (Done, `3de1cfe`) e de `debt.11` (Ready, ainda sem commit de implementação). É o prazo do AC 13 de `debt.11` e do AC 11 de `debt.10`. **(2) AC 1(b)** ganha a mesma condição, e a **Task 1** ganha a verificação dos dois commits contra o horário de cada partida. **(3) Consequência registrada:** as duas partidas ×6.0 já existentes (`992276418`, `670239056`, 3 compras) não contam para o piso de n≥30. **Não mexido:** a pergunta aberta da v1.1 ("×6.0 **e** atraso 6" ou dado misto aceito explicitamente?) continua não decidida e com o texto intacto. A pré-condição de coleta torna o atraso atribuível por evento, mas não escolhe entre as duas leituras. Essa escolha segue com o usuário/@pm. | @po |
