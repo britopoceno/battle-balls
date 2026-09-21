@@ -45,8 +45,8 @@ cada partida continua sendo a da linha do tempo acima, lida contra os commits; n
 | Data/hora (−03) | Commit | O que muda para quem ler um export |
 |---|---|---|
 | 2026-08-05 03:45:58 | `13ee9d8` | `ESCALA_HP = 6.0` fica como valor de entrega (tabela acima) — ainda **sem** carimbo no evento |
-| 2026-09-21 03:24:48 | `b8e8a41` (`e4.1`) | sai o literal `INPUT_DELAY_TICKS = 0` de `client/main.ts`; o cast humano do modo local passa a ser agendado `ATRASO_ALVO_TICKS` (= 6, de `net/protocolo.ts`) à frente. Rodadas gravadas daqui em diante têm atraso 6 — **ainda sem carimbo**: no arquivo são indistinguíveis das de atraso 0 |
-| 2026-09-21 | commit `[debt.10]` (hash: `git log --oneline --grep='debt.10\]' -- src/client/telemetria.ts`) | `client/telemetria.ts` passa a gravar `atrasoTicks` e `escalaHp` **em cada evento, no instante do `registrar()`**, lidos de `ATRASO_ALVO_TICKS` e `ESCALA_HP`. A chave continua `bb.telemetria.v1`. O agregador separa as populações e não calcula número combinado |
+| 2026-09-21 03:24:48 | `b8e8a41` (`e4.1`) | sai o literal `INPUT_DELAY_TICKS = 0` de `client/main.ts`; o cast humano do modo local passa a ser agendado `ATRASO_ALVO_TICKS` (= 6, de `net/protocolo.ts`) à frente. Rodadas gravadas daqui em diante têm atraso 6 — **ainda sem carimbo**: no arquivo são indistinguíveis das de atraso 0. Essa janela vale **só para um bundle que contém `b8e8a41` e não contém o commit de `debt.10`**: como os dois vão no mesmo push, ela é vazia no build publicado e só existe em sessões de dev server local (`DEBT10-DOC-002`) |
+| 2026-09-21 03:58:44 | commit `[debt.10]` (hash: `git log --oneline --grep='debt.10\]' -- src/client/telemetria.ts`) | `client/telemetria.ts` passa a gravar `atrasoTicks` e `escalaHp` **em cada evento, no instante do `registrar()`**, lidos de `ATRASO_ALVO_TICKS` e `ESCALA_HP`. A chave continua `bb.telemetria.v1`. O agregador separa as populações e não calcula número combinado |
 
 **A janela entre `b8e8a41` e `debt.10` não é recuperável pelo arquivo.** O que foi gravado nela (atraso 6)
 e o que foi gravado antes (atraso 0) saem juntos na população desconhecida, porque o carimbo não

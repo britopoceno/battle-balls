@@ -304,4 +304,4 @@ function main(): void {
   console.log('')
 }
 
-main()
+if (import.meta.main) main()

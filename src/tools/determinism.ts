@@ -40,6 +40,7 @@ import { hash, MAX_ROUND_TICKS, runRound, type RoundDriver, type RoundResult } f
 // invariante de economia RF-23. Mora em arquivo próprio porque é uma bateria sobre `match/`, não
 // sobre `sim/` — e porque este arquivo já é o mais longo de `tools/`.
 import { verificarPartida } from './partida.ts'
+import { verificarTelemetria } from './guarda-telemetria.ts'
 
 const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
 
@@ -1346,6 +1347,7 @@ function auditarCamada3(): { violacoes: string[]; tabela: string[] } {
  * de baseline sem informação (mesmo raciocínio do bloco P2.5 acima, `architecture-e2.md` §3.3).
  */
 const { linhas: linhasPartida, problemas: problemasPartida } = verificarPartida()
+const { linhas: linhasTelemetria, problemas: problemasTelemetria } = verificarTelemetria()
 
 const violacoesCamada1 = auditarCamada1()
 const { violacoes: violacoesCamada3, tabela: tabelaJanelas } = auditarCamada3()
@@ -1399,6 +1401,7 @@ console.log(
 )
 if (violacoesPilar3.length) for (const v of violacoesPilar3) console.log(v)
 console.log('')
+for (const linha of linhasTelemetria) console.log(linha)
 
 if (divergentes > 0) throw new Error('simulação não é determinística')
 if (desvios.length > 0) {
@@ -1481,5 +1484,14 @@ if (problemasBot001.length > 0) {
     `guarda de BOT-001 falhou em ${problemasBot001.length} ponto(s) — ver acima. O limiar de ` +
       '`porValorEsperado` precisa estar escrito no sentido positivo (`!(melhorVE >= limiar)`), ' +
       'senão um VE = NaN faz o bot castar onde a política manda não castar.',
+  )
+}
+if (problemasTelemetria.length > 0) {
+  for (const p of problemasTelemetria) console.log(p)
+  throw new Error(
+    `guarda da telemetria (debt.11) falhou em ${problemasTelemetria.length} ponto(s) — ver acima. ` +
+      'Suspeitos: registrar() sem carimbo por evento (M1) ou carimbo aplicado em exportar() (M1b) em ' +
+      'client/telemetria.ts; ausente lido como atraso 0 / escala 1.0 (M2) ou agregar() sem partição por ' +
+      'população (M3) em tools/telemetria.ts; global da guarda não restaurado pelo descritor original (R3).',
   )
 }
