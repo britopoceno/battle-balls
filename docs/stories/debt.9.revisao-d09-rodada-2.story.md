@@ -98,24 +98,21 @@ as duas precisam estar concluídas antes da primeira coleta humana usada como ev
   carimbo continua saindo no export. Sem ela, um export que perdeu o carimbo passa calado. *(v1.3: o
   commit existe, `971686b`, e `debt.11` está Done pelo gate CONCERNS `ca52e07`.)*
 
-**Cláusula provisória de COLETA (v1.3, @po, achado `DEBT11-TST-001`): o VALOR do carimbo ainda não é
-guardado.** A guarda de `debt.11` confere que o carimbo existe e é finito, mas não que ele tem o valor que
-o build aplica. Um `registrar()` que gravasse `atrasoTicks: 0, escalaHp: 1` passaria pelo `sim:check`, e o
-agregador rotularia a amostra como "atraso 0 · ESCALA_HP ×1", uma população conhecida e plausível, sem
-aviso. É exatamente a atribuição errada que (b) não pode receber. A correção está roteada para uma story
-nova, sugestão `debt.13` (spec no Change Log de `debt.11`, v1.5), que não tem ordem de execução e pode
-entrar já. **Até o commit de implementação de `debt.13` existir, vale uma das duas:**
-- **(i)** a coleta da amostra (b) espera esse commit; **ou**
-- **(ii)** cada export usado na amostra é conferido à mão. Todo evento das partidas da amostra tem
-  `atrasoTicks === ATRASO_ALVO_TICKS` (`src/net/protocolo.ts`) e `escalaHp === ESCALA_HP`
-  (`src/chars/tuning.ts`), com os valores do commit do build jogado (6 e 6.0 hoje). O comando e o
-  resultado ficam registrados junto da evidência. Para um export que só tem partidas da amostra, com os
-  valores de hoje, serve `node -e "const a=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));const r=a.eventos.filter(e=>e.atrasoTicks!==6||e.escalaHp!==6);console.log(a.eventos.length,r.length)" <export.json>`,
-  cujo segundo número tem de ser 0.
+**O valor do carimbo é guardado desde `debt.13` (v1.4).** A guarda confere que o carimbo tem o valor das
+constantes do build, e não só que existe (commit de implementação `181db27`, Done pelo gate PASS
+`f5d4713`, que fecha `DEBT11-TST-001` e `DEBT11-TST-002`). A cláusula provisória da v1.3, que mandava
+esperar ou conferir o valor à mão, foi retirada. **A pré-condição de coleta de (b) passa a ser: a amostra
+é coletada depois dos commits de implementação de `debt.11` (`971686b`) e de `debt.13` (`181db27`).** Isso
+não decide a pergunta aberta acima ("×6.0 **e** atraso 6" ou dado misto). Só garante que o valor gravado
+é o do build.
 
-Limite, também nas duas formas: enquanto as duas constantes valerem o mesmo, um carimbo com os dois campos
-trocados passa. A cláusula não decide a pergunta aberta acima ("×6.0 **e** atraso 6" ou dado misto). Ela
-só garante que o valor gravado é o do build. Quando `debt.13` estiver Done, o @po retira esta cláusula.
+**O que continua valendo, e é onde é fácil tropeçar: o build publicado no GitHub Pages não grava carimbo
+nenhum.** Nenhum dos commits de `debt.10` (`3de1cfe`), `debt.11` e `debt.13` está em `origin/master`. O
+último push é `44311f6`, de 2026-08-16, anterior a `debt.10`. Uma partida jogada hoje no Pages não traz
+`atrasoTicks` nem `escalaHp` em evento nenhum, por mais recente que seja o horário dela, e por isso não
+conta para o `n`. Só conta partida de um build que contenha `3de1cfe` ou posterior: um servidor de dev
+local, ou o Pages depois que o @devops fizer push. O `sim:check` do commit do build jogado é o que vale
+como conferência do carimbo.
 
 Consequência, independente da pergunta aberta acima: as partidas ×6.0 já existentes em
 `docs/evidence/telemetria/` (`992276418` e `670239056`, 3 compras humanas) **não contam** para o piso de
@@ -133,8 +130,9 @@ pós-`e3.6`/`e3.7`, não por ordem de execução entre si.
    citável que (a) a re-adjudicação formal do Risco #1b (`REQ-101`) foi **concluída** — não apenas iniciada
    — e (b) existe amostra de telemetria com **n ≥ 30 compras humanas** coletada inteiramente em
    `ESCALA_HP = 6.0` **e inteiramente depois dos commits de implementação de `debt.10` e `debt.11`**
-   (pré-condição de coleta, v1.2, ver "Depende de" (b)), com o valor do carimbo conferido à mão em cada
-   export enquanto `debt.13` não tiver commit de implementação anterior à amostra (cláusula provisória, v1.3). Se **qualquer uma** das duas não estiver satisfeita no momento em que o `@dev` pegar
+   (pré-condição de coleta, v1.2, ver "Depende de" (b)), e também depois do commit de implementação de
+   `debt.13` (`181db27`, v1.4), de um build que contenha `debt.10` (`3de1cfe`) ou posterior. O Pages
+   publicado hoje (`44311f6`) não contém. Se **qualquer uma** das duas não estiver satisfeita no momento em que o `@dev` pegar
    esta story, o desfecho legítimo é **declarar insuficiência de novo e não tocar nenhum número** — mesma
    disciplina do AC 3 de `e3.7` ("se a telemetria coletada até este ponto for insuficiente para uma revisão
    responsável, a story deve declarar isso e manter os provisórios como estão, documentando o motivo"). Isso
@@ -238,9 +236,10 @@ cada número revisado tem evidência por trás.
   - [ ] Confirmar que existem os commits de implementação de `debt.10` (`3de1cfe`) e de `debt.11`, e que
         toda partida da amostra é posterior aos dois. Partida anterior não entra no `n`, mesmo que seja ×6.0
         (AC 1(b), v1.2)
-  - [ ] Se o commit de implementação de `debt.13` não existir, ou for posterior a alguma partida da
-        amostra, conferir à mão o valor do carimbo de cada export usado ("Depende de" (b), cláusula
-        provisória (ii), v1.3) e registrar o resultado. Export sem essa conferência não entra no `n`
+  - [ ] Confirmar que toda partida da amostra é posterior ao commit de implementação de `debt.13`
+        (`181db27`) e veio de um build que contém `3de1cfe` ou posterior: servidor de dev local, ou Pages
+        depois de um push do @devops. Partida do Pages publicado em `44311f6` não entra no `n`, porque esse
+        build não grava carimbo ("Depende de" (b), v1.4)
 
 - [ ] Task 2 — Se as duas pré-condições estiverem satisfeitas: preparar a amostra (AC: 5)
   - [ ] Filtrar os exports de `docs/evidence/telemetria/` (ou exports novos) só para partidas confirmadas em
@@ -386,3 +385,4 @@ implementação).
 | 2026-09-21 | 1.1 | **Nota @po, sem mudança de AC nem de status (continua Draft/BLOCKED).** Adicionada em "Depende de" (b) uma **pergunta aberta ao usuário/@pm**: a pré-condição passa a exigir "×6.0 **e** atraso de input 6", ou aceita dado misto explicitamente? Origem: E41-TEL-002 do gate de `e4.1` (`docs/qa/gates/e4.1-ativar-atraso-de-input.yml`). Desde `b8e8a41` o cast humano tem atraso 6 no modo local, e a telemetria não distingue as duas populações. O @po não decide: a pré-condição foi escrita a partir da decisão de produto sobre a amostra, e mudá-la é do usuário/@pm. Se a resposta for "exigir", o AC 1(b), o AC 5 e a Task de verificação de amostra ganham "e atraso 6" numa revisão seguinte. | @po |
 | 2026-09-21 | 1.2 | **Pré-condição de coleta de `debt.11` (R10, validação de `debt.11` v1.1, `3c6ab23`). Status permanece Draft/BLOCKED.** Emenda que a validação de `debt.11` registrou para esta story ("a mesma pré-condição de coleta vale para ela na próxima edição"). **(1) "Depende de" (b):** a amostra humana usada em (b) é coletada **depois** dos commits de implementação de `debt.10` (Done, `3de1cfe`) e de `debt.11` (Ready, ainda sem commit de implementação). É o prazo do AC 13 de `debt.11` e do AC 11 de `debt.10`. **(2) AC 1(b)** ganha a mesma condição, e a **Task 1** ganha a verificação dos dois commits contra o horário de cada partida. **(3) Consequência registrada:** as duas partidas ×6.0 já existentes (`992276418`, `670239056`, 3 compras) não contam para o piso de n≥30. **Não mexido:** a pergunta aberta da v1.1 ("×6.0 **e** atraso 6" ou dado misto aceito explicitamente?) continua não decidida e com o texto intacto. A pré-condição de coleta torna o atraso atribuível por evento, mas não escolhe entre as duas leituras. Essa escolha segue com o usuário/@pm. | @po |
 | 2026-09-21 | 1.3 | **Cláusula provisória de coleta, roteada do gate CONCERNS de `debt.11` (`docs/qa/gates/debt.11-guarda-automatica-telemetria.yml`, `ca52e07`, achado `DEBT11-TST-001`, medium). Status permanece Draft/BLOCKED.** A guarda de `debt.11` confere que o carimbo existe e é finito, mas não o valor dele. Com `atrasoTicks: 0, escalaHp: 1` literais em `registrar()`, o `sim:check` sai com 0, e a amostra (b) sairia rotulada como uma população errada e plausível. A correção vai para uma story nova, sugestão `debt.13`, com spec no Change Log de `debt.11` v1.5. Ela não entra na ordem de `determinism.ts` e pode começar já. **(1) "Depende de" (b):** até o commit de implementação de `debt.13` existir, a coleta espera esse commit, **ou** cada export da amostra tem o valor do carimbo conferido à mão contra as constantes do build jogado, com comando e resultado registrados. Fica registrado o limite das duas formas: um carimbo com os campos trocados passa enquanto as duas constantes valerem 6. A nota "`debt.11` sem commit de implementação" ganhou a anotação de que ele existe (`971686b`, Done). **(2) AC 1(b)** e **Task 1** ganham a mesma condição. **Não mexido:** a pergunta aberta da v1.1 continua não decidida, e a cláusula não a responde. Quando `debt.13` estiver Done, o @po retira a cláusula. **Por que esta story é a que mais ganha com uma `debt.13` separada:** a coleta de (b) é de um aparelho só e não depende da rede, então poderia começar antes de `e4.3`. Se a correção fosse dobrada em `debt.12`, ela ficaria atrás de `e4.9` e `e4.3`. **Fatos conferidos:** `registrar()` em `src/client/telemetria.ts:163`, `ATRASO_ALVO_TICKS = 6` em `src/net/protocolo.ts:38`, `ESCALA_HP = 6.0` em `src/chars/tuning.ts:10`. O comando de conferência rodou sobre um export antigo de `docs/evidence/telemetria/` e deu `14 14`, o esperado para um export sem carimbo. | @po |
+| 2026-09-21 | 1.4 | **Cláusula provisória de coleta retirada, porque `debt.13` está Done (gate PASS `docs/qa/gates/debt.13-guarda-telemetria-confere-valor-do-carimbo.yml`, `f5d4713`, implementação `181db27`). Status permanece Draft/BLOCKED.** O gate fecha `DEBT11-TST-001` e `DEBT11-TST-002` e recomenda a retirada. **(1) "Depende de" (b):** o bloco da v1.3, com as opções (i)/(ii) e o parágrafo "Limite", sai. Entra uma nota curta: o valor do carimbo é guardado desde `debt.13`, e a pré-condição de coleta de (b) passa a ser "depois dos commits de implementação de `debt.11` (`971686b`) e de `debt.13` (`181db27`)". **(2) O que continua valendo, dito às claras:** o corte de build de `debt.10`/`e4.1`. Nenhum desses commits está em `origin/master`, e o build publicado no Pages (`44311f6`, 2026-08-16) não grava carimbo nenhum. Só conta para o `n` partida de um build que contenha `3de1cfe` ou posterior (servidor de dev local, ou Pages depois do push do @devops). **(3)** AC 1(b) e Task 1 foram ajustados da mesma forma. **Não mexido:** a pergunta aberta da v1.1 ("×6.0 **e** atraso 6" ou dado misto aceito explicitamente?) continua com o texto intacto e não decidida, e segue com o usuário/@pm. A consequência sobre `992276418` e `670239056` também não muda. **Fatos conferidos:** as linhas citadas pelo gate (101-118, 136-137, 241-243) batem com a v1.3 do arquivo, e foram conferidas antes de apagar. `git merge-base --is-ancestor` dá rc=1 para `3de1cfe`, `971686b` e `181db27` contra `origin/master`. `origin/master` é `44311f6`, de 2026-08-16. | Pax (@po) |
