@@ -1,0 +1,217 @@
+schema: 1
+story: 'e4.2'
+story_title: '`net/snapshot.ts` + `net/projecao.ts` — `World → Snapshot → forma de render`, ida e volta'
+gate: CONCERNS
+status_reason: >-
+  Os 14 ACs estão MET. Conferi tudo do zero, sem confiar no Dev Agent Record. check, sim:check e build
+  saíram com exit 0, e o golden hash ficou idêntico. O diff da saída inteira do sim:check contra um
+  checkout de b1c0668^ tem só as 8 linhas novas, nenhuma removida ou alterada. Os dois greps de pureza
+  saíram com rc=1. net/ só tem `import type` de sim/ e match/. render.ts tem numstat 10/10, todas as
+  linhas de assinatura ou import. O escopo são 5 arquivos, sem main.ts nem protocolo.ts. Rodei 7
+  mutações próprias, diferentes das M1–M9 do @dev: 5 foram pegas e 2 passaram, e é nessas duas que
+  está o achado de teste. Dois pontos que me pediram para julgar não reprovam. (1) O AC 9 exige medir,
+  registrar e investigar, não um teto. A investigação foi feita, e verifiquei a conclusão dela lendo o
+  script da própria §1.2. (2) Arredondar só posição e ângulo é exatamente o escopo do AC 8. Fica em
+  CONCERNS, e não PASS, por três MEDIUM que precisam de dono antes da e4.3: a decisão de codificação do
+  fio; o contrato de flush do acumulador, que a e4.3 (Ready) não conhece; e a composição fixa da
+  guarda, que deixa a tripwire cega a 3 das 4 passivas do roster.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:b1c0668. `git show --stat` lista 5 arquivos: src/net/snapshot.ts (novo, 189),
+  src/net/projecao.ts (novo, 98), src/client/render.ts (10/10), src/tools/determinism.ts (+370/-3) e a
+  story. src/net/protocolo.ts, src/client/main.ts, sim/, match/, shop/, bot/, chars/ e docs/ (fora a
+  story) têm zero linhas. No diff da story, só mudam Status, checkboxes, Dev Agent Record e Change
+  Log. AC e escopo estão intocados.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      `npx tsc --noEmit` saiu com rc=0 e `npx vite build` com rc=0. Rodei `node src/tools/determinism.ts`
+      em dois worktrees descartáveis, um de b1c0668^ (49dea57) e um de b1c0668, e os dois saíram com rc=0.
+      Nos dois aparece "golden hash ✓ ok — 6 seeds batem o baseline". Um `diff` das duas saídas inteiras
+      mostra só adições: a linha "empate coberto" e o bloco "fio snapshot" (7 linhas). Nenhuma linha
+      existente foi removida ou alterada.
+  - id: 'Pureza (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnwE "ws|document|window|localStorage|Math\.random" src/net/` deu rc=1, e
+      `grep -rnE "Date\.now|performance\.now" src/net/` também deu rc=1. Nos dois o critério foi o exit
+      code, não a saída vazia. snapshot.ts não tem estado de módulo: o acumulador fica preso à fábrica.
+  - id: 'Setas (ACs 10, 11) — sem ciclo'
+    verdict: PASS
+    evidence: >-
+      Os imports de net/ são só `import type`: snapshot.ts importa de sim/types.ts e ./protocolo.ts,
+      projecao.ts de sim/types.ts (CharDef) e ./protocolo.ts, e protocolo.ts de sim/types.ts e
+      match/types.ts. `grep -rnE "from '\.\./(tools|client|chars|bot|server|shop)/" src/net/` deu rc=1.
+      Procurei `from '../tools/'` em net/, sim/, match/, chars/, bot/ e shop/, e o único resultado é
+      um comentário antigo em match/types.ts:19 que proíbe exatamente essa seta. O grafo é
+      tools → net → {sim, match} e nada volta para tools/, então não há ciclo. O roster entra como
+      `Record<string, CharDef>` injetado, e nenhum arquivo de net/ importa chars/. A seta nova
+      tools/ → net/ está em determinism.ts:21-28, e o pedido de emenda ao @architect está no Dev Agent
+      Record (handoff 2), como o AC 11 pede.
+  - id: 'AC 6 — render.ts só anotações'
+    verdict: PASS
+    evidence: >-
+      `git show --numstat b1c0668 -- src/client/render.ts` dá `10 10`. As 20 linhas +/- são o import
+      (:1), `minhasBolas` (:21), `world` em desenhar e nos 6 auxiliares (:44, :63, :97, :131, :155,
+      :261, :301) e `b` (:156). Nenhuma linha de corpo mudou. main.ts não está no commit e o tsc passa,
+      então World e Ball satisfazem VisaoDoMundo e BolaVisivel por estrutura, sem cast.
+  - id: 'AC 13 — QA-D8-01'
+    verdict: PASS
+    evidence: >-
+      `seedsDeEmpate = BASELINE.filter(b => b.winner === -1)`, com `throw` se vier vazio. A saída
+      mostra "empate coberto ✓ ok — ... (seed 379)". Para a mutação, troquei o primeiro `winner: -1` do
+      BASELINE por 7: a linha virou "✗ BASELINE sem nenhuma seed de empate (QA-D8-01)" e o processo
+      saiu com rc=1.
+  - id: 'AC 4/5/7 — guarda de ida-e-volta e tripwire (mutações próprias)'
+    verdict: CONCERNS
+    evidence: >-
+      Por leitura: todos os campos da lista fechada do Dev Notes são comparados, a presença é comparada
+      por id e ordem, o detector de classe 3 olha CHAVES em qualquer nível e tem canário 10/10, e o hash
+      da rodada observada é comparado com o do arnês. `!(|Δ| <= passo/2 + 1e-9)` e `!==` recusam NaN.
+      Mutações, cada uma revertida com `git checkout` e com `git status` limpo depois:
+      Q2, acumulador guardando só `hit`: o total de hit continua 1752 = 1752, mas a checagem de
+      sequência pega, com rc=1 e "433 produzido(s), 367 nos snapshots". Pega.
+      Q4, x da bola quantizado a 0,02 no lugar do ε: fidelidade ✗ já no tick 0, rc=1. Pega.
+      Q6, guarda sem o flush de fim de rodada: 1752 ≠ 1748 hit e 3 eventos perdidos por rodada, rc=1.
+      Pega, e isso prova que o flush é obrigatório.
+      Q1b, passiva idx 0 do vex (Predador) ganhando `addBonus(self,'radius',0.25)` abaixo de 40% de HP:
+      "tripwire ✗ ... World stat.maxHp/radius 600/18.75 ≠ estático 600/15", rc=1. Pega.
+      Q5, produtor usado sozinho: pular um tick lança exceção, e fotografar um tick não observado
+      também. Fotografar duas vezes o mesmo tick não lança e devolve events vazio, o que é aceitável
+      porque não duplica nada.
+      Q1, a mesma mudança de raio na passiva Fantasma (vex, passiveIndex 1): "fio snapshot ✓" e
+      "tripwire ✓". Quem pegou foi o build coverage, por hash. NÃO PEGA.
+      Q3, `projetar` com `abilityIndex: 0` fixo: sim:check rc=0, tudo verde. NÃO PEGA.
+      Ver E42-TST-003.
+
+top_issues:
+  - id: 'E42-ARC-001'
+    severity: medium
+    category: performance
+    finding: >-
+      O limiar de ~600 B do AC 9 pressupõe uma codificação que o fio não usa. Li
+      docs/evidence/e4-determinismo-engines/01-banda-cpu-duracao.mjs:81-98, o script que gerou os
+      263/433 B da §1.2. Ele serializa uma TUPLA POSICIONAL com chaves de 1 letra (`b: [id, q(x), ...]`),
+      TODO número quantizado (hp a 0,1, abilityReadyAt arredondado) e `events` filtrados para `hit`,
+      um tick por vez, sem acúmulo. O snapshot real é JSON com nomes de campo: 872,7 B/tick a 60 Hz e
+      879,0 B/quadro (439,5 B/tick) a 30 Hz, com pico de 1 554 B. O detector de chaves e o canário 10/10
+      confirmam que não há classe 3 no fio. Então a premissa do AC ("se passar, a classe 3 vazou") é
+      falsa para esta codificação, e o limiar perde o poder de alarme. Achado lateral: a §5.3 afirma
+      que "a medição da §1.2 já os incluiu acumulados", o que não é verdade, porque o script filtra
+      `hit` por tick.
+    suggested_action: >-
+      NÃO é FAIL da e4.2. O AC 9 diz "remedir e registrar", e se passar de ~600 B, "investigar antes de
+      seguir, não ajustar o orçamento". O @dev mediu, registrou, separou `events`, investigou, provou
+      que a causa é a codificação e não mexeu no orçamento. Pela letra, o número "como produzido" em
+      B/tick (439,5) nem passa de 600. O que passa é o valor por snapshot, e é esse que se compara com
+      os 263 B da §1.2. A DECISÃO é do @architect, dono da §1.2 e do desenho do fio: (a) re-baselinar o
+      número da §1.2 para o JSON real, ou (b) mandar posicional quantizado, ou (c) JSON com
+      `permessage-deflate` (77,9 B/tick com contexto). Depois disso, o @po leva a decisão ao texto da
+      e4.3, que já cria net/codec.ts, ANTES de a e4.3 entrar em desenvolvimento. Seja qual for a
+      escolha, o limiar de alarme de classe 3 precisa ser re-expresso na codificação real. Outra opção
+      é aposentar o limiar, já que o detector de chaves é o alarme de verdade. Corrigir a frase da §5.3
+      no mesmo commit.
+  - id: 'E42-REQ-002'
+    severity: medium
+    category: requirements
+    finding: >-
+      O contrato do acumulador tem consequência a jusante que ninguém registrou. `observar()` precisa
+      ser chamado depois de CADA `step`, e na rodada é obrigatório um `snapshot()` final no último tick.
+      Sem esse snapshot final, o golpe fatal, `death` e `roundEnd` ficam no acúmulo e nunca saem pelo
+      fio (Q6: 3 eventos perdidos por rodada). O contrato está em snapshot.ts:141-152 e no Dev Agent
+      Record, que o endereça à "e4.4". Mas a cadência pertence à e4.3 (status Ready). O AC 10 dela diz
+      só "emite {t:'snap'} a cada 60/SNAPSHOT_HZ ticks", sem snapshot final. O "Depende de" da e4.3
+      ainda cita `snapshot()`, uma função que não existe: a API é `criarProdutorDeSnapshot(world)` com
+      `observar`/`snapshot`. Procurei flush/observar/"snapshot final" em e4.3–e4.6 e não achei nada.
+      Um @dev da e4.3 que seguisse o AC 10 à risca escreveria o bug, e as rodadas que terminam fora do
+      múltiplo de 2 perderiam o `roundEnd`.
+    suggested_action: >-
+      Handoff para o @po, que é o dono do texto de AC e já tem a e4.3 em Ready. Ajustes no texto da
+      e4.3: (1) em "Depende de", `snapshot()` passa a ser `criarProdutorDeSnapshot(world)` (um por
+      rodada), com `observar` a cada tick; (2) no AC 10, acrescentar "e sempre no tick em que a rodada
+      termina (world.over ou teto de ticks), mesmo fora da cadência"; (3) a guarda da sala (AC 11)
+      confere que a sequência de eventos entregue pelos `{t:'snap'}` é idêntica à produzida, como a
+      guarda da e4.2 já faz. Há um precedente útil aqui: a exceção do produtor só dispara se o tick for
+      pulado. Esquecer o flush final passa em silêncio. Por isso a guarda da sala é o único lugar onde
+      esse erro aparece.
+  - id: 'E42-TST-003'
+    severity: medium
+    category: tests
+    finding: >-
+      A guarda roda uma composição fixa: [golem, vex] com abilityIndex 0 e passiveIndex 0 dos dois
+      lados, as 5 seeds da §1. Dois campos ficam sem poder discriminante. (a) A tripwire só vê as
+      passivas de índice 0. Mudar o raio na Fantasma (vex, passiveIndex 1), que é justamente a passiva
+      que o AC 4 cita como prova de que `stat` muda, deixa "fio snapshot ✓" e "tripwire ✓" (Q1). O
+      sim:check só apitou pelo hash do build coverage, e a mensagem dele leva a re-baselinar, não a
+      reclassificar o campo. Na mesma composição, uma passiva de índice 0 dispara a tripwire (Q1b), ou
+      seja, o mecanismo funciona e o que falta é alcance. Para os 6 personagens da Fase 5, que é o
+      motivo declarado da tripwire, ela só vai ver os que estiverem na composição. (b) `abilityIndex`
+      vale sempre 0, então `projetar` com `abilityIndex: 0` fixo passa verde (Q3), embora o render o
+      use em render.ts:370 para ler o cd da habilidade. É o mesmo padrão que já registrei na Fase 2:
+      a verificação existe, mas o dado que a exercitaria nunca chega.
+    suggested_action: >-
+      Não reprova. O AC 4 pede a comparação por tick, e ela existe e funciona. O AC 7 não fixa a
+      composição. Follow-up do @dev, com rota decidida pelo @po (e4.3 ou story debt). Fazer a guarda do
+      fio rodar também as variantes de BUILD_BASELINE, que já existem em determinism.ts:207-208 e
+      cobrem todas as combinações de abilityIndex e passiveIndex. Pode ser 1 seed por variante para
+      manter o custo baixo. Acrescentar ao canário de cobertura "algum tick com abilityIndex ≠ 0" e
+      "algum tick com cada passiva ativa". Quando a Fase 5 adicionar personagens, o canário obriga a
+      incluí-los.
+  - id: 'E42-TST-004'
+    severity: low
+    category: tests
+    finding: >-
+      A linha-resumo "eventos ✓ ... sequência idêntica" engana. O ✓ só olha a soma de `hit`, e o texto
+      "sequência idêntica" é fixo no código. Na mutação Q2, a linha mostrou "✓ 1752 = 1752 ...
+      sequência idêntica" enquanto as linhas de baixo acusavam a divergência de sequência. O processo
+      falhou corretamente (rc=1) e as linhas ✗ estavam lá, então não é falso verde. Mas quem ler só o
+      resumo vê o contrário do que aconteceu.
+    suggested_action: >-
+      @dev, na próxima vez que abrir determinism.ts: calcular o ✓ a partir da comparação de sequência e
+      imprimir "sequência idêntica" só quando ela for de fato idêntica. É uma linha.
+  - id: 'E42-DOC-005'
+    severity: low
+    category: docs
+    finding: >-
+      Dois handoffs para o @architect estão abertos, os dois corretamente registrados pelo @dev, que não
+      editou docs/ (AC 11). O primeiro é a §5.1 ("Nenhuma linha de render.ts entra nesta fase"): na
+      realidade entraram 10 linhas de anotação e nenhuma de corpo. O segundo é a tabela da §2.2 e o
+      Anexo A: a linha `tools/` não inclui `net/`, e o Anexo A ainda diz render.ts "intacto" e tools/
+      "ganha uma guarda (passo 3)". Confirmado que não há ciclo.
+    suggested_action: >-
+      @architect, no commit de emenda da architecture-e4.md (que já está em andamento em paralelo),
+      junto com o E42-ARC-001.
+
+avaliacoes_pedidas:
+  ac9_orcamento_de_bytes: >-
+    O AC 9 não é um teto. Ele pede três coisas: remedir e registrar; separar `events`; e, se passar de
+    ~600 B, INVESTIGAR sem ajustar o orçamento. As três foram cumpridas, e conferi a conclusão da
+    investigação na fonte da §1.2 (tupla posicional, tudo quantizado, só `hit`). Então não é FAIL.
+    Registro também uma nuance de letra: a regra "como produzido, convertido para B/tick" dá 439,5, que
+    fica abaixo de 600. Mas a comparação honesta com a §1.2 é por snapshot (872,7 contra 263), e nessa
+    o limiar estoura. O limiar perdeu sentido como alarme de classe 3, porque o detector de chaves com
+    canário já faz esse papel e faz melhor. Quem decide a codificação é o @architect (§1.2, desenho do
+    fio). O @po transporta a decisão para a e4.3. O @dev acertou ao não decidir, porque DoServidor e o
+    codec estavam fora do escopo dele (AC 14). E42-ARC-001.
+  contrato_do_acumulador: >-
+    O contrato não estava registrado onde a e4.3 vai ver. Está no JSDoc e no Dev Agent Record, e ali
+    endereçado à e4.4, mas a cadência é o AC 10 da e4.3 (Ready), que não fala do snapshot final e cita
+    uma API que não existe. Virou achado MEDIUM com dono @po (E42-REQ-002). A mutação Q6 prova o custo:
+    3 eventos por rodada, incluindo `roundEnd`.
+  seta_tools_net: >-
+    Não há ciclo: tools → net → {sim, match}, e nada em net/, sim/ ou match/ importa tools/. A seta foi
+    declarada no AC 11 e o pedido de emenda está no Dev Agent Record. Falta a linha na §2.2 e no Anexo
+    A, que é do @architect (E42-DOC-005).
+  arredondamento: >-
+    É coerente com o AC 8, que diz textualmente "o snapshot arredonda posições e ângulos". Foi isso, e
+    só isso, que se arredondou, com os dois ε nomeados, comentados como precisão de exibição e
+    explicitamente desamarrados do toFixed(4) do hash(). Deixar time, abilityReadyAt e ultCharge exatos
+    é correto: o render compara `world.time >= bola.abilityReadyAt` (render.ts:366) e
+    `ultCharge >= ultThreshold` (:174, :365), e arredondar qualquer um dos lados pode acender PRONTO um
+    tick antes. Se o E42-ARC-001 levar a quantizar tudo (opção b), esses três campos precisam de regra
+    própria, por exemplo arredondar abilityReadyAt para cima. Isso é nota para a e4.3.
+
+waiver: { active: false }
+updated: '2026-09-21T15:00:00Z'
