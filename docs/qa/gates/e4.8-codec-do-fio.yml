@@ -1,0 +1,271 @@
+schema: 1
+story: 'e4.8'
+story_title: '`net/codec.ts` — o fio fechado nos dois sentidos'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 8 ACs estão MET. Conferi tudo do zero, sem confiar no Dev Agent Record. check, sim:check e build
+  saíram com exit 0, e o golden hash ficou idêntico. O diff da saída inteira do sim:check contra um
+  worktree de 910add8^ (3c6ab23) tem só as 9 linhas novas, nenhuma removida ou alterada. Os dois greps
+  de pureza saíram com rc=1. codec.ts tem só três `import type`. `git show --stat 910add8` lista só os
+  dois arquivos do AC 8. O código do parser e do codec está correto: 22 entradas adversariais minhas,
+  fora da lista da guarda, deram o resultado certo, e as quatro listas fechadas reprovam no tsc
+  quando divergem do tipo. Q1 e Q3 do gate de e4.2 agora são pegas pela guarda do fio, e o contrafactual
+  ingênuo falha como o AC 5 (b) exige. Fica em CONCERNS, e não PASS, por um MEDIUM de alcance de teste
+  (E48-TST-001): a guarda do parser cobre exatamente a lista de casos do AC 4 e nada além. Seis mutações
+  minhas no parser, todas nocivas, passaram verdes: extra devolvido em decisao/entrar/pong, `dy` sem
+  isFinite, `abilityIndex` de build sem faixa e `slot` de compra sem faixa. O código de hoje não tem
+  esses defeitos. O que falta é a guarda que impediria o retorno deles antes de a e4.4 ligar o parser
+  ao socket. Há ainda quatro LOW, cada um com dono.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:910add8 (implementação). `git show --stat 910add8` lista 2 arquivos: src/net/codec.ts (novo,
+  +427) e src/tools/determinism.ts (+558/−29). protocolo.ts, snapshot.ts, projecao.ts, sim/, match/ e
+  docs/ têm zero linhas. O commit 6d4eae1 (registro do @dev) toca só a story e muda apenas Status,
+  checkboxes, Dev Agent Record, File List e Change Log. AC e escopo estão intocados. 910add8 NÃO está
+  em origin/master (merge-base --is-ancestor rc=1), então é commit local e não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Na árvore principal (HEAD 6d4eae1, src/ idêntico a 910add8 por `git diff --quiet`),
+      `npm run check` deu rc=0, `npm run sim:check` rc=0 e `npm run build` rc=0. A saída mostra "golden
+      hash ✓ ok — 6 seeds batem o baseline" e "build coverage ✓ ok — 5 variantes batem". Rodei
+      `node src/tools/determinism.ts` num worktree descartável de 910add8^ (3c6ab23), que saiu com rc=0.
+      O `diff` das duas saídas inteiras é um único bloco `18a19,27`, só com `>`: variantes,
+      composição, codec do fio, parser, fidelidade, fronteira, limiar ult, não-snap e orçamento. As
+      linhas do bloco `fio snapshot` de e4.2 estão byte a byte iguais.
+  - id: 'Pureza (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnwE "ws|document|window|localStorage|Math\.random" src/net/` deu rc=1, e
+      `grep -rnE "Date\.now|performance\.now" src/net/` também deu rc=1. Nos dois o critério foi o exit
+      code. codec.ts não tem estado de módulo mutável: só constantes `as const` e funções.
+  - id: 'Setas (AC 7)'
+    verdict: PASS
+    evidence: >-
+      codec.ts:1-3 tem três `import type`: Decisao de ../match/types.ts, Command/EffectKind/SimEvent de
+      ../sim/types.ts e DoCliente/DoServidor/Snapshot de ./protocolo.ts. Não tem import de valor. Não
+      importa sala.ts (que não existe), client/, tools/, bot/, chars/, server/ nem a biblioteca de
+      socket. O único consumidor em src/ é tools/determinism.ts.
+  - id: 'Escopo (AC 8) e os dois commits'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 910add8` lista só codec.ts e determinism.ts. O AC 8 põe `docs/` entre os
+      proibidos, sem exceção para a story, e exige que o --stat do commit de implementação liste "só"
+      os dois arquivos. Então separar o registro num segundo commit é a única forma de cumprir a letra,
+      não um desvio. Ver avaliacoes_pedidas.dois_commits.
+  - id: 'Parser (AC 4) — leitura e casos adversariais próprios'
+    verdict: PASS
+    evidence: >-
+      Por leitura: toda variante é montada campo a campo (codec.ts:125-160, 80-114), sem `...raw` nem cast
+      de `raw`. A leitura é só de propriedade própria (`Object.hasOwn`). `finito` usa typeof +
+      Number.isFinite. `bit` aceita só `=== 0` ou `=== 1` e normaliza -0. As três listas estão escritas
+      por extenso com `satisfies Record<…, true>`. Os 23 casos → null e o descarte de tick/extra da
+      guarda estão lá e passam. Sondei 22 entradas fora da lista da guarda, e todas deram o certo:
+      `__proto__` vindo de JSON.parse dá null; ballIndex -0 vira 0; ballIndex true e "0" dão null; dy
+      NaN/Infinity e mag NaN dão null; slot 'ULT'/'toString', t 'constructor' e d.t '__proto__' dão
+      null; build com abilityIndex 2 e compra com slot 2 dão null; charId número dá null; d array dá
+      null; assento null dá null; entrar e pronto com extra/tick voltam limpos. mag 1e308 e mag -5 são
+      aceitos, e isso está correto: são finitos, `aimFrom` faz o clamp de mag, e hypot com overflow dá
+      direção 0, não NaN. Testes de tipo negativos, com controle de sanidade, reprovam no tsc: `debug`
+      a mais em T_DO_SERVIDOR (TS2353), `rodadaFim` a menos (TS1360), `passive` a mais em SLOTS
+      (TS2353), `pronto` a menos em T_DECISAO (TS1360), e ARIDADE_BOLA = 10 (TS2322).
+  - id: 'Codec de saída (AC 5) — regras na fonte'
+    verdict: PASS
+    evidence: >-
+      A tupla existe só para o snap: codec.ts:409 cai em `JSON.stringify(msg)` para toda outra variante.
+      O envelope é {t,seq,s}, e a guarda confere as chaves. ultCharge sai por `pisoQ` (:320).
+      abilityReadyAt sai como `Math.max(0, tetoQ(abilityReadyAt − s.time))` (:321), e o decodificador
+      devolve `time' + restante` (:365). x/y/facing/angle são repassados. O layout está declarado num só
+      lugar (:180-267), com tipos de tupla rotulados e comentados posição a posição, e as aridades de
+      runtime ficam amarradas a `Tupla*['length']`. O decodificador lança em aridade divergente, em
+      campo-lista que não é lista e em t ausente ou fora da lista (sondado: '{"seq":1}', '[]', 'null',
+      snap sem s, e bolas como objeto). Não existe tipo paralelo ao Snapshot. O orçamento que eu mesmo
+      medi é média 329,2 B/quadro (≤ 450), pico 700 B, events com média 17,1 e pico 381, o mesmo número
+      do registro. A fronteira dá 0/48 viradas com a regra e 40 com o ingênuo (habilidade 16, ult 24).
+  - id: 'Alcance da guarda do fio (AC 6)'
+    verdict: PASS
+    evidence: >-
+      (a) `rodadasDoFio()` roda as 5 de referência (heurístico) e as 5 de BUILD_BASELINE (dummyDriver,
+      seed e time da variante). A fidelidade de e4.2 e a do codec rodam no mesmo laço, e o hash de cada
+      rodada é comparado com runRound NA MESMA EXECUÇÃO. (b) A linha composição conta 7079 ticks com
+      abilityIndex ≠ 0 e 4/4 passivas. A lista vem de `Object.values(CHARS).flatMap(passives)`, não de
+      uma lista fixa. (c) E42-TST-004 está corrigido: o ✓ e o texto da linha `eventos` saem de
+      `sequenciasDivergentes`, e a linha agora imprime "sequência DIVERGENTE em n/5" quando for o caso.
+      (d) Repeti eu mesmo Q1 (raio na Fantasma, vex passiveIndex 1): rc=1, com "fio snapshot ✗ falhou",
+      além do build coverage. Repeti Q3 (`abilityIndex: 0` em projetar): rc=1, com "✗ fio seed 101 tick
+      0: bola 1.abilityIndex projeção 0 ≠ World 1". Mutação irmã fora da lista do @dev: raio na Casca
+      (golem passiveIndex 1) abaixo de 50% de HP deu rc=1, com "fio snapshot ✗". BUILD_BASELINE e o
+      golden hash estão inalterados.
+  - id: 'Mutações próprias (diferentes das 17 do @dev), em worktree descartável de 910add8'
+    verdict: CONCERNS
+    evidence: >-
+      O script aplica cada substituição exatamente uma vez (aborta se não casar 1x, por causa do CRLF),
+      roda o sim:check e restaura. `git status` do worktree ficou limpo no fim.
+      PEGAS (8):
+      M1, codec ingênuo inteiro (ultCharge arredondado, abilityReadyAt absoluto arredondado, decoder
+      absoluto): rc=1, fronteira 32/48 e fidelidade ✗.
+      M2 = Q1: rc=1. M3 = Q3: rc=1. M20, raio na Casca: rc=1.
+      M5, pisoQ sem nenhuma das duas correções de FP: rc=1, só pela fidelidade da rodada real
+      ("ultCharge decodificado 87.04 ≠ 87.03999999999999").
+      M8, decoder trocando vx/vy (simula descompasso só de um lado): rc=1.
+      M16, dy e pong.id só com typeof: rc=1, mas só pelo caso "pong id Infinity".
+      M19, só ultCharge arredondado: rc=1.
+      NÃO PEGAS, e nocivas (7):
+      M4a, `decisao.d` 'pronto'/'buildPadrao' devolvendo `{...raw, t, jogador}`: rc=0.
+      M4b, entrar devolvendo `{...raw, t, sala}`: rc=0.
+      M4c, pong devolvendo `raw`: rc=0.
+      M12, `dy` só com typeof, sem isFinite: rc=0.
+      M14, `abilityIndex` de build/trocaDeBuild sem faixa: rc=0. `abilityIndex: 2` vira
+      `def.abilities[2]` undefined dentro do sim, a mesma classe do `jogador: 2` que o AC 4 cita.
+      M15, `slot` de compra sem faixa: rc=0 (`personagens[2]`).
+      M7, pisoQ sem a correção para cima (o caso `110.07 * 100 = 11006.999…` da decisão 4 do @dev): rc=0.
+      NÃO PEGAS por desenho ou equivalentes (3):
+      M9, hp ↔ ultCharge trocados nos DOIS lados (mudança de layout consistente): rc=0. É o risco que a
+      §11.6 aceita, mas mostra que nada mecânico força "mudar layout = mudança de protocolo".
+      M6, tetoQ sem as correções: equivalente para a prontidão. Com v > 0, ceil(v·100) ≥ 1, e com v ≤ 0
+      o `max(0, …)` zera. Só muda precisão, dentro de ±0,015.
+      M18, sem o `max(0, …)`: prontidão preservada (r' ≤ 0), e só muda o abilityReadyAt exibido quando
+      pronta, que a guarda não confere de propósito.
+      Ver E48-TST-001, E48-TST-002 e E48-ARC-003.
+
+top_issues:
+  - id: 'E48-TST-001'
+    severity: medium
+    category: tests
+    owner: '@dev (rota pelo @po; prazo: antes de a e4.4 entrar em desenvolvimento)'
+    finding: >-
+      A guarda do parser cobre a LISTA de casos do AC 4, não os CAMPOS. O descarte de tick/extra e a
+      checagem "objeto novo" só existem para `cast`. Não-finito só é testado em dx, mag e pong.id, e
+      faixa só em ballIndex e d.jogador. Seis mutações nocivas passaram com rc=0: extra passando em
+      decisao.d, entrar e pong (M4a/b/c), dy sem isFinite (M12), abilityIndex de build sem faixa (M14)
+      e slot de compra sem faixa (M15). O código de hoje está correto, conferido por leitura e por 22
+      entradas adversariais. Mas o parser é a única fronteira entre o socket e o World autoritativo dos
+      dois jogadores. Se regredir num desses campos, o resultado é NaN no World ou TypeError no
+      servidor, exatamente o que o AC 4 descreve, e o sim:check fica verde. É o mesmo padrão de
+      E42-TST-003: o mecanismo funciona, falta alcance.
+    suggested_action: >-
+      Não reprova: a lista literal do AC 4 está 100% na guarda, e o código cumpre (a)–(g). Tornar a
+      guarda dirigida por tabela. (1) Para cada campo numérico (cast.dx, cast.dy, cast.mag, pong.id):
+      NaN, 1e999 via JSON.parse, -Infinity e "1". (2) Para cada campo 0|1 (cast.ballIndex, d.jogador, e
+      d.slot/abilityIndex/passiveIndex de build e trocaDeBuild, compra.slot): 2, 0.5, "0" e true. (3)
+      Para cada uma das 4 variantes de DoCliente e para decisao.d: `{…válida, tick, extra}` volta sem
+      tick/extra e `!== raw`. Isso cabe na próxima story que abrir determinism.ts (debt.11 ou e4.3)
+      como item pequeno, ou numa debt própria. O que importa é que esteja lá antes de a e4.4 ligar
+      parseDoCliente ao socket.
+  - id: 'E48-TST-002'
+    severity: low
+    category: tests
+    owner: '@dev (antes de a Fase 5 adicionar personagens)'
+    finding: >-
+      A correção de ponto flutuante do pisoQ que evita "ult cheia um passo abaixo" (decisão 4 do @dev)
+      não tem guarda. Sem ela, M7 passa verde. A fronteira sintética usa só os limiares do roster (110 e
+      130, inteiros), e com limiar inteiro o floor ingênuo acerta. A tripwire (c) aceita qualquer
+      múltiplo de 0,01, inclusive 110.07. Com esse limiar e sem a correção, `pisoQ(110.07)` dá 110.06, e
+      a ult carregada até o teto (que fica exatamente em thr) nunca acende no cliente. Hoje não há bug:
+      a correção está no código, e os limiares são inteiros.
+    suggested_action: >-
+      Acrescentar à varredura da fronteira limiares sintéticos não inteiros, múltiplos de 0,01, cujo
+      produto por 100 cai abaixo do inteiro (110.07, 0.29, 87.04), com ultCharge = thr e thr − 0,004.
+      Com isso a promessa "tripwire verde ⇒ piso preserva a prontidão" passa a ser testada, e não só
+      lida.
+  - id: 'E48-ARC-003'
+    severity: low
+    category: requirements
+    owner: '@architect (decide o gatilho e a forma), @po (leva ao AC da e4.4 ou da e4.7)'
+    finding: >-
+      O risco da §11.6 (reordenar campos do mesmo tipo passa sem erro) está aceito "até haver deploy",
+      mas o gatilho não tem dono nem story. Hoje o cliente já é republicado a cada push
+      (deploy-pages.yml). Quando o servidor da e4.4/R-05 estiver hospedado à parte, uma aba aberta
+      durante um push é o cenário concreto da §11.6. Além disso, a regra "mudar o layout é mudança de
+      protocolo, revisada como tal" não tem nada mecânico que a force: M9 (hp ↔ ultCharge trocados
+      nos dois lados) passa o sim:check inteiro verde.
+    suggested_action: >-
+      (1) @architect registra o gatilho concreto: o número de versão do formato no {t:'sala'} entra
+      antes do primeiro servidor hospedado separado do Pages. @po põe isso como AC na story que fizer
+      esse deploy (e4.4 ou a de R-05), para não depender de alguém lembrar. (2) Barato e imediato:
+      uma "fixture dourada do fio" no sim:check, com a string de `codificarDoServidor` sobre o
+      `snapshotSintetico` congelada. Mudar o layout passa a exigir editar a fixture, que é o ato
+      deliberado e revisável que a §11.6 pede. Pode ir junto com o E48-TST-001.
+  - id: 'E48-TST-004'
+    severity: low
+    category: tests
+    owner: '@po (critério das stories de personagem da Fase 5)'
+    finding: >-
+      O canário de composição conta passiva EQUIPADA e bola com abilityIndex ≠ 0, não passiva DISPARADA
+      nem habilidade CONJURADA. Isso é o que o AC 6 (b) pede. Para o roster de hoje, a cobertura é real,
+      e conferi: sob dummyDriver, Tremor é conjurado 13 vezes (seed 101), Deslize 26 (seed 103), e a
+      Fantasma fica ativa (HP < 40%) em 1361 ticks (seed 104) e 481 (seed 105). Mas uma passiva da Fase
+      5 cujo gatilho o dummy nunca alcança passaria no canário sem ser exercitada.
+    suggested_action: >-
+      Nas stories de personagem da Fase 5, exigir que a guarda do fio registre ao menos um tick com a
+      passiva nova de fato alterando o World e um cast da ativa nova. Não é trabalho para agora.
+  - id: 'E48-DOC-005'
+    severity: low
+    category: docs
+    owner: '@architect'
+    finding: >-
+      A §5.5 ("`e4.3`/AC 16", "criado por `e4.3`") e o Anexo A de architecture-e4.md ainda atribuem o
+      codec à e4.3. O @dev registrou isso sem editar docs/, como o AC 8 manda.
+    suggested_action: 'No próximo commit de emenda da architecture-e4.md, reapontar para e4.8.'
+
+avaliacoes_pedidas:
+  dois_commits: >-
+    Aceitável, e na verdade exigido. O precedente de e4.2 (b1c0668 com a story dentro) valia porque o
+    AC de escopo de lá excetuava a story ("docs/ (fora a story)"). O AC 8 desta story lista `docs/`
+    como proibido, sem exceção, e manda o --stat do commit de implementação listar "só" codec.ts e
+    determinism.ts. Um commit único violaria a letra. Os dois commits são locais e adjacentes, e o
+    segundo toca só a story, nas seções permitidas ao @dev. A rastreabilidade se mantém: 6d4eae1 cita
+    910add8 no corpo, e o Dev Agent Record também.
+  decodificador_estrito: >-
+    Aceitável. Não é funcionalidade nova, é a forma certa de "lançar": sem isso, lixo sairia tipado como
+    DoServidor, que é exatamente a degradação silenciosa que a §11.6 quer evitar. A lista fechada
+    `satisfies Record<DoServidor['t'], true>` transforma uma variante nova em erro de compilação no
+    próprio codec (conferi: TS2353 com uma a mais, TS1360 com uma a menos), então não envelhece
+    calada. Não quebra a e4.5: a v1.4.0 dela já lista os três casos em que o decode lança,
+    incluindo "sem t ou t fora da lista fechada", e decide try/catch com log, fechar a conexão e não
+    reconectar sozinho. O único efeito real é que um servidor com variante nova derruba clientes
+    antigos, e isso é o comportamento desejado num descompasso de versão.
+  variantes_com_dummyDriver: >-
+    A cobertura é significativa. O dummy conjura `def.abilities[self.abilityIndex]`
+    (bot/dummy.ts:40), e medi as conjurações: Tremor 13 vezes, Deslize 26. A Fantasma dispara em 1361
+    ticks na seed 104. As mutações provam: Q1, Q3 e Casca-raio são pegas pela guarda do fio nas
+    variantes. Usar o driver congelado é coerente com o AC 6 ("só observa rodadas que o arquivo já
+    roda"), e o hash é comparado com o arnês na mesma execução. O limite, que não reprova, é que o
+    canário mede equipamento e não disparo (E48-TST-004).
+  decodificacao_so_por_aridade: >-
+    Sim, precisa de dono antes de deploy, e o gatilho tem de estar escrito numa story, não só na §11.6.
+    Registrado como E48-ARC-003 (low), com @architect e @po. Recomendo também a fixture dourada do fio,
+    que custa poucas linhas e dá ao "mudança de protocolo" um ponto mecânico de revisão, já que M9 passa
+    tudo verde.
+  menos_zero_e_arena: >-
+    `-0 === 0` na igualdade profunda está correto e não mascara nada: o único par que `===` iguala e
+    `Object.is` separa é ±0. JSON não carrega -0. O render usa facing só em cos/sin (render.ts:198), e
+    sin(-0) desenha o mesmo que sin(0). arena.w/h repassados literais também está correto: a tabela da
+    §5.5 não os lista em nenhuma linha de arredondamento, eles vêm de `setup.arena ?? 960/540`
+    (sim/world.ts:63), e o literal é sem perda. A guarda confere os dois com `===` contra o World, então
+    qualquer transformação futura apita.
+  orcamento: >-
+    Medi 329,2 B/quadro de média (≤ 450), pico 700 B e events com média 17,1 e pico 381, nas 5 rodadas de
+    referência. A diferença para os 325,8 da §5.5 é explicada no registro (seq real e effects.kind
+    literal, como a tabela manda). O orçamento contar só as rodadas de referência mantém a comparação
+    com a §5.5 honesta. O AC 6 (a) estende às variantes só a fidelidade.
+
+observacoes:
+  - >-
+    O Status foi escrito "Ready for Review", e o canônico de story-lifecycle.md é "InReview". Não afeta o
+    gate. A transição registrada é Ready for Review → Done.
+  - >-
+    CodeRabbit não roda nesta máquina (WSL). A cobertura veio de check, sim:check e build, de leitura
+    linha a linha de codec.ts e do diff de determinism.ts, de 22 sondas adversariais, de 5 testes de
+    tipo negativos e de 18 mutações de runtime.
+  - >-
+    Nenhum chamador de produção ainda: parseDoCliente e codificarDoServidor entram na e4.4, e
+    decodificarDoServidor na e4.5. Pela lição recorrente de que o call site nunca é testado, os gates da
+    e4.4 e da e4.5 devem cobrar, no call site, que nenhum `JSON.stringify(DoServidor)` e nenhum
+    `JSON.parse(...) as DoServidor` / `as DoCliente` exista. As duas stories já têm grep para isso.
+
+waiver: { active: false }
+updated: '2026-09-21T07:55:00Z'
