@@ -2459,7 +2459,7 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
     `  autoridade   ${ok(nProblemasBo5)} decisão com d.jogador alheio recusada só ao remetente, estado intacto (AC 16) · cast de bola morta descartado · ${soma('pelaFronteira')} mensagens pela fronteira ` +
       '(parseDoCliente(JSON.parse(JSON.stringify(msg))), AC 16)',
     neg.linha,
-    `  variantes    ${ok(0)} ${vb.variantes} (debt.14, E43-TST-001)`,
+    `  por variante ${ok(0)} ${vb.variantes} (debt.14, E43-TST-001)`,
     `  cobertura    ${ok(0)} ${soma('transicoes')} transição(ões) de partida com a sala jogando → ≥1 {t:'visao'} a cada assento conectado · ${soma('rodadasFechadas')} rodada(s) fechada(s): ` +
       "1 rodadaFim a cada assento conectado e nenhum ao vago, ≥1 rodadaInicio na rodada (reassentado: o da largada + o da volta) · queda no draft → só {t:'sala'} (§6) · contagem por tipo e por assento (debt.14, E43-TST-002)",
     `  bordas       ${ok(0)} ${vb.bordas} (debt.14, E43-TST-003)`,
