@@ -1058,7 +1058,93 @@ function guardaParser(): { linha: string; problemas: string[] } {
     if (!profundamenteIgual(r, msg)) problemas.push(`  ✗ parser: ${JSON.stringify(msg)} válido voltou ${JSON.stringify(r)}`)
   }
 
-  const linha = `  parser       ${problemas.length === 0 ? '✓' : '✗'} parseDoCliente: ${nulos.length} casos → null (não-objeto, t/slot/d.t desconhecidos, não-finitos inclusive 1e999, número-como-string, faixas, campo ausente) · tick e extra descartados num objeto novo · ${validos.length} mensagens válidas reconstruídas iguais`
+  // debt.12 (AC 3, E48-TST-001) — a mesma prova, POR CAMPO e não por caso: cada campo que passa por
+  // `finito()` ou `bit()` em `parseDoCliente`, isoladamente, com os quatro valores adversariais do gate; e o
+  // descarte de `tick`/`extra` em toda variante, não só em `cast`. Complementa `nulos`/`validos` acima.
+  const pong = { t: 'pong', id: 3 }
+  const dValidos: Record<string, Record<string, unknown>> = {
+    draft: { t: 'draft', jogador: 0, charId: 'golem' },
+    build: { t: 'build', jogador: 1, slot: 0, abilityIndex: 1, passiveIndex: 0 },
+    buildPadrao: { t: 'buildPadrao', jogador: 0 },
+    compra: { t: 'compra', jogador: 1, slot: 1, itemId: 'lamina' },
+    trocaDeBuild: { t: 'trocaDeBuild', jogador: 0, slot: 1, abilityIndex: 0, passiveIndex: 1 },
+    pronto: { t: 'pronto', jogador: 1 },
+  }
+  const decisaoCom = (d: Record<string, unknown>) => ({ t: 'decisao', d })
+  /** `1e999` como chega do socket: pelo `JSON.parse` (o literal no fonte já seria `Infinity`). */
+  const comTexto1e999 = (msg: Record<string, unknown>, chave: string, emD: boolean): unknown => {
+    const alvo = emD ? { ...msg, d: { ...(msg.d as object), [chave]: 0 } } : { ...msg, [chave]: 0 }
+    const r = JSON.parse(JSON.stringify(alvo).replace(`"${chave}":0`, `"${chave}":1e999`)) as Record<string, unknown>
+    const v = emD ? (r.d as Record<string, unknown>)[chave] : r[chave]
+    if (v !== Infinity) problemas.push(`  ✗ parser: a tabela não montou 1e999 em ${chave} (${String(v)}) — o caso não testa nada`)
+    return r
+  }
+  const numericos: [rotulo: string, msg: Record<string, unknown>, chave: string][] = [
+    ['cast.dx', cast, 'dx'],
+    ['cast.dy', cast, 'dy'],
+    ['cast.mag', cast, 'mag'],
+    ['pong.id', pong, 'id'],
+  ]
+  let casosNumericos = 0
+  for (const [rotulo, msg, chave] of numericos) {
+    const casos: [string, unknown][] = [
+      ['NaN', { ...msg, [chave]: NaN }],
+      ['1e999 de JSON.parse', comTexto1e999(msg, chave, false)],
+      ['-Infinity', { ...msg, [chave]: -Infinity }],
+      ['"1"', { ...msg, [chave]: '1' }],
+    ]
+    for (const [valor, raw] of casos) {
+      casosNumericos++
+      const r = parseDoCliente(raw)
+      if (r !== null) problemas.push(`  ✗ parser: ${rotulo} ${valor} devolveu ${JSON.stringify(r)} em vez de null`)
+    }
+  }
+  const bits: [rotulo: string, msg: Record<string, unknown>, chave: string, emD: boolean][] = [
+    ['cast.ballIndex', cast, 'ballIndex', false],
+    ...Object.entries(dValidos).map(([t, d]): [string, Record<string, unknown>, string, boolean] => [
+      `${t}.jogador`,
+      decisaoCom(d),
+      'jogador',
+      true,
+    ]),
+    ...(['build', 'trocaDeBuild'] as const).flatMap((t) =>
+      (['slot', 'abilityIndex', 'passiveIndex'] as const).map((k): [string, Record<string, unknown>, string, boolean] => [
+        `${t}.${k}`,
+        decisaoCom(dValidos[t]),
+        k,
+        true,
+      ]),
+    ),
+    ['compra.slot', decisaoCom(dValidos.compra), 'slot', true],
+  ]
+  let casosBits = 0
+  for (const [rotulo, msg, chave, emD] of bits) {
+    for (const valor of [2, 0.5, '0', true]) {
+      casosBits++
+      const raw = emD ? { ...msg, d: { ...(msg.d as object), [chave]: valor } } : { ...msg, [chave]: valor }
+      const r = parseDoCliente(raw)
+      if (r !== null) problemas.push(`  ✗ parser: ${rotulo} ${JSON.stringify(valor)} devolveu ${JSON.stringify(r)} em vez de null`)
+    }
+  }
+  const descartes: [rotulo: string, valida: Record<string, unknown>, raw: Record<string, unknown>][] = [
+    ['entrar sem assento', { t: 'entrar', sala: 'abc' }, { t: 'entrar', sala: 'abc', tick: 5, extra: 1 }],
+    ['entrar com assento', { t: 'entrar', sala: 'abc', assento: 'segredo' }, { t: 'entrar', sala: 'abc', assento: 'segredo', tick: 5, extra: 1 }],
+    ['cast', cast, { ...cast, tick: 5, extra: 1 }],
+    ['pong', pong, { ...pong, tick: 5, extra: 1 }],
+    ...Object.entries(dValidos).flatMap(([t, d]): [string, Record<string, unknown>, Record<string, unknown>][] => [
+      [`decisao ${t}, extra fora`, decisaoCom(d), { ...decisaoCom(d), tick: 5, extra: 1 }],
+      [`decisao ${t}, extra em d`, decisaoCom(d), decisaoCom({ ...d, tick: 5, extra: 1 })],
+    ]),
+  ]
+  for (const [rotulo, valida, raw] of descartes) {
+    const r = parseDoCliente(raw) as Record<string, unknown> | null
+    const dNovo = raw.t !== 'decisao' || (r !== null && r.d !== raw.d)
+    if (r === null || r === raw || !dNovo || !profundamenteIgual(r, valida)) {
+      problemas.push(`  ✗ parser: ${rotulo} com tick/extra devolveu ${JSON.stringify(r)} — tem de voltar ${JSON.stringify(valida)}, num objeto novo (e d novo)`)
+    }
+  }
+
+  const linha = `  parser       ${problemas.length === 0 ? '✓' : '✗'} parseDoCliente: ${nulos.length} casos → null (não-objeto, t/slot/d.t desconhecidos, não-finitos inclusive 1e999, número-como-string, faixas, campo ausente) · tick e extra descartados num objeto novo · ${validos.length} mensagens válidas reconstruídas iguais · por campo: ${numericos.length} numéricos × 4 = ${casosNumericos} e ${bits.length} campos 0|1 × 4 = ${casosBits} → null · tick/extra descartados em ${descartes.length} formas (4 variantes, entrar com e sem assento, 6 de decisao.d por fora e em d)`
   return { linha, problemas }
 }
 
@@ -1093,7 +1179,7 @@ function prontidaoIngenua(s: Snapshot, limiar: number): { habilidade: boolean; u
   return { habilidade: r(s.time) >= r(b.abilityReadyAt), ult: r(b.ultCharge) >= limiar }
 }
 
-function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] } {
+function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[]; variantesNaoSnap: string[] } {
   const problemas: string[] = [...a.fidelidade]
   if (a.total > 0) problemas.push(`  ✗ codec: ${a.total} divergência(s) na ida-e-volta das rodadas (mostradas até ${MAX_MENSAGENS_FIO})`)
   if (a.quadros === 0 || a.amostrasProntidao === 0) problemas.push('  ✗ codec: canário — nenhum quadro passou pelo codec; a guarda (a) não mede nada')
@@ -1131,6 +1217,38 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
         }
       }
     }
+  }
+  // debt.12 (AC 4, E48-TST-002) — limiares sintéticos NÃO inteiros, múltiplos de 0,01, na mesma varredura
+  // (mesmos tempos, restantes e par thr − 0,004 / thr), além dos do roster, e não no lugar deles. O dente
+  // contra `pisoQ` sem a correção para cima é o 0.29: `0.29 * 100 === 28.999…`. 110.07 e 87.04 dão
+  // produto exato no Node e só ficam porque o gate os pediu; por isso o canário abaixo.
+  const LIMIARES_SINTETICOS = [110.07, 0.29, 87.04]
+  let casosSinteticos = 0
+  let viradasSinteticas = 0
+  for (const time of tempos) {
+    for (const thr of LIMIARES_SINTETICOS) {
+      for (const restante of [0.004, 0, -0.004]) {
+        for (const ultCharge of [thr - 0.004, thr]) {
+          casosSinteticos++
+          const volta = decodificarDoServidor(codificarDoServidor({ t: 'snap', s: snapshotSintetico(time, time + restante, ultCharge), seq: 0 }))
+          if (volta.t !== 'snap') {
+            viradasSinteticas++
+            continue
+          }
+          const b = volta.s.balls[0]
+          if ((volta.s.time >= b.abilityReadyAt) !== (time >= time + restante) || (b.ultCharge >= thr) !== (ultCharge >= thr)) viradasSinteticas++
+        }
+      }
+    }
+  }
+  const abaixoDoInteiro = LIMIARES_SINTETICOS.filter((thr) => thr * 100 < Math.round(thr * 100))
+  if (viradasSinteticas > 0) {
+    problemas.push(`  ✗ codec: a regra da §5.5 virou a prontidão em ${viradasSinteticas}/${casosSinteticos} casos com limiar sintético não inteiro [${LIMIARES_SINTETICOS.join(', ')}]`)
+  }
+  if (abaixoDoInteiro.length === 0) {
+    problemas.push(
+      `  ✗ codec: canário — nenhum limiar sintético [${LIMIARES_SINTETICOS.join(', ')}] tem thr × 100 abaixo do inteiro; os limiares sintéticos perderam poder discriminante (pisoQ sem a correção para cima passaria)`,
+    )
   }
   if (viradasCodec > 0) problemas.push(`  ✗ codec: a regra da §5.5 virou a prontidão em ${viradasCodec}/${casos} casos na fronteira`)
   if (viradasIngenuoHabilidade === 0 || viradasIngenuoUlt === 0) {
@@ -1212,7 +1330,9 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
   }
   const descompassos: [rotulo: string, msg: Record<string, unknown>, enviado: unknown][] = [
     ['versao ausente', salaSem('versao'), undefined],
-    ['versao 2', salaCom('versao', 2), 2],
+    // debt.12 (AC 9, §11.6.2 M-9): a versão seguinte RELATIVA — com um literal 2, subir VERSAO_DO_FIO a 2
+    // faria este caso parar de lançar e a linha ficar vermelha.
+    [`versao ${VERSAO_DO_FIO + 1}`, salaCom('versao', VERSAO_DO_FIO + 1), VERSAO_DO_FIO + 1],
     ['versao "1"', salaCom('versao', '1'), '1'],
     ['forma de hoje', { t: 'sala', jogador: 1, estado: 'jogando' }, undefined],
   ]
@@ -1225,7 +1345,11 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
     } catch (e) {
       if (!(e instanceof DescompassoDeVersao)) {
         problemas.push(`  ✗ codec: {t:'sala'} com ${rotulo} lançou, mas não DescompassoDeVersao — ${(e as Error).message}`)
-      } else if (!('servidor' in e) || !Object.is(e.servidor, enviado) || e.cliente !== VERSAO_DO_FIO) {
+      } else if (!('servidor' in e)) {
+        // debt.12 (AC 9 c, E49-TST-003): sem este ramo, o par abaixo sai "servidor undefined (esperado
+        // undefined)" — igual ao de um erro de valor — quando só a propriedade falta.
+        problemas.push(`  ✗ codec: {t:'sala'} com ${rotulo} — DescompassoDeVersao sem a propriedade servidor`)
+      } else if (!Object.is(e.servidor, enviado) || e.cliente !== VERSAO_DO_FIO) {
         problemas.push(
           `  ✗ codec: {t:'sala'} com ${rotulo} — DescompassoDeVersao com servidor ${mostrar(e.servidor)} (esperado ${mostrar(enviado)}), cliente ${e.cliente} (esperado ${VERSAO_DO_FIO})`,
         )
@@ -1241,6 +1365,12 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
     ['snapshotHz "30"', salaCom('snapshotHz', '30')],
     ['assento ausente', salaSem('assento')],
     ["assento ''", salaCom('assento', '')],
+    // debt.12 (AC 9 a/b, E49-TST-001/002): um termo do predicado de `conferirSala` por caso — -30 só
+    // `hz > 0` recusa; 7.5 só `Number.isInteger` (60 % 7.5 === 0); 120 só o divisor; 123 só o typeof.
+    ['snapshotHz -30', salaCom('snapshotHz', -30)],
+    ['snapshotHz 7.5', salaCom('snapshotHz', 7.5)],
+    ['snapshotHz 120', salaCom('snapshotHz', 120)],
+    ['assento 123', salaCom('assento', 123)],
   ]
   let formaRuimOk = 0
   for (const [rotulo, msg] of formaRuim) {
@@ -1267,13 +1397,13 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
   const ok = (cond: boolean) => (cond ? '✓' : '✗')
   const linhas = [
     `  fidelidade   ${ok(a.total === 0 && a.quadros > 0)} ${a.quadros} quadros na cadência com flush (${rodadasDoFio().length} rodadas): projetar(decodificar(codificar(snap))) bate o World — x/y/facing/angle = snapshot, demais ±${PASSO_FIO / 2}, ultCharge em [u − ${PASSO_FIO}, u], abilityReadyAt ±${1.5 * PASSO_FIO} · prontidão idêntica em ${a.amostrasProntidao} amostras bola×quadro`,
-    `  fronteira    ${ok(viradasCodec === 0 && viradasIngenuoHabilidade > 0 && viradasIngenuoUlt > 0)} regra da §5.5 vira ${viradasCodec}/${casos} casos sintéticos · o codec ingênuo (arredondar a 0,01) vira ${viradasIngenuoHabilidade + viradasIngenuoUlt} (habilidade ${viradasIngenuoHabilidade}, ult ${viradasIngenuoUlt}) — tem de falhar`,
+    `  fronteira    ${ok(viradasCodec === 0 && viradasIngenuoHabilidade > 0 && viradasIngenuoUlt > 0 && viradasSinteticas === 0 && abaixoDoInteiro.length > 0)} regra da §5.5 vira ${viradasCodec}/${casos} casos sintéticos · o codec ingênuo (arredondar a 0,01) vira ${viradasIngenuoHabilidade + viradasIngenuoUlt} (habilidade ${viradasIngenuoHabilidade}, ult ${viradasIngenuoUlt}) — tem de falhar · limiares não inteiros [${LIMIARES_SINTETICOS.join(', ')}]: ${ok(viradasSinteticas === 0 && abaixoDoInteiro.length > 0)} vira ${viradasSinteticas}/${casosSinteticos}, com thr × 100 abaixo do inteiro em [${abaixoDoInteiro.join(', ')}]`,
     `  limiar ult   ${ok(foraDoPasso.length === 0)} todo ult.threshold do roster é múltiplo de 0,01 [${limiares.map((l) => `${l.id} ${l.thr}`).join(', ')}]`,
     `  não-snap     ${ok(naoSnapFalhas === 0 && lancou === aridadeCasos)} ${naoSnap.length} mensagens (${Object.keys(amostras).length} variantes) voltam idênticas · aridade divergente e t desconhecido lançam em ${lancou}/${aridadeCasos}`,
-    `  versão fio   ${ok(descompassoOk === descompassos.length && formaRuimOk === formaRuim.length)} {t:'sala'} v${VERSAO_DO_FIO}: DescompassoDeVersao com servidor/cliente nos campos em ${descompassoOk}/${descompassos.length} (versao ausente, 2, "1", forma de hoje — versão conferida primeiro) · snapshotHz/assento fora de forma lançam erro que não é de versão em ${formaRuimOk}/${formaRuim.length}`,
+    `  versão fio   ${ok(descompassoOk === descompassos.length && formaRuimOk === formaRuim.length)} {t:'sala'} v${VERSAO_DO_FIO}: DescompassoDeVersao com servidor/cliente nos campos em ${descompassoOk}/${descompassos.length} (versao ausente, ${VERSAO_DO_FIO + 1}, "1", forma de hoje — versão conferida primeiro) · snapshotHz/assento fora de forma lançam erro que não é de versão em ${formaRuimOk}/${formaRuim.length}`,
     `  orçamento    ${ok(media <= ORCAMENTO_SNAP_B)} ${SNAPSHOT_HZ} Hz, tupla: média ${f1(media)} B/quadro (≤ ${ORCAMENTO_SNAP_B}) · pico ${Math.max(...a.quadro)} B · dos quais events: média ${f1(mediaEventos)} B, pico ${Math.max(...a.eventosQuadro)} B (${SEEDS_FIO.length} rodadas de referência)`,
   ]
-  return { linhas, problemas }
+  return { linhas, problemas, variantesNaoSnap: Object.keys(amostras) }
 }
 
 /**
@@ -1283,13 +1413,177 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
  */
 const ORCAMENTO_SNAP_B = 450
 
+/**
+ * `debt.12` (AC 5), Decisão 1 da `architecture-e4.md` §11.6.1 — a amostra da fixture congelada do fio.
+ * NÃO é o `snapshotSintetico`: aquele tem três colisões de valor entre posições escalares da mesma tupla
+ * (`over`/`arena.pad`, `id`/`alive`, `y`/restante), e trocar qualquer par nos dois lados deixa o texto
+ * idêntico (medição M-1). Aqui (a) nenhuma posição escalar repete valor na mesma tupla, então qualquer
+ * permutação muda os bytes; (b) todo campo quantizado está fora da grade de 0,01, e `ultCharge` 55.559 e o
+ * restante 183.341 separam as regras (piso ≠ arredondado, teto ≠ arredondado). Valores exatos da §11.6.1.
+ */
+function AMOSTRA_DO_FIO(): Snapshot {
+  // 'shield' é o valor exato da §11.6.1 e NÃO está em `EffectKind` ('slow' | 'dot' | 'amp' | 'vuln'). A
+  // posição é [lit] (o codec repassa o `kind` sem ler), então o texto congelado não depende do vocabulário;
+  // trocá-lo por um kind válido mudaria os 287 B decididos. Daí a asserção, só aqui.
+  const shield = 'shield' as Snapshot['balls'][number]['effects'][number]['kind']
+  return {
+    time: 1234.567,
+    over: false,
+    winner: 1,
+    arena: { w: 960, h: 540, pad: 17.254 },
+    balls: [
+      {
+        id: 7,
+        x: 100.25,
+        y: 200.5,
+        facing: 0.75,
+        hp: 432.126,
+        alive: true,
+        ultCharge: 55.559,
+        abilityReadyAt: 1234.567 + 183.341,
+        effects: [{ kind: 'slow' }, { kind: shield }],
+      },
+    ],
+    projectiles: [{ id: 8, x: 10.5, y: 20.75, vx: 300.123, vy: -40.456, radius: 5.555, color: '#b98cff' }],
+    zones: [{ id: 9, kind: 'wall', x: 30.25, y: 40.5, angle: 1.234, halfLen: 60.126, radius: 9.994, pull: 2.345, ownerColor: '#8a8' }],
+    events: [{ t: 'hit', x: 1.5, y: 2.5, amount: 3.14159, targetId: 7, crit: true }],
+  }
+}
+
+/**
+ * ⚠️ FIXTURE CONGELADA DO FIO — `codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO(), seq: 4 })` e a lista
+ * de `t` de `DoServidor` (`sort()` padrão, unida por vírgula), uma entrada por `VERSAO_DO_FIO` (§11.6.1,
+ * Decisão 1, com a emenda da §11.6.2: sem `variantes`, uma variante nova sem subir a versão passava). **SÓ DE ACRÉSCIMO**: ao contrário do `BASELINE`, que é
+ * substituído inteiro numa re-baseline autorizada, a entrada de uma versão publicada é fato histórico e
+ * NUNCA se edita. Mudança deliberada de formato, num único commit: (1) muda o layout, a forma de uma
+ * variante ou o significado de um campo; (2) incrementa `VERSAO_DO_FIO` em `net/protocolo.ts`; (3)
+ * ACRESCENTA `{ versao: N + 1, snap: <texto novo> }` ao fim desta lista; (4) a mensagem de commit diz
+ * "mudança de protocolo" e cita as posições que mudaram. Qualquer linha removida ou alterada aqui
+ * dentro, num diff, é carimbo.
+ */
+const FIO_CONGELADO: readonly { versao: number; snap: string; variantes: string }[] = [
+  {
+    versao: 1,
+    snap: '{"t":"snap","seq":4,"s":[1234.57,0,1,960,540,17.25,[[7,100.25,200.5,0.75,432.13,1,55.55,183.35,["slow","shield"]]],[[8,10.5,20.75,300.12,-40.46,5.56,"#b98cff"]],[[9,"wall",30.25,40.5,1.234,60.13,9.99,2.35,"#8a8"]],[{"t":"hit","x":1.5,"y":2.5,"amount":3.14159,"targetId":7,"crit":true}]]}',
+    variantes: 'erro,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao',
+  },
+]
+
+/** Caminho e valores da primeira posição em que dois JSON divergem (`s[6][0][4]`), para a mensagem. */
+function primeiraDivergencia(a: unknown, b: unknown, caminho: string): string | null {
+  const composto = (v: unknown) => typeof v === 'object' && v !== null
+  if (!composto(a) || !composto(b) || Array.isArray(a) !== Array.isArray(b)) {
+    return Object.is(a, b) ? null : `${caminho || '(raiz)'}: congelado ${JSON.stringify(a)}, atual ${JSON.stringify(b)}`
+  }
+  const oa = a as Record<string, unknown>
+  const ob = b as Record<string, unknown>
+  const chaves = Array.isArray(a)
+    ? Array.from({ length: Math.max((a as unknown[]).length, (b as unknown[]).length) }, (_, i) => String(i))
+    : [...new Set([...Object.keys(oa), ...Object.keys(ob)])]
+  for (const k of chaves) {
+    const sub = Array.isArray(a) ? `${caminho}[${k}]` : caminho ? `${caminho}.${k}` : k
+    const d = primeiraDivergencia(oa[k], ob[k], sub)
+    if (d !== null) return d
+  }
+  return null
+}
+
+/**
+ * `debt.12` (AC 5) — os quatro itens da §11.6.1: (1) o codificador de hoje produz o texto congelado da
+ * última versão; (2) a última versão é `VERSAO_DO_FIO`, e as versões são 1..N consecutivas; (3) ponto fixo
+ * `codificar(decodificar(t)) === t`, que prende o decodificador ao mesmo texto; (4) canário — a amostra
+ * continua discriminante (sem valor repetido entre posições escalares de uma tupla, e as regras de
+ * quantização separadas pelo valor). Sem (4), "simplificar" a amostra tiraria o dente em silêncio. E (5),
+ * emenda da §11.6.2: a lista de `t` de `DoServidor` — as chaves de `amostras` da guarda `não-snap`, cujo
+ * `satisfies` obriga uma por variante que não é `snap`, mais `snap` — é a `variantes` da última versão.
+ */
+function guardaFioCongelado(variantesNaoSnap: readonly string[]): { linha: string; problemas: string[] } {
+  const problemas: string[] = []
+  const ultima = FIO_CONGELADO[FIO_CONGELADO.length - 1]
+  const PROPOSITO =
+    'se foi de propósito, incremente `VERSAO_DO_FIO` em `net/protocolo.ts` e ACRESCENTE uma entrada; nunca edite uma existente (§11.6.1)'
+
+  // (1) o codificador
+  const atual = codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO(), seq: 4 })
+  const igual = atual === ultima.snap
+  if (!igual) {
+    const onde = primeiraDivergencia(JSON.parse(ultima.snap), JSON.parse(atual), '') ?? 'mesmo JSON, texto diferente'
+    problemas.push(`  ✗ fio congelado: o {t:'snap'} de AMOSTRA_DO_FIO mudou em relação à v${ultima.versao} — ${onde} — ${PROPOSITO}`)
+  }
+
+  // (2) a versão
+  const consecutivas = FIO_CONGELADO.every((e, i) => e.versao === i + 1)
+  const versaoOk = ultima.versao === VERSAO_DO_FIO && FIO_CONGELADO.length === VERSAO_DO_FIO && consecutivas
+  if (!versaoOk) {
+    problemas.push(
+      `  ✗ fio congelado: FIO_CONGELADO [${FIO_CONGELADO.map((e) => e.versao).join(', ')}] não termina em VERSAO_DO_FIO ${VERSAO_DO_FIO} com versões 1..N consecutivas — ${PROPOSITO}`,
+    )
+  }
+
+  // (3) ponto fixo do decodificador
+  let pontoFixo = false
+  try {
+    const volta = codificarDoServidor(decodificarDoServidor(ultima.snap))
+    pontoFixo = volta === ultima.snap
+    if (!pontoFixo) {
+      const onde = primeiraDivergencia(JSON.parse(ultima.snap), JSON.parse(volta), '') ?? 'mesmo JSON, texto diferente'
+      problemas.push(`  ✗ fio congelado: codificar(decodificar(congelado)) não é ponto fixo — ${onde}`)
+    }
+  } catch (e) {
+    problemas.push(`  ✗ fio congelado: decodificar o texto congelado lançou — ${(e as Error).message}`)
+  }
+
+  // (4) canário da propriedade discriminante. As três regras aqui são REFERÊNCIA local (as do codec são
+  // privadas); para estes valores, longe de meio-passo e de erro de ponto flutuante, bastam as ingênuas.
+  const colisoes: string[] = []
+  const conferirTupla = (t: unknown[], caminho: string) => {
+    const vistos = new Map<string, number>()
+    t.forEach((v, i) => {
+      if (typeof v === 'object' && v !== null) return
+      const chave = JSON.stringify(v)
+      const antes = vistos.get(chave)
+      if (antes !== undefined) colisoes.push(`${caminho}[${antes}] = ${caminho}[${i}] = ${chave}`)
+      else vistos.set(chave, i)
+    })
+  }
+  const s = (JSON.parse(ultima.snap) as { s: unknown[] }).s
+  conferirTupla(s, 's')
+  for (const n of [6, 7, 8]) (s[n] as unknown[][]).forEach((t, j) => conferirTupla(t, `s[${n}][${j}]`))
+  const amostra = AMOSTRA_DO_FIO()
+  const bola = amostra.balls[0]
+  const restante = bola.abilityReadyAt - amostra.time
+  const arred = (v: number) => Math.round(v * 100) / 100
+  const piso = Math.floor(bola.ultCharge * 100) / 100
+  const teto = Math.ceil(restante * 100) / 100
+  const regrasSeparadas = piso !== arred(bola.ultCharge) && teto !== arred(restante)
+  const entidades = [s[6], s[7], s[8]].every((l) => Array.isArray(l) && l.length > 0)
+  if (colisoes.length > 0 || !regrasSeparadas || !entidades) {
+    problemas.push(
+      `  ✗ fio congelado: canário — a amostra perdeu poder discriminante: colisões [${colisoes.join('; ')}] · piso(ultCharge) ${piso} vs arredondado ${arred(bola.ultCharge)} · teto(restante) ${teto} vs arredondado ${arred(restante)} · bola/projétil/zona presentes ${entidades}`,
+    )
+  }
+
+  // (5) a lista de variantes (§11.6.2)
+  const variantes = [...variantesNaoSnap, 'snap'].sort().join(',')
+  const variantesOk = variantes === ultima.variantes
+  if (!variantesOk) {
+    problemas.push(`  ✗ fio congelado: as variantes de DoServidor [${variantes}] não são as da v${ultima.versao} [${ultima.variantes}] — ${PROPOSITO}`)
+  }
+
+  const ok = (cond: boolean) => (cond ? '✓' : '✗')
+  const linha = `  fio congelado ${ok(problemas.length === 0)} FIO_CONGELADO v${ultima.versao} (${ultima.snap.length} B, ${FIO_CONGELADO.length} entrada(s), só de acréscimo): codificar(AMOSTRA_DO_FIO) = congelado ${ok(igual)} · versão = VERSAO_DO_FIO ${VERSAO_DO_FIO} ${ok(versaoOk)} · ponto fixo codificar(decodificar) ${ok(pontoFixo)} · canário: ${colisoes.length} colisões entre posições escalares, piso ≠ arredondado (ultCharge) e teto ≠ arredondado (restante) ${ok(regrasSeparadas)} · variantes de DoServidor = congeladas (${variantes.split(',').length}) ${ok(variantesOk)} (architecture-e4.md §11.6.1, §11.6.2)`
+  return { linha, problemas }
+}
+
 const { linha: linhaParser, problemas: problemasParser } = guardaParser()
-const { linhas: linhasCodecSaida, problemas: problemasCodecSaida } = guardaCodec(achadosCodec)
-const problemasCodec = [...problemasParser, ...problemasCodecSaida]
+const { linhas: linhasCodecSaida, problemas: problemasCodecSaida, variantesNaoSnap } = guardaCodec(achadosCodec)
+const { linha: linhaFioCongelado, problemas: problemasFioCongelado } = guardaFioCongelado(variantesNaoSnap)
+const problemasCodec = [...problemasParser, ...problemasCodecSaida, ...problemasFioCongelado]
 const linhasCodec = [
   `codec do fio   ${problemasCodec.length === 0 ? '✓ ok' : '✗ falhou'} — net/codec.ts: DoCliente fechado em runtime; {t:'snap'} em tupla posicional quantizada (architecture-e4.md §5.5)`,
   linhaParser,
   ...linhasCodecSaida,
+  linhaFioCongelado,
 ]
 
 // ------------------------------------------- sala pura (e4.3, AC 11 e 16) — a Bo5 inteira por passo()
