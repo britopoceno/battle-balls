@@ -1,0 +1,181 @@
+schema: 1
+story: 'e4.0'
+story_title: '`net/protocolo.ts` — vocabulário do fio, puro, sem socket'
+gate: CONCERNS
+status_reason: >-
+  Os 13 ACs de e4.0 estão MET, e tudo foi conferido do zero, sem confiar no Dev Agent Record:
+  check 0 erros, sim:check verde com golden hash idêntico, greps de pureza e de setas vazios, nenhuma
+  redeclaração, escopo de 2 arquivos, e os comentários obrigatórios presentes com as palavras
+  pedidas. Também escrevi meus próprios testes de tipo negativos (e conferi que o arnês detecta
+  erro). Eles confirmam que `tick` em `{t:'cast'}` é erro de compilação, que `t` desconhecido é
+  recusado nas duas uniões e que `World` satisfaz `Snapshot`/`EstaticoDaRodada` estruturalmente.
+  A forma completa por `Pick` NÃO reprova e4.0: o AC 7 diz "podem ser declarados aqui" (é
+  permissivo), e a forma bate com o que `render.ts` realmente lê. Um placeholder teria jogado a
+  e4.2 para fora do próprio escopo (AC 14 dela exclui este arquivo). Fica em CONCERNS, não PASS,
+  por dois resíduos que não são defeito deste arquivo, mas que esta story tornou visíveis e que
+  hoje não têm dono. (1) O "codec" do passo 0 da §10 não existe e nenhuma story o assume. Sem ele,
+  o vocabulário FECHADO só é fechado em tempo de compilação: JSON hostil chega ao `sim/` sem
+  checagem de forma, e `aimFrom` deixa NaN passar (E40-SEC-001). (2) O texto da e4.2 ficou
+  desalinhado com a forma já decidida aqui (E40-REQ-002).
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:323777d. git show --stat mostra 2 arquivos: src/net/protocolo.ts (novo, 148 linhas) e
+  docs/stories/e4.0.net-protocolo.story.md. Zero linhas em src/sim/, match/, shop/, bot/, chars/,
+  client/ e tools/. O diff da story só muda Status, checkboxes, Dev Agent Record e Change Log,
+  sem mexer em AC nem escopo.
+
+verificacao_independente:
+  - id: 'npm run check + sim:check (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      `npx tsc --noEmit` terminou com exit 0 (rodei sem pipe, para o exit code ser o do tsc e não o
+      de um `tail`). `npm run sim:check` terminou com exit 0, todas as guardas ok, e a linha
+      "golden hash ✓ ok — 6 seeds batem o baseline". O baseline não pode ter se movido: o commit não
+      toca nenhum arquivo além dos dois citados.
+  - id: 'Pureza por grep (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `grep -rn "ws\|document\|window\|localStorage\|Date.now\|performance.now\|Math.random"
+      src/net/` voltou vazio (rc=1). Um segundo grep, com fronteira de palavra, procurou
+      ws/fetch/require/process/setTimeout/setInterval/console/WebSocket/XMLHttpRequest/globalThis e
+      também voltou vazio. O arquivo não tem código executável além de duas constantes literais.
+  - id: 'Setas (AC 9)'
+    verdict: PASS
+    evidence: >-
+      Os únicos imports são `import type` de '../match/types.ts' e de '../sim/types.ts'. Não há
+      import sem `type`, e o grep por `from '../(tools|client|bot|chars|shop|server)/'` voltou vazio.
+      `verbatimModuleSyntax` está ligado, então um import de valor disfarçado não passaria no tsc.
+  - id: 'Nada redefinido (AC 8)'
+    verdict: PASS
+    evidence: >-
+      Procurei declarações de Decisao, VisaoPartida, ResultadoRodada, Jogador, Command,
+      ATRASO_ALVO_TICKS e SNAPSHOT_HZ em todo o src/. Cada um tem uma única definição exportada, no
+      dono certo, e `protocolo.ts` só declara os 6 nomes novos. Há um `interface ResultadoRodada`
+      local em src/tools/balance.ts:973, mas ele é anterior a esta story, não é exportado e não
+      entrou neste commit. `Snapshot`/`EstaticoDaRodada` são feitos de Pick/indexação sobre Ball,
+      Projectile, Zone, Effect e World, sem nenhum campo escrito à mão. `slot: Command['slot']`
+      resolve para `"ult" | "ability"` (confirmei na mensagem de erro do tsc), idêntico ao literal
+      do AC 5.
+  - id: 'Testes de tipo negativos próprios (ACs 5, 6, 7, 10, 12)'
+    verdict: PASS
+    evidence: >-
+      Arquivo no scratchpad, fora do repositório e apagado depois, compilado com as opções do
+      tsconfig. Resultados: `{t:'cast', ..., tick: 5}` é erro; `ballIndex: 2` é erro;
+      `slot: 'passive'` é erro; `{t:'qualquer'}` como DoServidor é erro; `{t:'sair'}` como DoCliente
+      é erro; `{...snap, rng}` como Snapshot é erro; `entrar` compila com e sem `assento`;
+      `const s: Snapshot = world` e `const e: EstaticoDaRodada = world` compilam; `ATRASO_ALVO_TICKS`
+      é do tipo literal 6 e `SNAPSHOT_HZ` do tipo literal 30. Todos os @ts-expect-error foram
+      consumidos. Controle de sanidade: com a diretiva do caso `tick` removida, o tsc acusa TS2353,
+      ou seja, o arnês detecta erro de verdade.
+  - id: 'Comentários obrigatórios (ACs 4, 6, 10, 11, 12)'
+    verdict: PASS
+    evidence: >-
+      AC 4: ATRASO_ALVO_TICKS diz "RF-38 / P4.1" e "Definição ÚNICA do projeto", com o argumento do
+      treino honesto. SNAPSHOT_HZ traz "⚠️ R-03 — o valor sai de MEDIÇÃO ... não de raciocínio.
+      `30` aqui é o PONTO DE PARTIDA, não decisão", mesma construção de chars/tuning.ts:5-6.
+      AC 6: "sem `tick`. O campo NÃO existe, e a ausência é a decisão", mais o porquê (tick no
+      passado, servidor não revisita) e a nota de que `Command.tick` continua existindo. AC 10:
+      "Vocabulário FECHADO, no precedente explícito de `AimSpec` (`e2.2`)" no topo dos DOIS tipos.
+      AC 11: o aviso-invariante está no topo do arquivo, praticamente verbatim, incluindo o "reabre
+      em silêncio" e a Muralha. AC 12: o comentário sobre `assento` diz quem gera, guarda e confere
+      (e4.4) e separa ESTADO de IDENTIDADE.
+  - id: 'Completude da forma contra render.ts (a pergunta da e4.2)'
+    verdict: PASS
+    evidence: >-
+      Levantei todos os acessos de propriedade em client/render.ts. Por bola: alive, abilityIndex,
+      effects.kind (via .some), ultThreshold, ultCharge, charId, abilityReadyAt, team,
+      stat.maxHp, stat.radius, hp, facing, x, y. Projétil: x, y, vx, vy, radius, color. Zona: kind,
+      x, y, angle, halfLen, radius, pull, ownerColor. Mundo: winner, time, over, arena.pad, chars.
+      Estático e Snapshot, juntos, cobrem todos esses campos. A cor da bola vem SEMPRE de
+      `def.color` (render.ts:166, 186, 274, 289, 314, 380, 386), ou seja, de chars[charId]. Deixar a
+      cor fora do estático está correto, porque a e4.2 recebe CHARS injetado (AC 10 dela). Nenhum
+      campo de classe 3 aparece no tipo.
+
+top_issues:
+  - id: 'E40-SEC-001'
+    severity: medium
+    category: security
+    finding: >-
+      O vocabulário FECHADO só existe em tempo de compilação, e o "codec" que a §10 lista no passo 0
+      não tem dono em nenhuma story da E4 (procurei codec/parse/serializ em e4.1–e4.7: nada). A
+      premissa da e4.4 ("a superfície de entrada já passa por validação existente —
+      castCommand/aplicar()") não se sustenta para a FORMA da mensagem. `aimFrom` (sim/world.ts:446)
+      faz `Math.hypot(NaN, dy) || 1`, que dá 1, e em seguida `dx = NaN/1`, que é NaN. A linha
+      `Math.max(0, Math.min(1, NaN))` também dá NaN. Resultado: um `dx: NaN` vindo do fio envenena a
+      posição de projétil/dash no World autoritativo dos DOIS jogadores. Além disso, em castCommand
+      qualquer `slot` diferente de 'ability' cai no ramo de ult. Em runtime um JSON pode trazer
+      `tick`, porque a checagem de propriedade extra do TS só vale para literal. O servidor precisa
+      descartar esse campo por construção, e hoje nada garante isso.
+    suggested_action: >-
+      Não é retorno ao @dev de e4.0, que não tem AC para isso (Artigo IV). A decisão de não escrever
+      codec foi correta dentro desta story. É handoff para @po/@sm: atribuir, de preferência à e4.3
+      (pura, coberta pelo sim:check), um `parseDoCliente(raw: unknown): DoCliente | null` em net/
+      que: exija `t` na união; exija ballIndex ∈ {0,1} e slot ∈ {'ability','ult'};
+      aplique `Number.isFinite` a dx/dy/mag; exija que sala e assento sejam string; e
+      RECONSTRUA o objeto só com os campos da variante, descartando `tick` e qualquer extra. Os
+      casos negativos (NaN, Infinity, slot estranho, `tick` presente, `t` desconhecido, não-objeto)
+      entram na guarda da sala. Também é preciso corrigir a frase da e4.4 ("já passam por validação
+      existente") para apontar para este parser.
+  - id: 'E40-REQ-002'
+    severity: medium
+    category: requirements
+    finding: >-
+      A forma de Snapshot/EstaticoDaRodada foi decidida em e4.0, mas o texto da e4.2 ainda pressupõe
+      o contrário: em "Depende de", "Esta story os preenche"; na tabela do AC 4, "cor → EstaticoDaRodada";
+      e o AC 14 exclui src/net/protocolo.ts do escopo. Lido ao pé da letra, um gate da e4.2 tropeçaria
+      na cor sem ter permissão de corrigi-la. No mérito não há conflito: a cor vem de
+      chars[charId].color, que é o que render.ts lê; a tripwire do AC 4/7 tem stat.maxHp e
+      stat.radius no estático; o ε de quantização continua livre, porque tudo é `number`; o
+      `id` em projéteis/zonas permite a checagem de PRESENÇA do AC 7; `time` e `arena` inteira
+      estão no snapshot. Um ponto a medir: `events: SimEvent[]` aceita todos os tipos de evento
+      (cast/ult com `name` string, death, roundEnd), e não só `hit`, o que pesa no orçamento do AC 9.
+    suggested_action: >-
+      Handoff para @po, ANTES de a e4.2 entrar em desenvolvimento. Anotar na e4.2 que a forma é dada
+      por e4.0; que "preenche" quer dizer PRODUZ; que a cor da tabela do AC 4 chega pelo CHARS
+      injetado e não pelo estático; e que, se a e4.2 precisar ajustar a forma, `src/net/protocolo.ts`
+      entra no AC 14 como alteração deliberada e justificada (AC 10 de e4.0). Para o AC 9, medir com
+      os eventos que forem de fato enviados. Filtrar para `hit` continua tipando, porque um subconjunto
+      de SimEvent[] cabe no tipo.
+  - id: 'E40-TST-003'
+    severity: low
+    category: tests
+    finding: >-
+      O grep de pureza como está escrito na story (Task 5 e quality_gate_tools), sem `-r`, sai com
+      rc=2 e a mensagem "Is a directory", sem nada em stdout. Um gate que conferisse só "saída vazia"
+      passaria de forma vazia. O @dev percebeu e usou `-r`, o que está correto. O padrão `ws` é uma
+      substring solta: pega "draws", "news", "rows". Foi isso que obrigou a contorção do comentário
+      que evita nomear a biblioteca (protocolo.ts:19-20), e o mesmo padrão vai dar falso positivo em
+      snapshot.ts/sala.ts.
+    suggested_action: >-
+      Nos gates de e4.2/e4.3/e4.4, usar
+      `grep -rnE "from ['\"]ws['\"]|\b(document|window|localStorage)\b|Date\.now|performance\.now|Math\.random" src/net/`
+      e exigir rc=1, não só saída vazia. É nota de processo, não retorno.
+  - id: 'E40-INF-004'
+    severity: low
+    category: code
+    finding: >-
+      `slot: Command['slot']` e `d: Decisao` (este último exigido pelo AC 8) ligam o vocabulário do
+      fio a tipos de sim/ e match/. Se um slot novo entrar em Command, a união DoCliente se estende
+      sem que protocolo.ts mude uma linha, o que está em leve tensão com o "estender é ato deliberado"
+      do AC 10. Aceitável: mudar Command já é, por si, um ato revisado em sim/, e fonte única vale
+      mais (AC 8). O efeito real é que o parser de E40-SEC-001 precisa listar os slots explicitamente
+      e não derivar a lista do tipo.
+    suggested_action: 'Nenhuma ação em e4.0. Considerar quando E40-SEC-001 for implementado.'
+
+avaliacoes_pedidas:
+  forma_completa_vs_e4_2: >-
+    Não é FAIL de e4.0. O AC 7 é permissivo ("podem ser declarados aqui como tipo e preenchidos em
+    e4.2"), e deixar só um placeholder tornaria a e4.2 inexecutável dentro do próprio AC 14. A forma
+    bate campo a campo com render.ts, não redeclara nada (compila contra `World` por estrutura) e
+    preserva o que a e4.2 decide: produção, ε de quantização, acumulação de eventos, tripwire. O que
+    sobra é desalinhamento de TEXTO na e4.2, registrado como E40-REQ-002 para o @po.
+  grep_sem_r: >-
+    O @dev está certo: o comando literal falha com rc=2. O -r é a leitura fiel da intenção do AC 3, e
+    eu reproduzi o resultado vazio com o -r. Virou nota de processo (E40-TST-003).
+  sem_codec: >-
+    Decisão correta dentro de e4.0 (Artigo IV: nenhum AC pede codec, e o @po validou GO 10/10 sem
+    ele). Mas a omissão tem consequência real: sem parser em runtime, o fio não é fechado. Esse é o
+    achado substantivo deste gate (E40-SEC-001), encaminhado ao @po/@sm.
+
+waiver: { active: false }
+updated: '2026-09-21T12:00:00Z'
