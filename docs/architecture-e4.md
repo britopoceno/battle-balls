@@ -13,7 +13,8 @@
 > Scripts, saídas brutas e instruções de reprodução em `docs/evidence/e4-determinismo-engines/`.
 > **Revisões:** 2026-09-21 (`e4.1` — §4.1) · 2026-09-21 (`e4.2` — §1.2, §2.2, §5.1, §5.2, **§5.5
 > codificação do fio, decidida**, §5.6, §9, §11.6, §12/R-05, Anexos A e B). Evidência da revisão de
-> `e4.2` em `docs/evidence/e4-codificacao-fio/`.
+> `e4.2` em `docs/evidence/e4-codificacao-fio/`. · 2026-09-21 (`debt.10` → `debt.11` — §2.2: **seta
+> `tools/ → client/` declarada** e casa da guarda de telemetria decidida; Anexos A e B).
 
 ---
 
@@ -311,6 +312,7 @@ match/   draft, builds, Bo5, placar, economia, loja   → sim/, shop/
 bot/     comandos de combate, política de partida     → sim/, shop/, match/ (só tipos)
 net/     protocolo, snapshot, máquina da sala         → sim/, match/, shop/   ← NOVO
 tools/   arnês, CLI, sim:check           → sim/, chars/, bot/, match/, shop/, net/   ← net/ desde e4.2
+                                           + client/ SÓ telemetria (lista fechada)  ← declarada 2026-09-21
 server/  entrada Node: WebSocket, roteamento, relógio → net/, match/, chars/, bot/  ← NOVO
 client/  render, input, telas, rede      → todos
 ```
@@ -333,7 +335,145 @@ client/  render, input, telas, rede      → todos
 > `client/input.ts` e `client/telemetria.ts`. Com `client/ → tools/` (`client/main.ts` importa `hash` de
 > `tools/harness.ts`), as duas **pastas** se apontam mutuamente, embora nenhum **arquivo** feche ciclo.
 > Não quebra nada hoje; registro para que ninguém cite esta tabela como prova de que `tools/` não
-> conhece `client/`. Se virar item, é dívida da Fase 3, não de E4.
+> conhece `client/`. Se virar item, é dívida da Fase 3, não de E4. *(Virou item no mesmo dia: a seta
+> está declarada no bloco abaixo, com lista fechada de arquivos.)*
+
+> **Decisão (2026-09-21, `debt.10` → `debt.11`) — a seta `tools/ → client/` fica declarada, e a guarda
+> da telemetria roda no `sim:check` a partir de um arquivo próprio.** Pedido: o achado `DEBT10-TST-001`
+> (gate de `debt.10`, medium) e o roteamento do @po no Change Log v1.4 de `debt.10`, que recomenda a guarda
+> dentro do `sim:check` e deixa a seta para esta seção.
+>
+> **O que foi medido nesta sessão, antes de decidir** (código em `1564ae4`, sem alterá-lo; scripts no
+> scratchpad da sessão):
+>
+> | Medida | Resultado |
+> |---|---|
+> | Grafo de imports de arquivo de `src/` (40 arquivos; `import`/`export ... from` relativos, regex estática, sem imports dinâmicos, que não existem) | Setas `tools/ ↔ client/` hoje: `client/main.ts → tools/harness.ts` (**execução**), `tools/telemetria.ts → client/input.ts` (**execução**, valores `ARRASTO_MAX`/`LIMIAR_ARRASTO_PX`, desde `24b85ff`/`e3.5`), `tools/telemetria.ts → client/telemetria.ts` (**só tipo**). A nota acima tratava a seta existente como uma coisa só. Ela já é de execução em uma das duas pernas |
+> | Ciclos de arquivo, com e sem as arestas hipotéticas de `debt.11` (`determinism.ts → guarda-telemetria.ts → {client/telemetria.ts, tools/telemetria.ts}`) | Só os dois ciclos de tipo internos a `sim/`, já registrados acima. **Zero ciclos de execução**, antes e depois |
+> | Fecho de execução do `sim:check` (módulos carregados por `node src/tools/determinism.ts`) | **27 → 32.** Entram `client/input.ts`, `client/layout.ts`, `client/telemetria.ts`, `tools/telemetria.ts` e o arquivo da guarda. **É a primeira vez que o `sim:check` carrega código de `client/`.** `chars/tuning.ts` e `net/protocolo.ts`, que o coletor importa, já estavam no fecho |
+> | Importar `tools/telemetria.ts` de outro módulo, sem argumento | O processo sai com código 1 e imprime `uso: ...`. **Com um argumento qualquer** (`--x`), `main()` tenta `readFileSync('--x')` e morre com `ENOENT`. São dois modos de falha, não um |
+> | Importar `client/telemetria.ts` em Node 24.13.1 com um `localStorage` falso em `globalThis` | Funciona. `criarTelemetria()` → `ler()` avisa 1 evento sem carimbo, e `registrar()` grava `atrasoTicks: 6, escalaHp: 6` só no evento novo. **O aviso de `ler()` sai em `console.warn`**, então entraria na saída do `sim:check` se não for capturado |
+> | Globais web em Node 24.13.1 | `localStorage` e `document` indefinidos; `Blob` e `URL.createObjectURL` nativos |
+> | `import.meta.main` em Node 24.13.1 | `true` quando o arquivo é a entrada do processo, `false` quando é importado. Declarado em `@types/node` instalado (`web-globals/importmeta.d.ts`), então passa em `npm run check` |
+> | `npm run sim:check` hoje | exit 0, 50 linhas com o cabeçalho do npm, cerca de 8 s de parede |
+>
+> **1. Onde a guarda mora — opções e trade-offs.**
+>
+> | Opção | A favor | Contra | Veredito |
+> |---|---|---|---|
+> | **A.** Corpo da guarda dentro de `determinism.ts`, que importa `client/telemetria.ts` e `tools/telemetria.ts` | Sem arquivo novo; roda em todo gate | `determinism.ts` (985 linhas) passa a importar `client/` direto, e o arquivo de que todo gate depende entra na lista de quem cruza a fronteira. Contraria o precedente de `tools/partida.ts`, que tirou a bateria de partida de lá pelo mesmo motivo | Rejeitada |
+> | **B.** Script irmão `npm run telemetria:check` | `sim:check` não carrega `client/`; fronteira mais limpa | Só protege se cada `quality_gate_tools` futuro lembrar de listá-lo. O histórico do projeto é exatamente esse esquecimento: "o caminho que importa nunca é testado" (`E41-TST-003`, `DEBT10-TST-001`). Mexe em `package.json` | Rejeitada |
+> | **C.** Extrair o carimbo e a partição para um módulo puro fora de `client/`, e testar esse módulo | Nenhuma seta nova de execução | **Não pega a mutação que importa.** Um teste de `carimbar()` puro continua verde se `registrar()` parar de chamá-lo, ou se o carimbo for para `exportar()` (M1 e M1b do gate). O cenário discriminante exige exercitar o `registrar()` **real**. Além disso, mexe em código `Done` de `client/` só para acomodar o teste | Rejeitada |
+> | **D.** Arquivo próprio `src/tools/guarda-telemetria.ts`, chamado pelo `sim:check` (`determinism.ts` ganha import, chamada e bloco de falha) | Roda em todo gate, que é o argumento do @po. O import de execução de `client/` fica isolado num arquivo cujo único papel é a guarda. `determinism.ts` não importa `client/`. Segue o precedente de `tools/partida.ts` e o de `e4.6` (CLI sobre arquivo + guarda headless no `sim:check`) | `sim:check` passa a carregar 3 arquivos de `client/` (27 → 32 módulos) e passa a depender de eles serem importáveis em Node. A saída do `sim:check` ganha linhas, o que afeta o "antes × depois" das stories que disputam `determinism.ts` | **Escolhida** |
+>
+> **Por que o custo da D é aceitável.** A dependência de "importável em Node" já existe: o CLI
+> `node src/tools/telemetria.ts` carrega `client/input.ts` e `client/layout.ts` desde `e3.5`. A D só a
+> estende a `client/telemetria.ts`, que hoje cumpre a condição (medido acima). E o modo de falha é
+> barulhento: um acesso a DOM no topo de um desses arquivos derruba o `sim:check` com `ReferenceError`, não
+> passa calado. O argumento "manter o `sim:check` focado em determinismo" não descreve o comando de hoje. Ele
+> já hospeda a auditoria estática do Pilar 3, a guarda de BOT-001, a economia da partida (RF-23) e a
+> ida-e-volta do fio. Na prática é **o gate headless do projeto**, e o nome ficou.
+>
+> **2. A seta, declarada.** Fica na tabela acima, com estas regras:
+>
+> - **Lista fechada de arquivos de `tools/` que podem importar `client/`:**
+>
+>   | Arquivo de `tools/` | Importa de `client/` | Tipo |
+>   |---|---|---|
+>   | `tools/telemetria.ts` (CLI agregador, `e3.5`) | `client/input.ts` (`ARRASTO_MAX`, `LIMIAR_ARRASTO_PX`) | execução |
+>   | `tools/telemetria.ts` | `client/telemetria.ts` (`ArquivoTelemetria`, `EventoRegistrado`) | só tipo |
+>   | `tools/guarda-telemetria.ts` (`debt.11`) | `client/telemetria.ts` (`criarTelemetria`, `CHAVE` e os tipos) | execução |
+>
+>   Qualquer outro arquivo de `tools/`, incluindo `determinism.ts`, `harness.ts`, `partida.ts` e os de
+>   `e4.3`/`e4.6`, **não** importa `client/`. Um arquivo novo nesta lista é emenda desta seção, não
+>   decisão de story. A conferência é `grep -rn "from '\.\./client/" src/tools/`, que deve devolver só os
+>   dois arquivos acima.
+> - **Invariante de importabilidade.** Todo arquivo de `client/` alcançado por `tools/` (hoje
+>   `client/input.ts`, `client/layout.ts` e `client/telemetria.ts`) não acessa `window`, `document`,
+>   `localStorage` nem `canvas` no topo do módulo. Esses acessos ficam dentro de funções, como já estão. Se
+>   um desses arquivos precisar de efeito no topo, a mudança dele é que abre handoff, não a guarda.
+> - **A outra direção fica como está.** `client/ → tools/` continua sendo só `client/main.ts →
+>   tools/harness.ts` (`hash`). **Nenhum arquivo de `client/` importa `tools/telemetria.ts` nem
+>   `tools/guarda-telemetria.ts`**: o primeiro importa `node:fs`, e qualquer um dos dois arrastaria código
+>   de Node para o bundle do Vite.
+> - **Sem ciclo de arquivo** é condição da seta. Pastas que se apontam mutuamente são toleradas, desde que
+>   com a lista fechada acima. Um ciclo de arquivo de execução entre `tools/` e `client/` é regressão.
+> - **Por que declarar, e não resolver.** Resolver exigiria mover `ARRASTO_MAX`/`LIMIAR_ARRASTO_PX` para
+>   fora de `client/input.ts` e o coletor para fora de `client/`. Os dois são semântica de entrada e de
+>   instrumentação do cliente, e estão no lugar certo. O agregador os lê porque mede o que o cliente
+>   gravou. Mover mexeria em arquivos `Done` e em `input.ts`, que a Fase 4 mantém intacto (Anexo A), para
+>   trocar uma seta declarada e fechada por uma pasta nova. Não compensa.
+>
+> **3. Restrições que `debt.11` herda desta seção** (o texto da story é do @sm; isto é o contrato de forma):
+>
+> - **(R1) Casa.** A guarda mora em `src/tools/guarda-telemetria.ts`, que exporta uma função no molde de
+>   `verificarPartida` (devolve linhas e problemas, sem lançar e sem `process.exit`). `determinism.ts` recebe
+>   **só** o import dessa função, a chamada, uma linha de seção na saída e um bloco `throw` no padrão dos
+>   que já existem. Não recebe import de `client/` nem de `tools/telemetria.ts`.
+> - **(R2) Guarda de ponto de entrada no agregador.** Em `tools/telemetria.ts`, `main()` roda só quando o
+>   arquivo é a entrada do processo. Preferência: `if (import.meta.main) main()`, medido acima. Se o @dev
+>   usar comparação de `process.argv[1]` com `import.meta.url`, que registre o cuidado com a caixa da letra
+>   de unidade no Windows. **Essa é a única mudança de corpo em `tools/telemetria.ts`**, fora o texto
+>   opcional de `DEBT10-COD-003`. Nenhum import novo fora de `node:` (a forma preferida não precisa de
+>   nenhum), nenhum `export` novo. A guarda lê `agregar()`, que já
+>   é exportado. **Prova discriminante das duas direções:** (a) importar o módulo não encerra o processo (a
+>   própria guarda no `sim:check` prova); (b) `node src/tools/telemetria.ts` sem argumento continua
+>   imprimindo `uso:` e saindo com 1; (c) sobre os 5 exports reais de `docs/evidence/telemetria/`, a saída do
+>   CLI é byte a byte igual à de antes. Sem (b) e (c), uma guarda de entrada que nunca é verdadeira passa
+>   despercebida, porque o CLI ficaria mudo e o `sim:check` verde. Registrar a versão do Node usada:
+>   `import.meta.main` não existe em Node antigo, e ali o CLI ficaria mudo.
+> - **(R3) Coletor real, não réplica.** A guarda exercita `criarTelemetria()`/`registrar()` do
+>   `client/telemetria.ts` real, com `localStorage` falso, e observa o que `exportar()` entregaria. Pode
+>   capturar o conteúdo do `Blob` e usar um `document` mínimo. Todo global instalado é **restaurado pelo
+>   descritor original** (`Object.getOwnPropertyDescriptor`/`defineProperty`, não `delete`) num
+>   `finally`. Ao sair da guarda, `localStorage` e `document` voltam a ser o que eram. Motivo: uma versão
+>   futura do Node pode trazer `localStorage` nativo, e a guarda não pode apagá-lo nem gravar num arquivo
+>   real. `console.warn` é capturado durante a guarda, e a saída do `sim:check` não ganha linhas
+>   `[telemetria]` soltas. A guarda pode afirmar sobre os avisos capturados.
+> - **(R4) Fixture em código, não em `docs/`.** A decisão desta seção é montar o fixture misto **dentro de
+>   `guarda-telemetria.ts`**, sintético e mínimo, em vez do `docs/evidence/telemetria/fixture-misto.json`
+>   sugerido no gate. Motivos: o `sim:check` hoje só lê disco em `src/chars/`; `docs/evidence/` é pasta de
+>   evidência que humanos substituem e reeditam, e trocar um JSON de lá mudaria o teste sem diff em `src/`;
+>   e o fixture em código deixa visível a propriedade que discrimina. O realismo sobre exports reais já foi
+>   provado uma vez, no gate. O que falta é a guarda contra regressão. Composição mínima: pelo menos duas
+>   populações conhecidas com rodadas de humano (por exemplo (6, 6) e (0, 6)) mais eventos sem carimbo, de
+>   modo que **nenhuma população tenha o `n` combinado**.
+> - **(R5) As 4 mutações do gate reprovam o `sim:check`.** Cada uma aplicada à mão, `npm run sim:check`
+>   rodado e revertido, com resultado no Dev Agent Record: **M1**, sem carimbo em `registrar()`; **M1b**,
+>   carimbo movido para `exportar()`; **M2**, `?? 0` / `?? 1` em `populacaoDe()`; **M3**, `agregar()`
+>   devolvendo `agregarPopulacao(eventos)` sem partição. As 4 precisam sair com código diferente de 0. As
+>   asserções sobre `agregar()` leem **rótulo e cabeçalho** (quantos blocos `P3.1`, presença de população
+>   "desconhecida"), não números formatados. Uma asserção que só confere "o carimbo existe" não pega a M2.
+>   Uma que só confere "há aviso" não pega a M3.
+> - **(R6) Uma só definição de "sem carimbo".** A guarda fixa a do agregador (`!Number.isFinite`, já
+>   validada no gate). Se `DEBT10-COD-003` entrar, `ler()` passa a usar a mesma definição e a guarda pode
+>   afirmar que a contagem do aviso de `ler()` bate com a população desconhecida. Se não entrar, a guarda
+>   **não** afirma sobre a contagem de `ler()` para `null`/string. Fixar a divergência num teste seria pior
+>   do que deixá-la registrada no gate.
+> - **(R7) Arquivos permitidos:** `src/tools/guarda-telemetria.ts` (novo); `src/tools/determinism.ts`
+>   (só R1); `src/tools/telemetria.ts` (só R2 e, opcionalmente, o texto de `DEBT10-COD-003`);
+>   `src/client/telemetria.ts` (só se `DEBT10-COD-003` entrar, e só o predicado de `ler()`);
+>   `docs/evidence/telemetria/README.md` (`DEBT10-DOC-002`). **Proibidos:** `package.json` (nenhum script
+>   novo), `src/sim/`, `src/match/`, `src/shop/`, `src/bot/`, `src/chars/`, `src/net/`, `client/main.ts`,
+>   `client/input.ts`, `client/layout.ts`, `client/render.ts` e qualquer outro arquivo de `tools/`.
+> - **(R8) Golden hash imóvel, saída do `sim:check` só com inserção.** `npm run sim:check` sai com 0, e a
+>   linha do golden hash não muda. O `diff` da saída completa antes × depois é **só inserção**: as linhas
+>   da seção nova, num ponto fixo depois das seções que já existem. Nenhuma linha existente muda ou troca de
+>   lugar. O argumento de neutralidade é de construção: a guarda não chama nada de `sim/` nem de `match/`, e
+>   os módulos novos no fecho não têm estado de topo que `sim/` leia. A prova continua sendo o `diff`.
+> - **(R9) Sequência.** `determinism.ts` é disputado por `e4.3` (Draft), `e4.6` (Ready) e pela story do
+>   codec que o @sm está escrevendo. `debt.11` começa depois do commit de implementação da que estiver em
+>   curso, e o escopo é conferido por `git show --stat <commit próprio>`, nunca pela árvore. As stories
+>   seguintes que fazem "`sim:check` antes × depois" passam a ver a seção da telemetria na saída. Como é
+>   inserção fixa, o `diff` delas continua vazio desde que o "antes" seja tirado depois de `debt.11`.
+> - **(R10) Prazo.** É o do AC 11 de `debt.10`: antes da primeira coleta humana usada como evidência de
+>   `debt.9` (pré-condição b) ou como baseline de P4.4 (`e4.7`, hoje Ready). Se `e4.7` deve listar
+>   `debt.11` como pré-condição é roteamento do @po.
+>
+> **Segurança.** Nenhuma superfície nova no produto. A guarda roda só em Node e não entra no bundle, porque
+> nenhum arquivo de `client/` a importa (regra 2). O `localStorage` falso vive só no processo do
+> `sim:check`, e a restauração pelo descritor (R3) impede que a guarda escreva em armazenamento real numa
+> versão futura do Node. Nenhum dado de jogador é lido: o fixture é sintético (R4).
 
 `net/` é **puro**: sem `ws`, sem DOM, sem `Date.now`, sem `Math.random`, sem I/O. Quem tem socket é
 `server/`; quem tem `WebSocket` do navegador é `client/rede.ts`. O motivo é o mesmo de sempre e
@@ -1074,8 +1214,10 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | `src/shop/**`, `src/chars/**` | **intactos** | — |
 | `src/client/render.ts` | **muda só em anotações de tipo** (`e4.2`) | 10 linhas, nenhuma de corpo: `World`/`Ball` → `VisaoDoMundo`/`BolaVisivel` (§5.1, emenda) |
 | `src/client/telas.ts`, `input.ts`, `layout.ts` | **intactos** | §5.1 |
-| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), sala e codec (`e4.3`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo |
-| `src/tools/**` (resto) | **intacto** | — |
+| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), sala e codec (`e4.3`), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
+| `src/tools/guarda-telemetria.ts` | **novo** (`debt.11`) | Guarda headless do carimbo e da partição de telemetria, chamada pelo `sim:check`. Um dos dois únicos arquivos de `tools/` que importam `client/` (§2.2, lista fechada) |
+| `src/tools/telemetria.ts` | **muda só no ponto de entrada** (`debt.11`) | `main()` roda só como entrada do processo. Mantém a seta `tools/ → client/` de `e3.5`, agora declarada (§2.2) |
+| `src/tools/**` (resto) | **intacto** | Não importa `client/` |
 
 *Atualização (2026-09-21, `e4.2`): o Anexo acima foi escrito antes de haver código. As linhas de
 `codec.ts`, `render.ts` e `tools/` foram corrigidas pelo que `e4.2` entregou e pelo que `e4.3` já tem no
@@ -1098,6 +1240,8 @@ escopo; a coluna "Estado" passou a citar a story dona.*
 | — | `net/` não importa `ws` nem toca DOM | grep + revisão | §2.3 |
 | — | Codec do fio: prontidão preservada, contrafactual ingênuo reprovado, média ≤ 450 B/quadro *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 17) | §5.5 |
 | — | O `snap` final de cada rodada chega ao fio antes do `rodadaFim` *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 11) + duas abas (`e4.4`/AC 16) | §5.6 |
+| — | Telemetria que vira baseline de P4.4 separa (atraso, `ESCALA_HP`) e não mistura populações *(2026-09-21)* | guarda do `sim:check` (`debt.11`), pronta antes da coleta de `e4.7` | §2.2 (decisão `debt.10` → `debt.11`) |
+| — | Só `tools/telemetria.ts` e `tools/guarda-telemetria.ts` importam `client/`; nenhum arquivo de `client/` importa um dos dois *(2026-09-21)* | `grep -rn "from '\.\./client/" src/tools/` + revisão | §2.2 |
 
 ---
 
