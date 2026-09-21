@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+Ready for Review
 
 ## Executor Assignment
 
@@ -245,47 +245,47 @@ dois sentidos do carimbo parcial no fixture.
 
 ## Tasks / Subtasks
 
-- [ ] Task 0 — Pré-condição de início (AC: "Depende de")
-  - [ ] Confirmar que `debt.11` está Done (`971686b`)
-  - [ ] Confirmar que `git status --short src/tools/guarda-telemetria.ts src/tools/telemetria.ts` sai
+- [x] Task 0 — Pré-condição de início (AC: "Depende de")
+  - [x] Confirmar que `debt.11` está Done (`971686b`)
+  - [x] Confirmar que `git status --short src/tools/guarda-telemetria.ts src/tools/telemetria.ts` sai
         vazio; se outra story tiver mudança não commitada em outros arquivos de `src/`, preparar um
         worktree descartável do commit de implementação para a verificação
 
-- [ ] Task 1 — `src/tools/guarda-telemetria.ts`, asserção de valor (AC: 3, 4)
-  - [ ] Importar `ATRASO_ALVO_TICKS` de `../net/protocolo.ts` e `ESCALA_HP` de `../chars/tuning.ts`
-  - [ ] Acrescentar, sobre `doExportNovo` (os eventos com `partida === PARTIDA_NOVA`), uma asserção de
+- [x] Task 1 — `src/tools/guarda-telemetria.ts`, asserção de valor (AC: 3, 4)
+  - [x] Importar `ATRASO_ALVO_TICKS` de `../net/protocolo.ts` e `ESCALA_HP` de `../chars/tuning.ts`
+  - [x] Acrescentar, sobre `doExportNovo` (os eventos com `partida === PARTIDA_NOVA`), uma asserção de
         valor separada da de presença: cada evento tem `atrasoTicks === ATRASO_ALVO_TICKS` e
         `escalaHp === ESCALA_HP`; problema registrado com o valor achado e o esperado por campo
-  - [ ] Atualizar a linha de status `telemetria` para imprimir os dois valores esperados
+  - [x] Atualizar a linha de status `telemetria` para imprimir os dois valores esperados
 
-- [ ] Task 2 — `src/tools/guarda-telemetria.ts`, carimbo parcial no fixture (AC: 5)
-  - [ ] Acrescentar ao `FIXTURE` um evento `{ escalaHp: 6 }` sem `atrasoTicks` (partida própria, ex.: 44)
-  - [ ] Acrescentar ao `FIXTURE` um evento `{ atrasoTicks: 6 }` sem `escalaHp` (outra partida, ex.: 55)
-  - [ ] `POPULACOES_FIXTURE` 3 → 5; novo `DESCONHECIDAS_FIXTURE = 3`; checagem de M2 → exatamente 3
+- [x] Task 2 — `src/tools/guarda-telemetria.ts`, carimbo parcial no fixture (AC: 5)
+  - [x] Acrescentar ao `FIXTURE` um evento `{ escalaHp: 6 }` sem `atrasoTicks` (partida própria, ex.: 44)
+  - [x] Acrescentar ao `FIXTURE` um evento `{ atrasoTicks: 6 }` sem `escalaHp` (outra partida, ex.: 55)
+  - [x] `POPULACOES_FIXTURE` 3 → 5; novo `DESCONHECIDAS_FIXTURE = 3`; checagem de M2 → exatamente 3
         desconhecidas, as 3 últimas; checagem de R6 → soma dos `eventos N ·` das desconhecidas =
         `SEM_CARIMBO_FIXTURE` (AC 5, v1.1)
-  - [ ] Confirmar que `SEM_CARIMBO_FIXTURE`/`N_COMBINADO_FIXTURE` (já derivados por `.filter`) passam a 4
+  - [x] Confirmar que `SEM_CARIMBO_FIXTURE`/`N_COMBINADO_FIXTURE` (já derivados por `.filter`) passam a 4
         e 9, e que nenhum bloco chega a `n=9`
-  - [ ] Atualizar o comentário do fixture (linhas 54-58): 5 populações, 3 desconhecidas, `n` combinado 9
+  - [x] Atualizar o comentário do fixture (linhas 54-58): 5 populações, 3 desconhecidas, `n` combinado 9
 
-- [ ] Task 3 — `src/tools/telemetria.ts`, comentário (AC: 8)
-  - [ ] Remover, do bloco de `populacaoDe()` (linhas 57-58), a frase "`tools/ → net/` não existe na
+- [x] Task 3 — `src/tools/telemetria.ts`, comentário (AC: 8)
+  - [x] Remover, do bloco de `populacaoDe()` (linhas 57-58), a frase "`tools/ → net/` não existe na
         tabela de camadas"; manter o motivo de o agregador não importar as constantes-fonte
 
-- [ ] Task 4 — Contrafactual (AC: 6, 7)
-  - [ ] Q12, Q12a, Q12b — aplicar em `registrar()`, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] Q13, Q13b — aplicar em `populacaoDe()`, rodar `sim:check`, confirmar código != 0, reverter
-  - [ ] Reaplicar M1, M1b, M2, M3, MR1 e as duas formas de MR2 de `debt.11` — confirmar código != 0 sem
+- [x] Task 4 — Contrafactual (AC: 6, 7)
+  - [x] Q12, Q12a, Q12b — aplicar em `registrar()`, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] Q13, Q13b — aplicar em `populacaoDe()`, rodar `sim:check`, confirmar código != 0, reverter
+  - [x] Reaplicar M1, M1b, M2, M3, MR1 e as duas formas de MR2 de `debt.11` — confirmar código != 0 sem
         regressão, reverter
-  - [ ] Reaplicar Q1 (formato de número) — confirmar código == 0 (benigna)
-  - [ ] Registrar no Dev Notes, sem implementar asserção, o limite dos campos trocados com o mesmo valor
+  - [x] Reaplicar Q1 (formato de número) — confirmar código == 0 (benigna)
+  - [x] Registrar no Dev Notes, sem implementar asserção, o limite dos campos trocados com o mesmo valor
         numérico (AC 7)
 
-- [ ] Task 5 — Verificação (AC: 1, 2, 9)
-  - [ ] `npm run check` — 0 erros
-  - [ ] `npm run sim:check` antes e depois — golden hash idêntico; só a linha `telemetria` muda de
+- [x] Task 5 — Verificação (AC: 1, 2, 9)
+  - [x] `npm run check` — 0 erros
+  - [x] `npm run sim:check` antes e depois — golden hash idêntico; só a linha `telemetria` muda de
         conteúdo
-  - [ ] `git show --stat` do commit de implementação, restrito aos 2 arquivos do AC 9
+  - [x] `git show --stat` do commit de implementação, restrito aos 2 arquivos do AC 9
 
 ## Dev Notes
 
@@ -371,6 +371,18 @@ nenhuma seta nova.
 
 [Fonte: `src/net/protocolo.ts:38`; `src/chars/tuning.ts:10`; `docs/stories/debt.10.telemetria-marca-atraso-de-input.story.md` Dev Notes]
 
+### Limite conhecido — campos trocados com o mesmo valor (AC 7, registrado pelo @dev)
+
+A asserção de valor compara `atrasoTicks === ATRASO_ALVO_TICKS` e `escalaHp === ESCALA_HP`. Hoje
+`ATRASO_ALVO_TICKS = 6` e `ESCALA_HP = 6.0`, e em JavaScript `6 === 6.0`. Por isso um `registrar()` que
+grave `{ atrasoTicks: ESCALA_HP, escalaHp: ATRASO_ALVO_TICKS }`, com os dois campos **trocados**, passa
+pela checagem **sem ser pego**. Isso foi medido: a mutação T7 da bateria sai com `sim:check` rc=0. A troca
+só fica visível quando as duas constantes deixarem de valer o mesmo número. Nenhuma asserção foi
+acrescentada para isso, conforme o AC 7. A mitigação é a linha `telemetria` do `sim:check`, que agora
+imprime `com o valor esperado (atraso=6, escala=6)`: quem revisar a saída vê os dois números lado a lado
+e percebe quando deixarem de coincidir. O mesmo limite está escrito no cabeçalho de
+`src/tools/guarda-telemetria.ts`.
+
 ### O que esta story explicitamente NÃO faz
 
 - Não corrige o caso em que os dois campos são trocados por engano mas mantêm o mesmo valor numérico
@@ -393,9 +405,134 @@ nenhuma seta nova.
 - `grep -rln "from '\.\./client/" src/tools/` — continua devolvendo exatamente `guarda-telemetria.ts` e
   `telemetria.ts`, sem mudança na linha de import de `client/`.
 
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (1M context), como Dex (@dev), em modo YOLO.
+
+### Commits
+
+- **Implementação:** `181db27`, `test(telemetria): guarda confere o valor do carimbo [debt.13][DEBT11-TST-001]`.
+  O pai é `c4b22db` (gate de `e4.9` pelo @qa, commitado em paralelo, que só mexe em `docs/`).
+  `git show --stat 181db27` lista `src/tools/guarda-telemetria.ts | 68 +++---` e
+  `src/tools/telemetria.ts | 8 ++--`, 2 arquivos, 60 inserções e 16 remoções (AC 9).
+- **Story:** commit separado, só com este arquivo, no mesmo molde de `e4.8`, `debt.11` e `e4.9`.
+
+### Debug Log References
+
+**Task 0.** `debt.11` está Done (`971686b`). `git status --short src/` saiu vazio antes da primeira edição,
+então a verificação rodou na árvore. As mutações rodaram numa cópia descartável de `src/` no scratchpad,
+pelo motivo descrito abaixo.
+
+**AC 1:** `npm run check` (`tsc --noEmit`) saiu com rc=0. **Build:** `npm run build` saiu com rc=0.
+
+**AC 2.** A saída completa do `sim:check` foi salva antes da primeira edição e de novo sobre a árvore
+commitada, e as duas foram comparadas com `diff`. As duas saem com rc=0. `golden hash ✓ ok — 6 seeds batem
+o baseline` ficou idêntico. O diff tem **uma única linha trocada** (2 linhas `<`/`>`), a 61:
+
+```
+< telemetria     ✓ ok — coletor real: 2 evento(s) novo(s) carimbado(s), 1 antigo(s) sem carimbo no export (3) · agregar() do fixture: 3 bloco(s) P3.1, 3 população(ões), a desconhecida à parte, nenhum n combinado
+> telemetria     ✓ ok — coletor real: 2 evento(s) novo(s) carimbado(s), 2 com o valor esperado (atraso=6, escala=6), 1 antigo(s) sem carimbo no export (3) · agregar() do fixture: 5 bloco(s) P3.1, 5 população(ões), as 3 desconhecidas à parte, nenhum n combinado
+```
+
+A linha `globais` continua byte a byte igual, com `3 console.warn capturado(s)`, porque os eventos
+parciais estão nas partidas 44 e 55.
+
+**AC 4.** `grep -rln "from '\.\./client/" src/tools/` devolve exatamente `src/tools/guarda-telemetria.ts`
+e `src/tools/telemetria.ts`. A linha 1 da guarda, o import de `client/telemetria.ts`, não mudou. Os
+imports novos entraram nas linhas 3-4: `ESCALA_HP` de `../chars/tuning.ts` e `ATRASO_ALVO_TICKS` de
+`../net/protocolo.ts`.
+
+**AC 8.** `git diff -U0 src/tools/telemetria.ts` tem 4 linhas `-` e 4 linhas `+`, todas dentro do bloco
+`/** … */` de `populacaoDe()`. Nenhuma linha de código mudou.
+
+**AC 6: contrafactual.** O script `bateria.mjs`, no scratchpad, copia `src/` e `package.json` para um
+diretório descartável. Para cada mutação ele confere que cada padrão casa **exatamente 1 vez**
+(senão aborta), grava, roda `node src/tools/determinism.ts`, registra o rc e as linhas `✗` e restaura o
+arquivo. Ao final, `diff -r` entre a árvore e a cópia saiu vazio. A árvore compartilhada nunca foi
+mutada, porque o @qa estava fazendo o gate de `e4.9` em paralelo. Resultados, rodados sobre o código
+final:
+
+| Caso | Aplicada como | rc | Problema acusado pela guarda |
+|---|---|---|---|
+| **Q12** | `registrar()` com `atrasoTicks: 0, escalaHp: 1` | **1** | `2 evento(s) novo(s) com carimbo de VALOR errado no export — achado atraso=0, escala=1; esperado atraso=6, escala=6 … (DEBT11-TST-001)` |
+| **Q12a** | só `atrasoTicks: 0` | **1** | idem, `achado atraso=0, escala=6` |
+| **Q12b** | só `escalaHp: 1` | **1** | idem, `achado atraso=6, escala=1` |
+| **Q13** | em `populacaoDe()`, `e.atrasoTicks` → `(e.atrasoTicks ?? 0)` no `isFinite` **e** no rótulo | **1** | `4 bloco(s) P3.1 e 4 rótulo(s) — esperado 5`; `2 população(ões) "desconhecida" — esperadas 3, as últimas (M2 …)` |
+| **Q13b** | `e.escalaHp` → `(e.escalaHp ?? 1)` no `isFinite` **e** no rótulo | **1** | só `2 população(ões) "desconhecida" — esperadas 3` (o total fica em 5, como o AC 5 previa) |
+| **M1** | `registrar()` grava `{ ...e, partida }` | **1** | só a mensagem de presença `(M1)`. A de valor **não** dispara, como pede a separação do AC 3 |
+| **M1b** | M1 mais `exportar()` com `eventos.map(… carimbo …)` | **1** | `o evento antigo saiu carimbado no export … (M1b)` |
+| **M2** | `populacaoDe()` começa com `e = { ...e, atrasoTicks: e.atrasoTicks ?? 0, escalaHp: e.escalaHp ?? 1 }` | **1** | `4 bloco(s) … esperado 5`; `0 população(ões) "desconhecida"`; `não avisou sobre os eventos sem carimbo` |
+| **M3** | `agregar()` começa com `return agregarPopulacao(eventos)` | **1** | `1 bloco(s) P3.1 e 0 rótulo(s)`, sem `⚠`, `0 desconhecida`, `n combinado (9)` e sem aviso de sem carimbo |
+| **MR1** | `restaurar()` começa com `return Reflect.deleteProperty(alvo, chave)` | **1** | `console.warn`, `globalThis.Blob`, `URL.createObjectURL` e `URL.revokeObjectURL` `não voltou ao descritor de antes` |
+| **MR2 (a)** | caso ausente vira `defineProperty(…, { value: undefined, … })` | **1** | `globalThis.localStorage` e `globalThis.document` `não voltou … (estava ausente)` |
+| **MR2 (b)** | caso ausente vira `alvo[chave] = undefined` | **1** | idem |
+| **Q1** (benigna) | `(medHumano / 1000).toFixed(1)` → `toFixed(2)` em P3.1 | **0** | nenhum; as duas linhas de status ficam `✓ ok` |
+| **T7** (limite do AC 7) | `registrar()` com `atrasoTicks: ESCALA_HP, escalaHp: ATRASO_ALVO_TICKS` | **0** | nenhum. É o limite documentado, sem asserção nova, conforme o AC 7 |
+
+O script terminou com 0 falhas, e a execução final da cópia restaurada saiu com rc=0.
+
+### Completion Notes
+
+- **AC 3, valor do carimbo.** `carimbadosNovos = doExportNovo.filter((e) => !semCarimbo(e))`. A asserção de
+  valor corre só sobre eles e dispara se algum tiver `atrasoTicks !== ATRASO_ALVO_TICKS ||
+  escalaHp !== ESCALA_HP`, por `===` e sem tolerância. A mensagem tem os pares achados distintos e o
+  par esperado. A asserção de presença (M1) ficou como estava, e `novosCarimbados` agora é
+  `carimbadosNovos.length`, com o mesmo valor de antes.
+- **AC 5, fixture.** Entraram `rodadaFim(44, 1, 16000, { escalaHp: 6 })` e
+  `rodadaFim(55, 1, 17000, { atrasoTicks: 6 })`. `POPULACOES_FIXTURE = 5` e `DESCONHECIDAS_FIXTURE = 3` são
+  literais, com comentário explicando por quê. `SEM_CARIMBO_FIXTURE` e `N_COMBINADO_FIXTURE` continuam
+  derivados e passaram a 4 e 9. Os blocos ficaram com n=3, 2, 1, 1 e 2, e nenhum tem 9. A checagem de M2
+  exige `desconhecidas.length === 3` e que os índices sejam os 3 últimos de `indicesPopulacao`. A de R6
+  lê `^eventos (\d+) ·` no cabeçalho de cada desconhecida, exige que todos casem e que a soma seja
+  `SEM_CARIMBO_FIXTURE`. O comentário do fixture foi atualizado.
+- **AC 7.** O limite ficou registrado nos Dev Notes (subseção própria) e no cabeçalho da guarda. A linha
+  de status imprime `atraso=6, escala=6`.
+
+**Decisões autônomas:**
+- [AUTO-DECISION] O AC 3 pede "valor achado e esperado de cada campo". Um problema por evento ou um só?
+  → **Um só**, com a contagem e os pares distintos achados (motivo: no molde de M1, que também é um
+  problema agregado, e com 2 eventos novos isso evita repetir a mesma linha).
+- [AUTO-DECISION] O que a linha de status imprime? → `N com o valor esperado (atraso=…, escala=…)`, logo
+  depois da contagem de carimbados, e o sufixo `ok` passa a `as 3 desconhecidas à parte` (motivo: o AC 7
+  pede os dois valores esperados na linha, e o sufixo antigo, no singular, deixou de ser verdade).
+- [AUTO-DECISION] Rodar T7 (campos trocados), mesmo sem o AC pedir? → **Sim, como medição, sem asserção**
+  (motivo: transforma o limite do AC 7 de afirmação em fato medido, rc=0).
+- [AUTO-DECISION] Onde entram os imports novos? → Nas linhas 3-4, depois do import de `./telemetria.ts`
+  (motivo: o AC 4 exige que a linha 1, o import de `client/`, não mude).
+- [AUTO-DECISION] Status final → `Ready for Review`, como pedido na delegação e no mesmo molde de
+  `e4.9`/`debt.11`.
+
+**Incidente, sem efeito no commit:** uma primeira tentativa de edição por script de shell quebrou na
+interpolação de crases e gravou texto truncado. Reverti com `git checkout --`, que, com
+`core.autocrlf=true`, regravou o arquivo em CRLF. Normalizei de volta para LF antes do commit. O diff
+commitado tem só as 60/16 linhas reais.
+
+**Self-critique (passos 5.5/6.5):** não há `any` nem `as` novo. Não há import fora das setas declaradas
+(`tools/ → net/`, `tools/ → chars/`). A guarda continua sem lançar e sem `process.exit`. `Number(c)` só
+roda depois de conferir que nenhuma contagem é `undefined`. Nenhuma asserção lê número formatado: `eventos
+N ·` é contagem inteira, a mesma leitura que R6 já fazia, e Q1 continua rc=0. A checagem de M2 não foi
+afrouxada para "pelo menos uma", e Q13b prova que ela sustenta o caso sozinha. `determinism.ts` não foi
+aberto.
+
+**Em aberto:** CodeRabbit não roda nesta máquina (gate por WSL), então as caixas Pre-Commit/Pre-PR do
+bloco CodeRabbit ficaram desmarcadas. A cobertura foi `npm run check`, `npm run sim:check`,
+`npm run build` e a bateria acima. Retirar a cláusula provisória de `e4.7` v1.6.0 e de `debt.9` v1.3 é
+ação do @po ao fechar esta story.
+
+### File List
+
+| Arquivo | Mudança |
+|---|---|
+| `src/tools/guarda-telemetria.ts` | imports de `ATRASO_ALVO_TICKS`/`ESCALA_HP`, asserção de valor separada (AC 3), fixture com carimbo parcial em 44/55, `POPULACOES_FIXTURE = 5`, `DESCONHECIDAS_FIXTURE = 3`, M2 e R6 ajustadas (AC 5), linha de status com os valores esperados (AC 7), cabeçalho e comentário do fixture |
+| `src/tools/telemetria.ts` | só o comentário de `populacaoDe()` (AC 8) |
+| `docs/stories/debt.13.guarda-telemetria-confere-valor-do-carimbo.story.md` | Status, checkboxes, Dev Notes (limite do AC 7), Dev Agent Record, File List e Change Log, em commit separado |
+
 ## Change Log
 
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-09-21 | 1.0 | Story criada a partir dos achados `DEBT11-TST-001` (medium) e `DEBT11-TST-002` (low) do gate de `debt.11` (`docs/qa/gates/debt.11-guarda-automatica-telemetria.yml`, `ca52e07`), conforme a spec completa roteada pelo @po no Change Log v1.5 de `docs/stories/debt.11.guarda-automatica-telemetria.story.md`. Escopo: `src/tools/guarda-telemetria.ts` (asserção de valor do carimbo, fixture com carimbo parcial) e `src/tools/telemetria.ts` (só o comentário desatualizado de `populacaoDe()`, sem mudança de código). Não entra na ordem de `src/tools/determinism.ts` e pode começar já, em paralelo com qualquer story dessa ordem. Prazo (R10): commit de implementação antes da primeira coleta humana usada como evidência de `debt.9` (pré-condição b) ou de `e4.7` (AC 8). Ao fechar, o @po retira a cláusula provisória registrada em `e4.7` v1.6.0 e `debt.9` v1.3. Status: Draft. | River (@sm) |
 | 2026-09-21 | 1.1 | **Validação @po (`*validate-story-draft`): GO 8/10, Draft → Ready.** Checklist de 10 pontos: 1 título ✓, 2 descrição ✓, 3 ACs testáveis ⚠ (AC 5 falso contra o código até esta versão, corrigido abaixo), 4 escopo ✓, 5 dependências ✓, 6 complexidade ✓ (XS), 7 valor ✓ (gate de R10 para `debt.9` (b) e `e4.7` AC 8), 8 riscos ✓ (limite dos campos trocados, AC 7), 9 DoD ✓, 10 alinhamento ⚠ (a spec de origem, Change Log v1.5 de `debt.11`, era do próprio @po e trazia o erro do AC 5). **Correção bloqueante (AC 5).** `agregar()` agrupa por RÓTULO, e o rótulo de `populacaoDe()` é escrito campo a campo. Os dois eventos de carimbo parcial viram 2 populações desconhecidas novas, e não entram na que já existe. São 5 populações (2 conhecidas e 3 desconhecidas), e não 3. Ao pé da letra, a v1.0 deixava o `sim:check` vermelho sem mutação ("5 blocos, esperado 3" e "3 desconhecidas, esperada 1"). O AC 5 agora pede `POPULACOES_FIXTURE` 3 → 5, `DESCONHECIDAS_FIXTURE = 3` literal, M2 com "exatamente 3, as 3 últimas" e R6 com a soma dos `eventos N ·` das desconhecidas igual a `SEM_CARIMBO_FIXTURE`. **Segunda correção (AC 2 e AC 5):** os dois eventos novos ficam em partidas distintas. Na mesma partida, `agregar()` emite o aviso `partidasPartidas`, e a linha `globais` passa de "3 console.warn" a 4, o que viola o AC 2. **Ajustes menores:** o AC 3 aplica a asserção de valor só aos novos carimbados, senão M1 dispara as duas mensagens. O AC 4 cita o fecho real (`client/telemetria.ts:1,3` já importa as duas constantes; tabela "27 → 32" da §2.2). O AC 6 fixa a forma exata de Q13/Q13b (toda leitura do campo em `populacaoDe()`, não só o `isFinite`). Tasks 2 e CodeRabbit Focus foram alinhadas ao AC 5. Os Dev Notes (@dev) ainda dizem "partida nova (por exemplo 44)" para os dois eventos, e onde divergirem o AC 5 prevalece. **Prova medida** numa cópia descartável de `d378ca5` (Node 24.13.1), sem tocar a árvore. Com a guarda ajustada como no AC 5 e mais a asserção de valor, o baseline sai ✓ ("5 bloco(s) P3.1, 5 população(ões)"), e `globais` fica byte a byte igual ("3 console.warn capturado(s)"). Q12, Q12a, Q12b, M1, Q13, Q13b, M2 e M3 reprovam, e Q1 (`toFixed(1)` → `toFixed(2)` em P3.1) passa. M1b, MR1 e MR2 não foram rodadas aqui, porque estão em caminhos que esta story não muda, e ficam para o Dev Agent Record. Sem a mudança, Q13 passa verde na guarda de hoje, o que reproduz `DEBT11-TST-002`. **Fatos conferidos:** `guarda-telemetria.ts:1` (import de `client/`), `:29-31` (`semCarimbo`), `:54-58` (comentário "n combinado é 7"), `:60-68` (FIXTURE com 7 eventos), `:69-71` (`POPULACOES_FIXTURE = 3` literal; N/SEM derivados), `:190` (`PARTIDA_NOVA = 901`), `:221` e `:232-236` (presença/M1), `:264` (M2), `:270-274` (R6), `:318` (linha `globais` com a contagem de warns). `tools/telemetria.ts:57-58` traz a frase "`tools/ → net/` não existe na tabela de camadas", e o agrupamento por rótulo está em `agregar()` (`grupos.set(rotulo, …)`). `client/telemetria.ts:163` carimba com as constantes. `net/protocolo.ts:38` traz `ATRASO_ALVO_TICKS = 6`, com imports só `import type` (em `d378ca5` e em `6f2f56c` de `e4.9`). `chars/tuning.ts:10` traz `ESCALA_HP = 6.0`, sem imports. `architecture-e4.md:317` traz `tools/ … → sim/, chars/, bot/, match/, shop/, net/`, e `:357` diz que `chars/tuning.ts` e `net/protocolo.ts` já estavam no fecho. `grep -rln "from '\.\./client/" src/tools/` devolve exatamente os 2 arquivos. `e4.9` foi commitada durante esta validação (`6f2f56c`), sem tocar nenhum dos 2 arquivos desta story. | Pax (@po) |
+| 2026-09-21 | 1.2 | **Implementação @dev: Ready → InProgress → Ready for Review.** Commit de implementação `181db27` (pai `c4b22db`, só `docs/`). `git show --stat` mostra 2 arquivos: `src/tools/guarda-telemetria.ts` e `src/tools/telemetria.ts`, este só com comentário. `determinism.ts` não foi aberto. check, sim:check e build saem com 0. O golden hash é idêntico, e o diff da saída do `sim:check` tem só a linha `telemetria` trocada (`globais` igual, 3 warns). Contrafactual numa cópia descartável: Q12, Q12a, Q12b, Q13, Q13b, M1, M1b, M2, M3, MR1, MR2a e MR2b saem com rc=1. Q1 sai com rc=0. T7 (campos trocados) sai com rc=0, e é o limite do AC 7, medido e documentado nos Dev Notes. Detalhes no Dev Agent Record. | Dex (@dev) |
