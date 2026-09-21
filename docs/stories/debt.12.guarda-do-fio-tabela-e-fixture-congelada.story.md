@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
@@ -48,6 +48,15 @@ por sua vez começa depois de `e4.9`. Esta story não lê nem toca nenhum arquiv
 dependência é só de sequência de `git status --short src/tools/determinism.ts` vazio, pelo mesmo motivo já
 registrado em `debt.11` (AC 12) e `e4.8` (v1.1.0): a árvore é compartilhada por até quatro stories
 concorrentes, e `git diff --stat` absorveria guardas de outra story em voo.
+
+*(@po v1.1 — estado de `e4.9` no momento da validação: implementada no commit `6f2f56c` (Ready for
+Review, `502d12b`). Ela entrega `export const VERSAO_DO_FIO = 1` em `src/net/protocolo.ts:65`, e por isso
+`FIO_CONGELADO = [{ versao: 1, … }]` satisfaz o item 2 do AC 5 (`última.versao === VERSAO_DO_FIO` e
+`length === VERSAO_DO_FIO`, 1 = 1) desde a primeira linha. `e4.9` mudou a forma do `{t:'sala'}`
+(`versao`, `assento`, `snapshotHz`), mas não o `{t:'snap'}`. O texto de 287 B da §11.6.1, regenerado a
+partir do `codificarDoServidor` de `6f2f56c`, é byte a byte igual, e o ponto fixo continua valendo. A
+seção ENTRADA de `codec.ts` (`parseDoCliente` e seus auxiliares) e o tipo `DoCliente` não mudaram, só se
+deslocaram uma linha. A pré-condição que continua valendo é o commit de implementação de `e4.3`.)*
 
 **Não depende de conteúdo de `codec.ts`**: esta story só abre `src/tools/determinism.ts`. Se um caso novo
 do AC 3 ou do AC 6 falhar contra o código de `codec.ts` de hoje, isso é **achado**, a story **para** e
@@ -132,43 +141,72 @@ de protocolo registrada, o que é achado, não ajuste:
    golden hash, do build coverage, do replay, nem de qualquer seção anterior ao bloco do codec muda de
    conteúdo ou troca de lugar.
 3. **Guarda do parser dirigida por tabela (`E48-TST-001`).** `guardaParser()`
-   (`src/tools/determinism.ts:978-1044`) deixa de ser uma lista fixa de casos e passa a testar, por
-   campo:
+   (`src/tools/determinism.ts:981-1047` em `6f2f56c`; *as linhas deste AC são de `6f2f56c` e vão se mover
+   de novo com `e4.3`, então a âncora é o nome da função e da lista*) deixa de ser uma lista fixa de casos
+   e passa a testar, por campo:
    - **Campos numéricos** — `cast.dx`, `cast.dy`, `cast.mag`, `pong.id`: cada um, isoladamente, com `NaN`,
-     `1e999` (via `JSON.parse`, não o literal — o `codec.ts:1-3` só recebe `import type`, e `1e999`
-     literal já vira `Infinity` no parser do JS antes de chegar à guarda), `-Infinity` e `"1"`. Os quatro
-     têm de dar `null`. Hoje só `dx` é testado (linhas 989-992); `dy` nunca é, e é o gap citado no achado.
+     `1e999` (via `JSON.parse`, como o valor chega do socket; o literal `1e999` no código-fonte já é
+     `Infinity` antes de chegar ao parser), `-Infinity` e `"1"`. Os quatro têm de dar `null`. Hoje a
+     lista `nulos` cobre só combinações soltas: `dx` com `NaN`, `1e999` e `"1"`, `mag` com `-Infinity`,
+     e `pong.id` com `Infinity` e ausente (linhas 992-995 e 1007). **`dy` nunca aparece**, e é o gap
+     citado no achado (M12).
    - **Campos 0|1** — `cast.ballIndex`, `d.jogador`, `d.slot`/`abilityIndex`/`passiveIndex` de `build` e de
      `trocaDeBuild`, `compra.slot`: cada um, isoladamente, com `2`, `0.5`, `"0"` e `true`. Os quatro têm
-     de dar `null`. Hoje só `ballIndex` (linhas 994-995) e `d.jogador` (linha 996) são testados; a faixa
+     de dar `null`. Hoje só `ballIndex` (linhas 997-998, com `2` e `0.5`) e `d.jogador` (linha 999, com
+     `2`) são testados; a faixa
      de `abilityIndex`/`passiveIndex` de build/trocaDeBuild e de `slot` de compra não é — os gaps exatos
      de `M14` e `M15` no gate.
-   - **Descarte de `tick`/`extra`** — hoje só provado para `cast` (linhas 1013-1019, o caso `comExtra`).
+   - **Descarte de `tick`/`extra`** — hoje só provado para `cast` (linhas 1016-1022, o caso `comExtra`).
      Passa a valer para as 4 variantes de `DoCliente` (`entrar`, `decisao`, `cast`, `pong`) e para as 6 de
      `decisao.d` (`draft`, `build`, `buildPadrao`, `compra`, `trocaDeBuild`, `pronto`): cada uma recebe
      `{ …válida, tick: 5, extra: 1 }` (e, em `decisao`, também `{ …válida, d: { …d válido, tick, extra } }`)
      e o resultado parseado não contém `tick` nem `extra`, é um objeto novo (`!== raw`), e em `decisao`
      também `.d !== raw.d`. São os gaps exatos de `M4a` (`pronto`/`buildPadrao`), `M4b` (`entrar`) e `M4c`
-     (`pong`) no gate.
-   - A lista de casos "→ `null`" que já existe (`nulos`, linhas 982-1006) e os de "→ parse OK" (`validos`,
-     linhas 1025-1037) continuam — a tabela **complementa**, não substitui, o que já prova o AC 4 de
+     (`pong`) no gate. *(@po v1.1: `entrar` entra **duas vezes**, sem `assento` e com `assento: 'segredo'`,
+     porque `parseDoCliente` tem dois `return` distintos nessa variante (`src/net/codec.ts`, `case
+     'entrar'`), e uma mutação num deles não aparece no outro. `assento` é o campo do achado M-4 da
+     §11.6.1, que `e4.9` pôs no `{t:'sala'}` e que volta em `{t:'entrar', assento}`.)*
+   - A lista de casos "→ `null`" que já existe (`nulos`, linhas 985-1009) e os de "→ parse OK" (`validos`,
+     linhas 1028-1040) continuam — a tabela **complementa**, não substitui, o que já prova o AC 4 de
      `e4.8`.
+   - *(@po v1.1 — conferência dos campos contra a fonte:* as listas deste AC batem com a seção ENTRADA de
+     `src/net/codec.ts` em `6f2f56c`. Passam por `finito()` exatamente `cast.dx`, `cast.dy`, `cast.mag` e
+     `pong.id`. Passam por `bit()` exatamente `cast.ballIndex`, `d.jogador` (antes do `switch`, nas 6
+     variantes), `slot`/`abilityIndex`/`passiveIndex` de `build`/`trocaDeBuild` e `compra.slot`. Batem
+     também com `DoCliente` (`net/protocolo.ts`) e `Decisao` (`match/types.ts:148-154`). Os campos string
+     (`entrar.sala`, `entrar.assento`, `draft.charId`, `compra.itemId`, `cast.slot`) ficam fora da tabela
+     de propósito, porque o achado não os cita. `nulos` já tem caso para `sala`, `assento`, `itemId` e
+     `cast.slot`. `draft.charId` não tem nenhum, e isso fica registrado como fora do escopo, sem ser
+     exigido aqui. `e4.9` não mudou `parseDoCliente` nem `DoCliente`.)*
    [Fonte: `docs/qa/gates/e4.8-codec-do-fio.yml`, achado `E48-TST-001`; `docs/stories/e4.8.codec-do-fio.story.md`,
    Change Log v1.4.0 item (a) e v1.5.0]
 4. **Fronteira do piso de FP com limiares não inteiros (`E48-TST-002`).** A varredura de `guardaCodec()`
-   (`src/tools/determinism.ts:1090-1122`), que hoje só usa os limiares do roster (110 e 130, inteiros),
-   ganha limiares sintéticos **não inteiros, múltiplos de 0,01**, cujo produto por 100 cai abaixo do
-   inteiro: **110.07, 0.29, 87.04**. Para cada um, `ultCharge = thr` e `ultCharge = thr − 0,004` (o mesmo
-   par que a varredura já usa para os limiares do roster). Sem a correção de ponto flutuante do `pisoQ`
-   (decisão 4 do @dev em `e4.8`), `pisoQ(110.07)` dá `110.06` em vez de `110.07`, e a ult carregada até o
-   teto nunca acenderia no cliente — o efeito exato que `M7` explora. Esses limiares sintéticos **não**
-   substituem os do roster; entram como casos adicionais da mesma varredura.
+   (`src/tools/determinism.ts:1093-1125` em `6f2f56c`), que hoje só usa os limiares do roster (110 e 130,
+   inteiros), ganha limiares sintéticos **não inteiros, múltiplos de 0,01**: **110.07, 0.29, 87.04**, a
+   lista que o gate sugere. Para cada um, `ultCharge = thr` e `ultCharge = thr − 0,004` (o mesmo par que a
+   varredura já usa para os limiares do roster). Esses limiares sintéticos **não** substituem os do
+   roster; entram como casos adicionais da mesma varredura.
+
+   *(@po v1.1 — correção factual, medida no Node 24.13.1.)* A v1.0 dizia que os três têm "produto por 100
+   abaixo do inteiro" e que "`pisoQ(110.07)` dá `110.06` sem a correção". O gate, a decisão 4 do @dev em
+   `e4.8` e o roteamento do @po diziam o mesmo, mas **só vale para 0.29**:
+   - `0.29 * 100 === 28.999999999999996`, e o piso ingênuo dá `0.28`;
+   - `110.07 * 100 === 11007` e `87.04 * 100 === 8704`, exatos, e o piso ingênuo acerta os dois.
+
+   Com a mutação `M7` (sem a correção para cima do `pisoQ`) aplicada numa cópia de `6f2f56c`, a
+   varredura dá 0 viradas em 110, 130, 110.07 e 87.04, e **4 viradas em 0.29**. É **0.29 que carrega
+   `M7`**. Os outros dois ficam, porque não custam nada e são o que o gate pediu, mas não sustentam o
+   contrafactual. Por isso a guarda ganha um **canário**, na mesma lógica do item 4 do AC 5 e do
+   "contrafactual ingênuo NÃO falhou" que já existe: pelo menos um limiar sintético tem
+   `thr * 100 < Math.round(thr * 100)`, e se nenhum tiver, é problema no `sim:check` ("os limiares
+   sintéticos perderam poder discriminante"). Sem o canário, trocar 0.29 por outro valor "bonito"
+   deixaria `M7` passar verde em silêncio.
    [Fonte: `docs/qa/gates/e4.8-codec-do-fio.yml`, achado `E48-TST-002`; `docs/stories/e4.8.codec-do-fio.story.md`,
    Change Log v1.4.0 item (b)]
 5. **Fixture congelada do fio (`E48-ARC-003`, parte 2 — Decisão 1 da §11.6.1).**
    - **`AMOSTRA_DO_FIO`**, uma função própria em `src/tools/determinism.ts`, devolve exatamente o
      `Snapshot` citado em "Depende de" acima, com os valores exatos do bloco `ts` da §11.6.1 — não o
-     `snapshotSintetico` já existente (linha 1053), que tem três colisões de valor entre posições
+     `snapshotSintetico` já existente (linha 1056 em `6f2f56c`), que tem três colisões de valor entre posições
      escalares da mesma tupla (`over`/`arena.pad`, `id`/`alive`, `y`/restante da habilidade) e por isso
      deixa passar despercebidas trocas com a forma de `M9` (medição M-1 da §11.6.1). A amostra nova
      garante que nenhuma posição escalar repete valor dentro da mesma tupla, e que todo campo quantizado
@@ -177,9 +215,12 @@ de protocolo registrada, o que é achado, não ajuste:
    - **`FIO_CONGELADO: readonly { versao: number; snap: string }[]`**, uma lista **só de acréscimo**, que
      nasce com `[{ versao: 1, snap: '<texto de 287 B citado acima>' }]`. Mora inline em
      `src/tools/determinism.ts`, no bloco do codec (ao lado de `guardaCodec()`), no mesmo padrão do
-     `BASELINE` do golden hash (linha 120) — um array congelado, comentado, dentro do próprio arquivo, não
-     um JSON à parte em `docs/`.
-   - **A guarda confere, numa linha própria do `sim:check`, dentro do bloco `codec do fio`:**
+     `BASELINE` do golden hash (linha 123 em `6f2f56c`) — um array congelado, comentado, dentro do próprio
+     arquivo, não um JSON à parte em `docs/`.
+   - **A guarda confere, numa linha própria do `sim:check`, dentro do bloco `codec do fio`** *(@po v1.1:
+     com rótulo distinto do `versão fio` que `e4.9` já pôs nesse bloco, por exemplo `fio congelado`. São
+     duas guardas diferentes: a de `e4.9` confere o decodificador do `{t:'sala'}`, e esta confere o texto
+     do `{t:'snap'}`)*:
      1. `codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO(), seq: 4 }) === última.snap`. Se falhar, a
         mensagem de problema aponta a **primeira posição divergente** da tupla, com o caminho (ex.:
         `s[6][0][4]`), o valor congelado e o atual, e o texto: "se foi de propósito, incremente
@@ -211,8 +252,8 @@ de protocolo registrada, o que é achado, não ajuste:
    - **M12** — `dy` verificado só com `typeof`, sem `isFinite`;
    - **M14** — `abilityIndex` de `build`/`trocaDeBuild` sem checagem de faixa;
    - **M15** — `slot` de `compra` sem checagem de faixa;
-   - **M7** — `pisoQ` sem a correção de ponto flutuante que evita "ult cheia um passo abaixo" (o caso
-     `110.07 * 100 = 11006.999…`);
+   - **M7** — `pisoQ` sem a correção de ponto flutuante para cima, a que evita "ult cheia um passo
+     abaixo". O caso que a pega é `0.29 * 100 = 28.999…`, e não `110.07`, que é exato (ver AC 4, v1.1);
    - **M9** — `hp ↔ ultCharge` trocados nos **dois** lados (codificador e decodificador) — mudança de
      layout consistente, a mesma classe de risco da §11.6;
    - **`over ↔ pad`** — troca de posição entre `over` e `arena.pad` nos dois lados, a mesma troca que a
@@ -235,8 +276,8 @@ de protocolo registrada, o que é achado, não ajuste:
    existente), `src/net/protocolo.ts`, `src/net/sala.ts`, `src/net/snapshot.ts`, `src/net/projecao.ts`,
    `src/sim/`, `src/match/`, `src/shop/`, `src/bot/`, `src/chars/`, `src/client/`, e qualquer outro arquivo
    de `src/tools/` além de `determinism.ts`, e `docs/` (exceto a própria story).
-8. **Sequenciamento.** `src/tools/determinism.ts` é disputado por `e4.9` (Draft), `e4.3` (Ready) e `e4.6`
-   (Ready), além desta story. A ordem, decidida pelo @architect na §11.6.1 e registrada por `e4.8`
+8. **Sequenciamento.** `src/tools/determinism.ts` é disputado por `e4.9` (implementada em `6f2f56c`,
+   Ready for Review no momento desta validação), `e4.3` (Ready) e `e4.6` (Ready), além desta story. A ordem, decidida pelo @architect na §11.6.1 e registrada por `e4.8`
    v1.5.0, é **`e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `e4.6`**.
    - **Pré-condição de início:** o commit de implementação de `e4.3` existe, e
      `git status --short src/tools/determinism.ts` sai vazio.
@@ -309,7 +350,8 @@ coordenação de sequência com até três stories concorrentes em `determinism.
 
 **Secondary Focus**:
 - O `diff` do `sim:check` antes × depois não remove nem move nenhuma linha fora das seções do AC 2 (AC 2)
-- A fronteira do piso de FP cobre os três limiares não inteiros exigidos (AC 4)
+- A fronteira do piso de FP cobre os três limiares não inteiros exigidos, e o canário exige pelo menos um
+  com produto por 100 abaixo do inteiro, hoje só 0.29 (AC 4)
 
 ## Tasks / Subtasks
 
@@ -333,7 +375,9 @@ coordenação de sequência com até três stories concorrentes em `determinism.
 
 - [ ] Task 2 — Fronteira do piso de FP (AC: 4)
   - [ ] Acrescentar os limiares sintéticos 110.07, 0.29 e 87.04 à varredura de `guardaCodec()`
-        (`determinism.ts:1090-1122`), cada um com `ultCharge = thr` e `thr − 0,004`
+        (`determinism.ts:1093-1125` em `6f2f56c`), cada um com `ultCharge = thr` e `thr − 0,004`
+  - [ ] Canário: pelo menos um limiar sintético com `thr * 100 < Math.round(thr * 100)` (hoje só 0.29),
+        senão problema no `sim:check` (AC 4, v1.1)
 
 - [ ] Task 3 — Fixture congelada do fio (AC: 5)
   - [ ] Criar `AMOSTRA_DO_FIO()` com os valores exatos citados na §11.6.1
@@ -458,3 +502,4 @@ existente é editada, nunca.
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-09-21 | 1.0 | Story criada a partir dos achados `E48-TST-001` (medium) e `E48-TST-002` (low) do gate de `e4.8` (`docs/qa/gates/e4.8-codec-do-fio.yml`), e da parte 2 do achado `E48-ARC-003`, conforme roteamento do @po em `docs/stories/e4.8.codec-do-fio.story.md` Change Log v1.4.0 (itens a, b, e, f) e v1.5.0 (itens c, d, g, que substituem os equivalentes da v1.4.0, decididos pelo @architect na §11.6.1 de `architecture-e4.md`, commit `bed4603`). Escopo fechado: só `src/tools/determinism.ts`; `src/net/codec.ts` é proibido, e um caso novo que falhe contra o código de hoje é achado a escalar, não correção dentro da story. Sequenciada depois do commit de implementação de `e4.3` (que já vem depois de `e4.9`), na ordem `e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `e4.6` registrada pela §11.6.1. `e4.9` está Draft, em validação do @po em paralelo, e não é tocada por esta story. Precondição registrada em `e4.4` v1.5.0 (Task 0), `e4.3` v1.5.0 e `e4.6` v1.2.0: commit de implementação desta story antes da Task 1 de `e4.4`. Status: Draft. | River (@sm) |
+| 2026-09-21 | 1.1 | **Validação @po (`*validate-story-draft`): GO 9/10, Draft → Ready.** Checklist de 10 pontos: 1 título ✓, 2 descrição ✓, 3 ACs testáveis ✓ (com a correção do AC 4), 4 escopo ✓ (só `determinism.ts`, com prova por `git show --stat`), 5 dependências ✓, 6 complexidade ✓ (Medium), 7 valor ✓, 8 riscos ✓, 9 DoD ✓, 10 alinhamento ⚠ (a narrativa de FP do AC 4, herdada do gate e do roteamento do @po, estava errada em 2 dos 3 limiares). **Conferência caractere a caractere com a §11.6.1** (script, e não leitura a olho): o bloco `ts` de `AMOSTRA_DO_FIO` da story (7 linhas) é idêntico a `architecture-e4.md:1264-1270`, com espaços iniciais normalizados. O texto congelado é idêntico ao de `:1273`, com 287 B. As 4 checagens, a lista `FIO_CONGELADO` só de acréscimo com `{ versao, snap }` e o procedimento de mudança deliberada batem com `:1277-1323`. **Regenerado a partir do codec:** `codificarDoServidor({ t:'snap', s: AMOSTRA, seq: 4 })` dá os mesmos 287 B, byte a byte, com o `codec.ts` de `d378ca5` e com o de `6f2f56c` (`e4.9`). O ponto fixo vale nos dois. **Coerência com `e4.9`:** `VERSAO_DO_FIO = 1` em `protocolo.ts:65` (`6f2f56c`), então `[{ versao: 1 }]` e `length === VERSAO_DO_FIO` fecham (1 = 1). O diff `d378ca5..6f2f56c` de `codec.ts` não tem hunk na seção ENTRADA (`:30-162`, só deslocada uma linha pelo import de `VERSAO_DO_FIO`). `DoCliente` e `Decisao` não mudaram, e a tabela do AC 3 não conflita. **Correções aplicadas:** (1) **AC 4, fato de FP errado.** No Node 24.13.1, `110.07 * 100 === 11007` e `87.04 * 100 === 8704`, exatos. Só `0.29 * 100 === 28.999999999999996` cai abaixo do inteiro. Com `M7` aplicada numa cópia de `6f2f56c`, a varredura dá 0 viradas em 110, 130, 110.07 e 87.04, e 4 em 0.29. Os três limiares ficam, e entra um **canário** (pelo menos um limiar sintético com `thr*100 < round(thr*100)`), para que `M7` não perca o dente se alguém trocar 0.29. O texto de `M7` no AC 6 foi alinhado. (2) **AC 3:** saiu a frase "`codec.ts:1-3` só recebe `import type`", que ficou falsa desde `6f2f56c` (a linha 3 importa o valor `VERSAO_DO_FIO`) e era irrelevante para o motivo do `JSON.parse`. "Hoje só `dx` é testado" foi corrigido para a cobertura real (`dx`, `mag -Infinity`, `pong.id Infinity`/ausente, e `dy` nunca). `entrar` entra no descarte com e sem `assento`, porque são dois `return`. Entrou uma nota com a conferência campo a campo contra `finito()`/`bit()` da seção ENTRADA. (3) **Linhas de `determinism.ts`** nos ACs 3, 4 e 5 e na Task 2 atualizadas para `6f2f56c` (+3), com a âncora declarada como nome de função, porque `e4.3` vai movê-las de novo. (4) **AC 5:** a linha nova precisa de rótulo distinto do `versão fio` que `e4.9` pôs no bloco. (5) **"Depende de" e AC 8:** estado de `e4.9` atualizado (implementada, `6f2f56c`). A pré-condição de início continua sendo o commit de `e4.3`. **Não editado (Dev Notes, @dev):** o mapa de linhas (970/978/1053/1078/1210/1213, de `d378ca5`) e "`e4.9` (Draft…)" em "O que NÃO faz". Onde divergirem, os ACs prevalecem. **Observação fora do escopo:** `draft.charId` não tem caso em `nulos`. Não é exigido aqui, porque o achado não o cita. **Fatos conferidos:** `determinism.ts` em `6f2f56c`: `:23` (import de `VERSAO_DO_FIO`), `:123` (`BASELINE`), `:981` (`guardaParser`), `:985-1009` (`nulos`), `:992-995` (dx/mag), `:997-999` (ballIndex/d.jogador), `:1007` (pong id Infinity), `:1016-1022` (`comExtra`), `:1028-1040` (`validos`), `:1056` (`snapshotSintetico`), `:1081` (`guardaCodec`), `:1087` (`limiares` do roster), `:1102` (`[thr - 0.004, thr]`), `:1258` (linha `versão fio`). `codec.ts`: `bit()`/`finito()` e os dois `return` de `entrar`; `pisoQ`/`tetoQ`/`q` em `:283-306`. Os três irmãos citados no AC 8 têm a pré-condição de `debt.12` nas linhas de versão citadas (`e4.4` v1.5.0, `e4.3` v1.5.0, `e4.6` v1.2.0). | Pax (@po) |
