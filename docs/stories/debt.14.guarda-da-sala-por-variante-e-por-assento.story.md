@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+Ready for Review
 
 ## Executor Assignment
 
@@ -356,49 +356,49 @@ mesma árvore.
 
 ## Tasks / Subtasks
 
-- [ ] Task 0 — Pré-condição de sequência (AC: 8)
-  - [ ] Confirmar que o commit de implementação de `debt.12` existe; registrar o hash usado como base no Dev
+- [x] Task 0 — Pré-condição de sequência (AC: 8)
+  - [x] Confirmar que o commit de implementação de `debt.12` existe; registrar o hash usado como base no Dev
         Agent Record
-  - [ ] Confirmar que `git status --short src/tools/determinism.ts` sai vazio antes de começar
+  - [x] Confirmar que `git status --short src/tools/determinism.ts` sai vazio antes de começar
 
-- [ ] Task 1 — Recusa de `d.jogador` alheio por variante (AC: 3, 6)
-  - [ ] Para cada uma de `build`, `buildPadrao`, `pronto`, `compra`, `trocaDeBuild`: encontrar (ou construir
+- [x] Task 1 — Recusa de `d.jogador` alheio por variante (AC: 3, 6)
+  - [x] Para cada uma de `build`, `buildPadrao`, `pronto`, `compra`, `trocaDeBuild`: encontrar (ou construir
         numa sala descartável) um momento em que `aplicar()` aceitaria a decisão enviada pelo assento do
         outro jogador
-  - [ ] Repetir o caso "→ sala" (`determinism.ts:1517-1527`) para cada variante: `{t:'erro'}` só ao
+  - [x] Repetir o caso "→ sala" (`determinism.ts:1517-1527`) para cada variante: `{t:'erro'}` só ao
         remetente, `partida` idêntica por referência, `decisoes` sem entrada nova
-  - [ ] Acrescentar o controle positivo por variante: a mesma decisão, do assento dono, é aceita
-  - [ ] Se alguma variante não tiver momento alcançável, parar e escalar ao @po (registrar no Dev Agent
+  - [x] Acrescentar o controle positivo por variante: a mesma decisão, do assento dono, é aceita
+  - [x] Se alguma variante não tiver momento alcançável, parar e escalar ao @po (registrar no Dev Agent
         Record) em vez de prosseguir
-  - [ ] Aplicar Q3 e as 5 mutações por variante numa cópia descartável de `sala.ts`; confirmar `rc=1` em
+  - [x] Aplicar Q3 e as 5 mutações por variante numa cópia descartável de `sala.ts`; confirmar `rc=1` em
         todas; reverter
 
-- [ ] Task 2 — Entrega a todo assento conectado (AC: 4, 6)
-  - [ ] Estender `conduzir` (`determinism.ts:1345-1389`) para conferir, em todo passo em que
+- [x] Task 2 — Entrega a todo assento conectado (AC: 4, 6)
+  - [x] Estender `conduzir` (`determinism.ts:1345-1389`) para conferir, em todo passo em que
         `c.sala.partida` muda de identidade, que cada assento conectado recebeu ao menos um `{t:'visao'}`
-  - [ ] Por rodada: conferir exatamente um `rodadaFim` por assento conectado no fim, e pelo menos um
+  - [x] Por rodada: conferir exatamente um `rodadaFim` por assento conectado no fim, e pelo menos um
         `rodadaInicio` por assento conectado (o assento que caiu e voltou recebe dois, o da largada e o do
         reassentamento — AC 4); a queda no draft (§6) é exceção esperada da regra da visão
-  - [ ] Contar envios por tipo e por assento, sem fixar a lista completa de um passo (AC 8, Nota para
+  - [x] Contar envios por tipo e por assento, sem fixar a lista completa de um passo (AC 8, Nota para
         `e4.10`)
-  - [ ] Se a sala de hoje violar a regra em algum caminho, parar e escalar ao @po (registrar achado) em vez
+  - [x] Se a sala de hoje violar a regra em algum caminho, parar e escalar ao @po (registrar achado) em vez
         de editar `sala.ts`
-  - [ ] Aplicar Q5, Q6 e Q7 numa cópia descartável de `sala.ts`; confirmar `rc=1` nas três; reverter
+  - [x] Aplicar Q5, Q6 e Q7 numa cópia descartável de `sala.ts`; confirmar `rc=1` nas três; reverter
 
-- [ ] Task 3 — Três casos sem regressão (AC: 5, 6)
-  - [ ] (i) Sala descartável com `tetoDeTicks` pequeno; conferir snap final e `rodadaFim` no tick do teto;
+- [x] Task 3 — Três casos sem regressão (AC: 5, 6)
+  - [x] (i) Sala descartável com `tetoDeTicks` pequeno; conferir snap final e `rodadaFim` no tick do teto;
         aplicar Q8, confirmar `rc=1`, reverter
-  - [ ] (ii) Sala descartável em `builds` com queda e reassentamento durante o prazo; conferir
+  - [x] (ii) Sala descartável em `builds` com queda e reassentamento durante o prazo; conferir
         `{t:'prazo', terminaEmMs}` com o restante no reassentado; aplicar Q12, confirmar `rc=1`, reverter
-  - [ ] (iii) Sala descartável com queda em `loja` e em `builds` (sem estouro de prazo anterior), conferindo
+  - [x] (iii) Sala descartável com queda em `loja` e em `builds` (sem estouro de prazo anterior), conferindo
         que a pausa abre por conta própria; aplicar Q13, confirmar `rc=1`, reverter
 
-- [ ] Task 4 — Verificação (AC: 1, 2, 6, 7, 8)
-  - [ ] `npm run check` — 0 erros
-  - [ ] `npm run sim:check` antes e depois da mudança — golden hash idêntico; diff só dentro do bloco
+- [x] Task 4 — Verificação (AC: 1, 2, 6, 7, 8)
+  - [x] `npm run check` — 0 erros
+  - [x] `npm run sim:check` antes e depois da mudança — golden hash idêntico; diff só dentro do bloco
         `sala pura`
-  - [ ] Confirmar as 12 mutações com `rc=1`, cada resultado registrado no Dev Agent Record
-  - [ ] `git show --stat` do(s) commit(s) desta story, restrito ao bloco `sala pura` de
+  - [x] Confirmar as 12 mutações com `rc=1`, cada resultado registrado no Dev Agent Record
+  - [x] `git show --stat` do(s) commit(s) desta story, restrito ao bloco `sala pura` de
         `src/tools/determinism.ts`
 
 ## Dev Notes
@@ -551,9 +551,155 @@ o código está correto; falta a guarda de cobertura.
   mesma decisão, reenviada pelo dono em `determinism.ts:1530`, tem de ser aceita, ou a contagem de
   rejeições diverge do arnês.
 
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (1M context), como Dex (@dev), modo YOLO.
+
+### Task 0: pré-condição (AC 8)
+
+- Commit de implementação de `debt.12`: **`5766137`**, usado como base. `git status --short src/tools/determinism.ts`
+  estava vazio no início.
+- O pai do primeiro commit desta story é `6d525df` (docs do @po, commit paralelo). `git show --stat 6d525df` lista só
+  `docs/stories/e4.4`–`e4.7`. O código de base é o de `5766137`.
+
+### Commits (AC 7, AC 8)
+
+- **Implementação 1: `17ecf5c`** (`test(net): guarda da sala por variante e por assento [debt.14][E43-TST-001]`).
+  `git show --stat 17ecf5c`: `src/tools/determinism.ts | 253 +++…-`, 1 arquivo, 251 inserções e 2 remoções.
+- **Implementação 2: `f9b0312`** (`test(net): linha 'por variante' …`). `git show --stat f9b0312`:
+  `src/tools/determinism.ts | 2 +-`. Só o rótulo de uma linha de saída muda (ver Decisões).
+  Entre os dois está `2129004` (@sm, `e4.10` criada, só docs), commitado em paralelo. Por isso não houve amend.
+- Todos os hunks dos dois commits caem entre `// ---… sala pura (e4.3, AC 11 e 16)` e o fim de `guardaSala()`:
+  `ConferenciaDeEnvios`/`Condutor`/`novoCondutor`, `conferirCobertura()` (nova), `conduzir()`, `salaVariantesEBordas()`
+  (nova, entre `salaNegativos()` e `guardaSala()`) e `guardaSala()`. `src/net/sala.ts`, `src/net/codec.ts`, o bloco
+  `codec do fio`, os imports do topo e `package.json` não foram tocados.
+- **Story:** commit separado, `docs(dev)`, depois destes.
+
+### O que entrou, por AC
+
+- **AC 3 (`E43-TST-001`), `salaVariantesEBordas()`, sala `variantes`** (seed 777, `tetoDeTicks: 30`, descartável; a Bo5
+  não muda). O helper `recusaEControle(c, d, agora)` faz quatro coisas. (1) Usa `aplicar(partida, d)` como oráculo: se
+  ele já recusaria, o caso vira ✗ ("não testaria a checagem da sala"). (2) Manda a decisão pelo assento do OUTRO
+  jogador e confere exatamente 1 envio, `{t:'erro'}` só ao remetente, `partida` idêntica por referência e `decisoes`
+  sem entrada nova. Esta é a única lista completa das conferências novas, como o AC 8 permite. (3) Manda a MESMA
+  decisão pelo assento dono, que é o controle positivo: a `partida` muda de identidade, sem erro, e o log ganha 1.
+  (4) Registra o caso.
+  Ordem na janela única de `builds`: `build`/j1, `buildPadrao`/j1 (j1 fica pronto), `pronto`/j0 (a rodada 0 abre).
+  Todos rodam a +100 ms, longe do prazo de RF-04. Na `loja`, a primeira em que `aplicar()` aceita **as duas**,
+  `compra`/j1 (`chumbo`, slot 0) e `trocaDeBuild`/j0, escolhida pelo predicado e não por índice, ficam `compra`/j1,
+  `trocaDeBuild`/j0 e `pronto`/j1. Medido: a 2ª loja, ouro [9,9], como a tabela do @po previa. Resultado: 6/6 casos
+  (5 variantes, com `pronto` nas duas fases). O `draft` continua sendo o caso da Bo5.
+- **AC 4 (`E43-TST-002`), `conferirCobertura()`, chamada no fim de TODO `conduzir()`,** em todas as salas da guarda:
+  Bo5, `20hz`, `anular`, `draft`, `variantes` e `builds`. Ela conta os envios do passo por tipo e por assento.
+  (a) Se a `partida` mudou de identidade e a sala terminou `jogando`, cada assento conectado recebeu ≥1 `{t:'visao'}`.
+  A queda no draft devolve a sala a `aguardando` e fica fora pela condição, sem caso especial.
+  (b) `fechadas = Δ historico.length`: cada assento conectado recebe exatamente `fechadas` `rodadaFim`, e o vago 0.
+  Isso também pega `rodadaFim` fora de passo que fecha rodada.
+  (c) Cada rodada fechada tem ≥1 `rodadaInicio` acumulado na rodada, por assento conectado. O acumulador zera quando
+  `sala.rodada` vira outro objeto, e o reassentamento soma.
+  Medido: 52 transições e 6 rodadas fechadas conferidas. A queda no draft (`salaNegativos`, sala `draft`) passa sem
+  acusar, e o reassentamento da rodada 1 da Bo5 (2 `rodadaInicio`) também.
+- **AC 5 (`E43-TST-003`):**
+  (i) Na sala `variantes`, a rodada 0 vai até `agoraDoTick(r, 30)`. Saem o snap final no tick 30, com `over:false`,
+  antes do `rodadaFim`, e 2 `rodadaFim` com `ticks === 30`. O `historico[0].ticks` também é 30.
+  (ii) Na sala `builds` (config padrão), o reassentamento a +25 000 ms, ainda em `builds`, recebe exatamente 1
+  `{t:'prazo'}`, com `terminaEmMs === prazoDeBuilds − agora` = 5 000 ms.
+  (iii) `builds`: a queda a +2 000 ms (antes dos 10 s) abre a pausa com `desde === agora`. A 1 ms do prazo de R-02 o
+  estado está intacto. A +22 000 ms (antes do RF-04 a +30 000) sai `buildPadrao`/j1, e j0 continua não pronto.
+  `loja`: na sala `variantes`, depois dos casos do AC 3, sem pausa anterior, j0 (não pronto) cai. A queda abre a
+  pausa, 1 ms antes nada muda, e no estouro sai `pronto`/j0, a rodada seguinte abre e a pausa é renovada.
+- **Saída:** 3 linhas novas no fim do bloco, `  por variante`, `  cobertura` e `  bordas`. As 2 linhas existentes que
+  mudam de texto são `assentos` e `autoridade`, só nos contadores, porque as salas novas somam na
+  `ConferenciaDeEnvios`.
+
+### Verificação
+
+- `npm run check`: rc=0 (`tsc --noEmit`, 0 erros).
+- `npm run sim:check`: rc=0, com `golden hash ✓ ok — 6 seeds batem o baseline`. O `diff` da saída completa de
+  `node src/tools/determinism.ts` antes (árvore de `5766137`) e depois (`f9b0312`) mostra `65,66c65,66` e `67a68,70`,
+  nada mais:
+  - `assentos`: 21→28 `{t:'sala'}`, 12→17 assentamentos, 76→119 `{t:'visao'}`, ✓ inalterado;
+  - `autoridade`: 176→198 mensagens pela fronteira, ✓ inalterado;
+  - 3 linhas novas depois de `negativos`: `por variante ✓`, `cobertura ✓`, `bordas ✓`.
+  Nenhuma linha do golden hash, do build coverage, do replay, do `codec do fio`, nem as linhas `sala pura`, `bo5`,
+  `flush` e `negativos`, mudou ou trocou de lugar.
+- `npm run build`: rc=0.
+- `npm run lint`: o projeto não tem esse script. `check` é o gate de tipos.
+- CodeRabbit: indisponível nesta máquina (o gate por WSL não roda aqui). Coberto por `check`, `sim:check` e as
+  mutações. O checkbox "Pre-Commit" da seção CodeRabbit fica desmarcado por isso.
+
+### Contrafactual (AC 6), cópia descartável, nunca a árvore compartilhada
+
+Script Node no scratchpad da sessão. Para cada mutação: `git archive -o <dir>/a.tar f9b0312 src package.json` num
+diretório descartável, a troca textual em `src/net/sala.ts` (fim de linha normalizado para LF, o padrão tem de casar
+exatamente 1 vez), `node src/tools/determinism.ts` e remoção do diretório. A mesma bateria rodou antes contra `17ecf5c`,
+com o mesmo resultado. `git status --short src` ficou vazio depois.
+
+| Mutação | Troca em `sala.ts` | rc | Linha ✗ relevante |
+|---|---|---|---|
+| controle | nenhuma (padrão por ele mesmo) | **0** | todas ✓ |
+| Q3 | `msg.d.t === 'draft' && msg.d.jogador !== j` | 1 | `✗ sala debt.14: build em nome do jogador 1 vinda do assento do outro chegou a aplicar() / mudou o estado (AC 3)` (6 linhas, uma por caso) |
+| isenta `build` | `msg.d.t !== 'build' && …` | 1 | `✗ sala debt.14: build em nome do jogador 1 … chegou a aplicar()` |
+| isenta `buildPadrao` | `msg.d.t !== 'buildPadrao' && …` | 1 | `✗ sala debt.14: buildPadrao em nome do jogador 1 … chegou a aplicar()` |
+| isenta `pronto` | `msg.d.t !== 'pronto' && …` | 1 | `✗ sala debt.14: pronto em nome do jogador 0 …` e `… jogador 1 …` (builds e loja) |
+| isenta `compra` | `msg.d.t !== 'compra' && …` | 1 | `✗ sala debt.14: compra em nome do jogador 1 … chegou a aplicar()` |
+| isenta `trocaDeBuild` | `msg.d.t !== 'trocaDeBuild' && …` | 1 | `✗ sala debt.14: trocaDeBuild em nome do jogador 0 … chegou a aplicar()` |
+| Q5 | `enviarVisao` só `if (j === 0)` | 1 | `✗ sala bo5: a partida mudou (fase draft) e o assento conectado do jogador 1 não recebeu {t:'visao'} no passo (debt.14 AC 4)` (12 linhas) |
+| Q6 | `rodadaFim` só ao assento 0 | 1 | `✗ sala bo5: 0 rodadaFim ao assento do jogador 1 (conectado) num passo que fechou 1 rodada(s), esperado 1 (debt.14 AC 4)` |
+| Q7 | `iniciarRodada` sem o `rodadaInicio` | 1 | `✗ sala bo5: rodada fechada sem nenhum rodadaInicio ao assento conectado do jogador 0 (debt.14 AC 4)` |
+| Q8 | `w.tick > n.config.tetoDeTicks` | 1 | `✗ sala debt.14: teto de 30 ticks: rodada aberta no tick 30, snap final no tick 30 over:false (índice 28), rodadaFim [] (índice -1) (AC 5 i)` |
+| Q12 | reassentamento sem o `{t:'prazo'}` (`sala.ts:367`) | 1 | `✗ sala debt.14: reassentamento em builds a 25000 ms: {t:'prazo'} ao reassentado [], esperado exatamente um com o restante 5000 ms (AC 5 ii)` |
+| Q13 | `if (n.pausa === null && n.rodada !== null)` | 1 | `✗ sala debt.14: queda na loja: pausa aberta pela queda false …` e `✗ sala debt.14: queda em builds: pausa aberta pela queda false …` (AC 5 iii) |
+
+As 12 dão rc=1, e todas pela conferência nova, não por efeito colateral de outra linha. O gate de `e4.3` registrou
+rc=0 para Q3, Q5, Q6, Q7, Q8, Q12 e Q13 com a guarda antiga.
+
+### Decisões (autônomas, YOLO)
+
+- [AUTO-DECISION] AC 3 na Bo5 ou em sala descartável? → As cinco variantes novas numa sala descartável só
+  (`variantes`). O `draft` fica na Bo5, como já está. (motivo: os controles positivos de `buildPadrao` e `trocaDeBuild`
+  não cabem na Bo5, pelo v1.1 AC 3, e pôr as cinco num roteiro só mantém a Bo5 byte-idêntica, com as linhas `bo5` e
+  `flush` sem mudança nenhuma)
+- [AUTO-DECISION] Como escolher o "momento em que `aplicar()` aceitaria" sem importar o catálogo? Os imports do topo
+  estão fora do bloco `sala pura`. → `aplicar()`, já importado, vira oráculo puro: o caso só vale se
+  `aplicar(partida, d).erro === undefined`, e o avanço até a loja para no primeiro estado em que ele aceita compra E
+  troca. (motivo: é literalmente o predicado do AC, não depende dos números D-09 e não abre import novo)
+- [AUTO-DECISION] `pronto` testado nas duas fases (`builds` e `loja`). (motivo: é a única variante legal em duas
+  fases, custa uma chamada, e a tabela do @po fez o mesmo)
+- [AUTO-DECISION] A queda em `loja` do AC 5 (iii) reusa a sala `variantes` depois dos casos do AC 3, em vez de abrir
+  uma terceira sala. (motivo: o estado é exatamente o exigido: `loja`, pausa nula, j0 não pronto, sem estouro
+  anterior, e a pré-condição é conferida antes da queda, com ✗ se não valer)
+- [AUTO-DECISION] Rótulo da linha AC 3: `por variante`, não `variantes`. O bloco `codec do fio` já tem uma linha
+  `  variantes` (BUILD_BASELINE, `determinism.ts:980`). (motivo: um grep do @qa pela saída casaria as duas.) Veio
+  depois do primeiro commit e virou o segundo commit de implementação (`f9b0312`), porque `2129004` do @sm já estava
+  em cima de `17ecf5c`.
+- As conferências novas do AC 4 e do AC 5 contam por tipo e por assento. Nenhuma fixa a lista completa de um passo
+  (AC 8, Nota para `e4.10`). As listas da `e4.3` (`[sala,visao,rodadaInicio]`, `'0:snap,0:rodadaFim,0:visao'`) ficaram
+  como estavam.
+
+### Achados
+
+Nenhum. Os casos novos passaram contra o `sala.ts` de hoje na primeira execução. Não houve escalada.
+
+### Em aberto
+
+- **Para a `e4.10`:** `conferirCobertura()` conta `visao`/`rodadaInicio`/`rodadaFim` por tipo, e o `{t:'evento'}` que
+  ela acrescenta não altera essas contagens. A recusa do AC 3 exige exatamente 1 envio, e recusa não tem evento. As
+  listas completas da `e4.3` (`:1654`/`:1839` na numeração antiga) continuam sendo dela atualizar.
+
+### File List
+
+| Arquivo | Mudança |
+|---|---|
+| `src/tools/determinism.ts` | Modificado, só o bloco `sala pura`: `ConferenciaDeEnvios` (+`transicoes`, `rodadasFechadas`), `Condutor` (+`rodadaVista`, `inicios`), `novoCondutor`, `conferirCobertura()` (nova), `conduzir()` (contagem por tipo/assento + chamada), `salaVariantesEBordas()` (nova), `guardaSala()` (chamada + 3 linhas de saída) |
+| `docs/stories/debt.14.guarda-da-sala-por-variante-e-por-assento.story.md` | Status, checkboxes, Dev Agent Record, File List, Change Log |
+
 ## Change Log
 
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-09-21 | 1.0 | Story criada a partir dos achados `E43-TST-001` (medium), `E43-TST-002` (medium) e `E43-TST-003` (low) do gate de `e4.3` (`docs/qa/gates/e4.3-sala-pura.yml`), conforme roteamento do @po em `docs/stories/e4.3.sala-pura.story.md` Change Log v1.9.0 (commit `c10f287`). Escopo fechado: só `src/tools/determinism.ts`, e dentro dele só o bloco `sala pura`; `src/net/sala.ts`, `src/net/codec.ts` e o bloco `codec do fio` são proibidos, e um caso novo que falhe contra o código de hoje é achado a escalar, não correção dentro da story. Sequenciada depois do commit de implementação de `debt.12`, na ordem `e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `debt.14` → `e4.6`. Precondição registrada em `e4.4` v1.7.0 (AC 1, Task 0): commit de implementação desta story antes da Task 1 de `e4.4`. Status: Draft. | River (@sm) |
 | 2026-09-21 | 1.1 | **Validada pelo @po (`*validate-story-draft`): GO 9/10. Status Draft → Ready.** Conferido contra o código, não contra o texto da story: `src/net/sala.ts` e `src/match/{types,redutor,economia}.ts` na árvore de `29d7b51`, e o bloco `sala pura` de `determinism.ts` em `HEAD:` (a árvore de trabalho tem mudanças locais da `debt.12`, não conferidas). Uma sonda descartável (`git archive 29d7b51 src` num scratch) rodou `passo()` real. **Checklist de 10 pontos:** título ✓, descrição ✓, ACs testáveis ✓ (depois das correções abaixo), escopo IN/OUT ✓, dependências ✓ (com a ordem nova), complexidade ✓ (Medium), valor ✓, riscos ⚠ (as saídas por escalada estão escritas, mas faltava a interação com a `e4.10`; foi acrescentada, e o item fica parcial), DoD ✓, alinhamento com gate e spec ✓. **Linhas conferidas, e corretas:** `sala.ts:131, 252-254, 316-321, 337-338, 346-350, 358-372, 367, 369, 393-415, 402-412, 414, 446-454, 449, 549-561, 583, 595-611, 610`; `types.ts:148-154`; `determinism.ts` (HEAD) `:1295, 1345, 1375-1387, 1446, 1517-1527, 1644-1657, 1757, 1828-1850, 1879, 1883-1885, 1911-1923`, fim do bloco `:1925`. **Correções no lugar:** (1) **AC 3, alcançabilidade (a pergunta do coordenador).** Há momento alcançável pela guarda da sala para as cinco variantes novas, provado com controle negativo e positivo para cada uma (tabela nova em Dev Notes). Duas restrições que a story não dizia e que fariam o @dev escalar sem motivo: `compra` e `trocaDeBuild` são RECUSADAS por `aplicar()` na primeira `loja` (ouro [4,4] contra 6 e 5, `economia.ts:35-42`, `catalogo.ts:72`) e só são aceitas da segunda `loja` em diante (ouro [9,9]), em jogadores diferentes; `build`/`buildPadrao` têm uma janela só (a `builds` que o draft abre; toda rodada termina em `loja`, `redutor.ts:482`). Os controles positivos de `buildPadrao` e `trocaDeBuild` não cabem na Bo5 (o `buildPadrao` do roteiro não é enviado, `determinism.ts:1315-1317/1483-1486`; a seed 1 não tem `trocaDeBuild`, §11.6.2 M-5; e uma decisão aceita a mais quebraria Bo5 = arnês e o log de `:1576`), então vão numa sala descartável. O `tetoDeTicks` pequeno do AC 5 (i) torna a segunda `loja` barata. (2) **AC 4: duas regras que acusariam em código não mutado.** "Exatamente um `rodadaInicio`" falha no reassentamento da rodada 1 da Bo5, que recebe o da largada mais o do reassentamento (`sala.ts:561` + `:369`, já conferido em `determinism.ts:1654`). Passou a "pelo menos um `rodadaInicio`, exatamente um `rodadaFim` a quem está conectado no fim". A regra da visão ganhou a condição "sala termina o passo `jogando`" e a exceção da queda no draft (§6, `sala.ts:402-412`: a `partida` é recriada e só sai `{t:'sala'}`), que roda hoje em `salaNegativos` (`:1866`). O "pelo menos um `visao`" do @sm foi mantido contra o "exatamente um" do gate: o estouro de RF-04 dá dois `enviarVisao` num passo (`sala.ts:624-627`). (3) **AC 5 (i):** "snap final (`over: true`)" estava errado. No teto o mundo não acabou, e o snap final tem `over:false` (medido: `tetoDeTicks` 30, `over:false, winner:-1`, `rodadaFim.resultado.ticks` 30). A spec de v1.9.0 não pedia `over`; o critério passou a ser snap no tick do teto mais `resultado.ticks === tetoDeTicks`. (4) **AC 5 (iii):** em `builds`, a queda tem de acontecer nos primeiros 10 s (prazo de R-02 de 20 s < prazo de RF-04 de 30 s), senão o RF-04 produz o `buildPadrao` primeiro. (5) **Dev Notes:** as condições de `compra` (faltava `validarCompra`, `:327-348`), `trocaDeBuild` (`:375-385`) e `pronto` (não é "sem outra condição": exige `!prontos[d.jogador]`, `:401-405`); `interface Condutor` está em `:1333`, não em `:1332`. **Sequenciamento (coordenado com a outra rodada do @po):** a ordem de `determinism.ts` passou a `e4.8` → `debt.11` → `e4.9` → `e4.3` → `debt.12` → `debt.14` → **`e4.10`** → `e4.6` ("Depende de", AC 8, CodeRabbit). A citação literal da spec, item (g), ficou como estava, com nota. AC 8 diz agora que `e4.10` começa depois do commit desta story. **Nota para `e4.10`** (AC 8; o arquivo da story ainda não existe): ela muda o que a sala envia (`{t:'evento'}` depois de cada `{t:'visao'}`, só ao dono quando tem `jogador`, §11.6.2). As conferências dos AC 4/5 têm de continuar verdes ou ser estendidas por ela, nunca afrouxadas. A cobertura por assento do `{t:'evento'}` é dela. [AUTO-DECISION] Fixar a lista completa de envios nas conferências novas ou contar por tipo? → Contar por tipo e por assento; a única lista completa é a da recusa do AC 3, que não tem transição (motivo: uma lista completa quebraria na `e4.10` sem regressão nenhuma, e a contagem por tipo pega Q5/Q6/Q7 igual). As listas completas da `e4.3` (`:1654`, `:1839`) ficam; atualizá-las é da `e4.10`. ACs 1, 2, 6 e 7 e o total de 12 mutações não mudaram. | Pax (@po) |
+| 2026-09-21 | 1.2 | **Implementada pelo @dev (Dex, YOLO). Status Ready → InProgress → Ready for Review.** Base: `debt.12` `5766137`, com `determinism.ts` limpo. Implementação em `17ecf5c` e `f9b0312` (só `src/tools/determinism.ts`, só o bloco `sala pura`; `f9b0312` troca só o rótulo `variantes` → `por variante`, para não colidir com a linha homônima do `codec do fio`). AC 3: `build`, `buildPadrao` e `pronto` em `builds`; `compra`, `trocaDeBuild` e `pronto` na 2ª loja (ouro [9,9], escolhida com `aplicar()` como oráculo); cada caso com recusa por assento alheio e controle positivo, 6/6, numa sala descartável. AC 4: `conferirCobertura()` em todo `conduzir()` (52 transições e 6 rodadas conferidas, contagem por tipo e por assento). AC 5: teto de 30 ticks (snap final no tick 30, `over:false`, `rodadaFim.ticks` 30), `{t:'prazo'}` restante de 5 000 ms no reassentamento em `builds`, e queda em `builds` (2 s) e na `loja` abrindo a pausa sozinha, com W.O. `buildPadrao`/`pronto`. `check`, `sim:check` e `build` com rc=0; golden hash idêntico; diff da saída só em `assentos`/`autoridade` (contadores) e mais 3 linhas novas. 12/12 mutações com rc=1, e o controle sem mutação com rc=0. Nenhum achado contra `sala.ts`. | Dex (@dev) |
