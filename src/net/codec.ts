@@ -1,6 +1,6 @@
 import type { Decisao } from '../match/types.ts'
 import type { Command, EffectKind, SimEvent } from '../sim/types.ts'
-import type { DoCliente, DoServidor, Snapshot } from './protocolo.ts'
+import { VERSAO_DO_FIO, type DoCliente, type DoServidor, type Snapshot } from './protocolo.ts'
 
 /**
  * CODEC DO FIO — as duas pontas do texto que atravessa a rede (`docs/architecture-e4.md` §5.5, story
@@ -21,8 +21,9 @@ import type { DoCliente, DoServidor, Snapshot } from './protocolo.ts'
  * recebe `DoCliente` já parseado e não revalida forma.
  *
  * Puro: sem socket, DOM, relógio de parede, aleatoriedade ou I/O. Importa só TIPOS, de
- * `net/protocolo.ts`, `sim/types.ts` e `match/types.ts` (§2.2). Nenhum tipo paralelo ao `Snapshot`: a
- * tupla é codificação de fio, e fora do fio só existe o objeto com nomes.
+ * `net/protocolo.ts`, `sim/types.ts` e `match/types.ts` (§2.2), mais um único VALOR, `VERSAO_DO_FIO` de
+ * `net/protocolo.ts` (`e4.9`, §11.6.1) — a seta continua `net/ → net/`. Nenhum tipo paralelo ao
+ * `Snapshot`: a tupla é codificação de fio, e fora do fio só existe o objeto com nomes.
  */
 
 // ================================================================== ENTRADA — parseDoCliente
@@ -166,9 +167,12 @@ export function parseDoCliente(raw: unknown): DoCliente | null {
  * Codificador e decodificador abaixo leem daqui, posição a posição; o `tsc` confere a aridade dos dois
  * lados contra estes tipos, e o decodificador LANÇA em runtime se a aridade recebida divergir.
  *
- * **Mudar este layout é mudança de PROTOCOLO (§11.6), revisada como tal — nunca refatoração.** Lançar
- * em aridade divergente cobre acréscimo e remoção de campo; NÃO cobre reordenar dois campos do mesmo
- * tipo, e isso é risco aceito até haver deploy.
+ * **Mudar este layout é mudança de PROTOCOLO (§11.6), revisada como tal — nunca refatoração** — e sobe
+ * `VERSAO_DO_FIO` (`net/protocolo.ts`). Lançar em aridade divergente cobre acréscimo e remoção de campo;
+ * NÃO cobre reordenar dois campos do mesmo tipo. Quem cobre é a §11.6.1: a versão é conferida no
+ * `{t:'sala'}`, o primeiro envio de toda conexão assentada, antes de qualquer `{t:'snap'}` chegar
+ * (`DescompassoDeVersao`, abaixo); e a fixture congelada do fio (`debt.12`) trava o layout desde a
+ * versão 1.
  *
  * Regras de quantização (tabela da §5.5, passo `q = 0,01`), marcadas em cada posição:
  * - `[rep]` repassado: `net/snapshot.ts` já quantizou (0,01 px / 0,001 rad);
@@ -401,6 +405,54 @@ const T_DO_SERVIDOR = {
 } as const satisfies Record<DoServidor['t'], true>
 
 /**
+ * §11.6.1 (`e4.9`, AC 7 a) — o `{t:'sala'}` chegou com `versao` diferente de `VERSAO_DO_FIO`. As duas
+ * versões vão em CAMPOS, não só no texto, para o cliente escolher o remédio sem parsear a mensagem:
+ * servidor mais novo é aba velha ("recarregue"); cliente mais novo é o Pages na frente do servidor
+ * ("aguarde o servidor"), inclusive quando `servidor` é `undefined` (servidor de antes da versão).
+ *
+ * `servidor` é o valor do fio tal e qual (`2`, `"1"`, `undefined`), e a propriedade existe mesmo quando
+ * vale `undefined`. Campos declarados no corpo e atribuídos no construtor, **sem** parameter
+ * properties: o `node` do `sim:check` roda em modo strip-only e recusa essa sintaxe
+ * (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), e o `tsc` deste projeto não acusa.
+ */
+export class DescompassoDeVersao extends Error {
+  readonly servidor: unknown
+  readonly cliente: number
+
+  constructor(servidor: unknown, cliente: number) {
+    super(
+      `decodificarDoServidor: versão do fio ${String(servidor)} no servidor, ${cliente} neste cliente — ` +
+        'descompasso (architecture-e4.md §11.6.1)',
+    )
+    this.name = 'DescompassoDeVersao'
+    this.servidor = servidor
+    this.cliente = cliente
+  }
+}
+
+/**
+ * As três checagens do `{t:'sala'}` (`e4.9`, AC 7). **A versão vem PRIMEIRO** (AC 7 d): um servidor de
+ * antes da versão manda `{t:'sala', jogador, estado}`, sem os três campos, e tem de cair em
+ * `DescompassoDeVersao`, não num erro genérico; com versão diferente, os outros campos não têm
+ * significado conhecido e não são lidos. Os erros de `snapshotHz` e `assento` NÃO são
+ * `DescompassoDeVersao`: com a versão certa, o problema não é de build.
+ */
+function conferirSala(m: Objeto): void {
+  const versao = campo(m, 'versao')
+  if (versao !== VERSAO_DO_FIO) throw new DescompassoDeVersao(versao, VERSAO_DO_FIO)
+  const hz = campo(m, 'snapshotHz')
+  if (!(typeof hz === 'number' && Number.isInteger(hz) && hz > 0 && 60 % hz === 0)) {
+    throw new Error(
+      `decodificarDoServidor: {t:'sala'} com snapshotHz ${JSON.stringify(hz)} — tem de ser inteiro positivo divisor de 60`,
+    )
+  }
+  const assento = campo(m, 'assento')
+  if (typeof assento !== 'string' || assento === '') {
+    throw new Error("decodificarDoServidor: {t:'sala'} sem assento (string não vazia)")
+  }
+}
+
+/**
  * SERVIDOR → texto do fio (`architecture-e4.md` §5.5). O `{t:'snap'}` sai como
  * `{"t":"snap","seq":n,"s":[…tupla…]}` — envelope com nomes, identificável no devtools por `t` e `seq`;
  * toda outra variante sai como JSON com nomes, tal e qual.
@@ -414,7 +466,9 @@ export function codificarDoServidor(msg: DoServidor): string {
  * Texto do fio → SERVIDOR. Reconstrói o `Snapshot` de `net/protocolo.ts` a partir da tupla (com
  * `abilityReadyAt = time' + restante`) e devolve as demais variantes como vieram. **Lança** se a
  * aridade de qualquer tupla divergir do LAYOUT, e se a mensagem não tiver um `t` do vocabulário: um
- * cliente com versão diferente do servidor tem de falhar alto, não desenhar lixo.
+ * cliente com versão diferente do servidor tem de falhar alto, não desenhar lixo. No `{t:'sala'}`,
+ * lança `DescompassoDeVersao` se `versao` divergir de `VERSAO_DO_FIO`, e erro comum se `snapshotHz` ou
+ * `assento` vierem fora de forma (`conferirSala`, §11.6.1).
  */
 export function decodificarDoServidor(texto: string): DoServidor {
   const m: unknown = JSON.parse(texto)
@@ -423,5 +477,6 @@ export function decodificarDoServidor(texto: string): DoServidor {
     throw new Error('decodificarDoServidor: mensagem sem `t` do vocabulário de DoServidor')
   }
   if (t === 'snap') return { t, seq: campo(m, 'seq') as number, s: tuplaParaSnap(campo(m, 's')) }
+  if (t === 'sala') conferirSala(m)
   return m as DoServidor
 }

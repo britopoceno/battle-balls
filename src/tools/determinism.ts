@@ -19,9 +19,12 @@ import type { Command, SimEvent, World } from '../sim/types.ts'
 // `architecture-e4.md` registrado no Dev Agent Record, para o @architect). É a guarda de
 // ida-e-volta abaixo: provar a serialização inteira sem servidor e sem navegador.
 import { SNAPSHOT_HZ, type DoServidor, type EstaticoDaRodada, type Snapshot } from '../net/protocolo.ts'
+// e4.9 — a versão do fio (AC 10), pela mesma seta `tools/ → net/`: a amostra `sala` e a guarda do descompasso.
+import { VERSAO_DO_FIO } from '../net/protocolo.ts'
 // e4.8 — o codec do fio (AC 4, 5, 6). Mesma seta `tools/ → net/` de `e4.2`; `match/` entra para produzir
 // uma `VisaoPartida` real para a ida-e-volta das variantes não-`snap` (AC 5 (d)).
 import { codificarDoServidor, decodificarDoServidor, parseDoCliente } from '../net/codec.ts'
+import { DescompassoDeVersao } from '../net/codec.ts'
 import { aplicar, criarPartida, visaoPara } from '../match/index.ts'
 import {
   criarProdutorDeSnapshot,
@@ -1155,7 +1158,7 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
   const partida = criarPartida({ seed: 1, pool: Object.keys(CHARS) })
   const aposDraft = aplicar(partida, { t: 'draft', jogador: 0, charId: Object.keys(CHARS)[0] }).estado
   const amostras = {
-    sala: { t: 'sala', jogador: 1, estado: 'jogando' },
+    sala: { t: 'sala', versao: VERSAO_DO_FIO, jogador: 1, estado: 'jogando', assento: 'a3f9c2e1', snapshotHz: 30 },
     visao: { t: 'visao', v: visaoPara(partida, 0) },
     prazo: { t: 'prazo', terminaEmMs: 29999.5 },
     rodadaInicio: { t: 'rodadaInicio', estatico: estaticoDaRodada(createWorld(CHARS, setup(1))) },
@@ -1181,6 +1184,63 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
     }
   }
 
+  // e4.9 (AC 10) — o {t:'sala'} recusado em runtime (§11.6.1). A versão certa já volta idêntica acima
+  // (amostra `sala`, linha `não-snap`); aqui só os negativos, numa linha própria, fora dos contadores
+  // `lancou`/`aridadeCasos`/`naoSnap` (AC 11: a linha `não-snap` não muda de texto). Cada caso é a
+  // amostra válida com UM campo alterado ou removido, para só poder lançar pela checagem que mira; a
+  // exceção é a "forma de hoje", sem os três campos, que prende a ordem do AC 7 (d): versão PRIMEIRO.
+  const salaCom = (k: string, v: unknown): Record<string, unknown> => ({ ...amostras.sala, [k]: v })
+  const salaSem = (k: string): Record<string, unknown> => {
+    const m: Record<string, unknown> = { ...amostras.sala }
+    delete m[k]
+    return m
+  }
+  const descompassos: [rotulo: string, msg: Record<string, unknown>, enviado: unknown][] = [
+    ['versao ausente', salaSem('versao'), undefined],
+    ['versao 2', salaCom('versao', 2), 2],
+    ['versao "1"', salaCom('versao', '1'), '1'],
+    ['forma de hoje', { t: 'sala', jogador: 1, estado: 'jogando' }, undefined],
+  ]
+  const mostrar = (v: unknown): string => (v === undefined ? 'undefined' : JSON.stringify(v))
+  let descompassoOk = 0
+  for (const [rotulo, msg, enviado] of descompassos) {
+    try {
+      decodificarDoServidor(JSON.stringify(msg))
+      problemas.push(`  ✗ codec: {t:'sala'} com ${rotulo} não lançou`)
+    } catch (e) {
+      if (!(e instanceof DescompassoDeVersao)) {
+        problemas.push(`  ✗ codec: {t:'sala'} com ${rotulo} lançou, mas não DescompassoDeVersao — ${(e as Error).message}`)
+      } else if (!('servidor' in e) || !Object.is(e.servidor, enviado) || e.cliente !== VERSAO_DO_FIO) {
+        problemas.push(
+          `  ✗ codec: {t:'sala'} com ${rotulo} — DescompassoDeVersao com servidor ${mostrar(e.servidor)} (esperado ${mostrar(enviado)}), cliente ${e.cliente} (esperado ${VERSAO_DO_FIO})`,
+        )
+      } else {
+        descompassoOk++
+      }
+    }
+  }
+  const formaRuim: [rotulo: string, msg: Record<string, unknown>][] = [
+    ['snapshotHz ausente', salaSem('snapshotHz')],
+    ['snapshotHz 0', salaCom('snapshotHz', 0)],
+    ['snapshotHz 7', salaCom('snapshotHz', 7)],
+    ['snapshotHz "30"', salaCom('snapshotHz', '30')],
+    ['assento ausente', salaSem('assento')],
+    ["assento ''", salaCom('assento', '')],
+  ]
+  let formaRuimOk = 0
+  for (const [rotulo, msg] of formaRuim) {
+    try {
+      decodificarDoServidor(JSON.stringify(msg))
+      problemas.push(`  ✗ codec: {t:'sala'} com ${rotulo} não lançou`)
+    } catch (e) {
+      if (e instanceof DescompassoDeVersao) {
+        problemas.push(`  ✗ codec: {t:'sala'} com ${rotulo} lançou DescompassoDeVersao — com a versão certa, o problema não é de build`)
+      } else {
+        formaRuimOk++
+      }
+    }
+  }
+
   // (e) orçamento: alarme de regressão do codec, não detector de vazamento (esse é o de chaves, acima)
   const media = a.quadro.length ? a.quadro.reduce((t, x) => t + x, 0) / a.quadro.length : NaN
   const mediaEventos = a.eventosQuadro.length ? a.eventosQuadro.reduce((t, x) => t + x, 0) / a.eventosQuadro.length : NaN
@@ -1195,6 +1255,7 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[] }
     `  fronteira    ${ok(viradasCodec === 0 && viradasIngenuoHabilidade > 0 && viradasIngenuoUlt > 0)} regra da §5.5 vira ${viradasCodec}/${casos} casos sintéticos · o codec ingênuo (arredondar a 0,01) vira ${viradasIngenuoHabilidade + viradasIngenuoUlt} (habilidade ${viradasIngenuoHabilidade}, ult ${viradasIngenuoUlt}) — tem de falhar`,
     `  limiar ult   ${ok(foraDoPasso.length === 0)} todo ult.threshold do roster é múltiplo de 0,01 [${limiares.map((l) => `${l.id} ${l.thr}`).join(', ')}]`,
     `  não-snap     ${ok(naoSnapFalhas === 0 && lancou === aridadeCasos)} ${naoSnap.length} mensagens (${Object.keys(amostras).length} variantes) voltam idênticas · aridade divergente e t desconhecido lançam em ${lancou}/${aridadeCasos}`,
+    `  versão fio   ${ok(descompassoOk === descompassos.length && formaRuimOk === formaRuim.length)} {t:'sala'} v${VERSAO_DO_FIO}: DescompassoDeVersao com servidor/cliente nos campos em ${descompassoOk}/${descompassos.length} (versao ausente, 2, "1", forma de hoje — versão conferida primeiro) · snapshotHz/assento fora de forma lançam erro que não é de versão em ${formaRuimOk}/${formaRuim.length}`,
     `  orçamento    ${ok(media <= ORCAMENTO_SNAP_B)} ${SNAPSHOT_HZ} Hz, tupla: média ${f1(media)} B/quadro (≤ ${ORCAMENTO_SNAP_B}) · pico ${Math.max(...a.quadro)} B · dos quais events: média ${f1(mediaEventos)} B, pico ${Math.max(...a.eventosQuadro)} B (${SEEDS_FIO.length} rodadas de referência)`,
   ]
   return { linhas, problemas }

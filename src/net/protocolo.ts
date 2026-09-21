@@ -49,6 +49,22 @@ export const ATRASO_ALVO_TICKS = 6
 export const SNAPSHOT_HZ = 30
 
 /**
+ * §11.6.1, Decisão 2 (`e4.9`) — a VERSÃO DO FIO, levada no `{ t: 'sala' }` e conferida em runtime por
+ * `decodificarDoServidor` (`net/codec.ts`) antes de qualquer `{ t: 'snap' }` ser decodificado.
+ *
+ * **Sobe quando:** muda o layout ou a quantização de `codec.ts`; muda a forma de qualquer variante de
+ * `DoCliente`/`DoServidor`; ou muda o significado ou a unidade de um campo.
+ *
+ * **NÃO sobe** com `SNAPSHOT_HZ` nem com o `permessage-deflate`: são levers de operação, sobrescritos na
+ * subida do servidor sem rebuild (`e4.7`/AC 4), e amarrá-los à versão faria o override derrubar os
+ * clientes. (Por isso `snapshotHz` viaja como CAMPO do `{ t: 'sala' }`, conferido pela forma.)
+ *
+ * Começa em `1`, não em `0`: um servidor sem o campo manda `undefined`, e esse caso falha pelo mesmo
+ * caminho de um número errado.
+ */
+export const VERSAO_DO_FIO = 1
+
+/**
  * §5.1, classe 1 — o ESTÁTICO DA RODADA: o que não muda de um tick para o outro, mandado uma vez em
  * `{ t: 'rodadaInicio' }`.
  *
@@ -101,7 +117,8 @@ export type Snapshot = Pick<World, 'time' | 'over' | 'winner' | 'arena'> & {
  */
 export type DoCliente =
   /**
-   * `assento`: segredo devolvido no primeiro `{ t: 'sala' }`, reapresentado ao reconectar. Sem ele o
+   * `assento`: segredo devolvido no primeiro `{ t: 'sala' }` (campo `assento` de `DoServidor['sala']`,
+   * com o mesmo nome nas duas direções — `e4.9`, §11.6.1), reapresentado ao reconectar. Sem ele o
    * servidor não distingue o jogador 0 voltando de um terceiro abrindo o link — os dois chegam
    * idênticos no fio. A "reconexão sai de graça" de §6 vale para o ESTADO (o cliente não guarda
    * autoridade); para a IDENTIDADE, é este campo. Quem gera (stream próprio, como o id da sala), guarda
@@ -132,8 +149,31 @@ export type DoCliente =
  * é ato deliberado, revisado, não acidente. Cobre as fases da sala (§6), a partida, o prazo e a rodada.
  */
 export type DoServidor =
-  /** fase da sala (§6); `jogador` é o assento desta conexão — que NÃO é o lado da rodada */
-  | { t: 'sala'; jogador: Jogador; estado: 'aguardando' | 'jogando' | 'encerrada' }
+  /**
+   * fase da sala (§6); `jogador` é o assento desta conexão — que NÃO é o lado da rodada.
+   *
+   * **Extensão deliberada do vocabulário fechado** (`e4.0`/AC 10): `versao`, `assento` e `snapshotHz`
+   * entraram em `e4.9`, e a revisão que esse AC exige é a §11.6.1 de `architecture-e4.md` (Decisão 2 e
+   * decisão O-1 do @po). Nenhum `t` novo: só campos numa variante existente.
+   * - `versao`: o LITERAL de `VERSAO_DO_FIO` — quem produz não consegue pôr outro valor. O tipo não
+   *   protege quem recebe; por isso `decodificarDoServidor` confere em runtime, e confere PRIMEIRO.
+   * - `assento`: o segredo que o cliente reapresenta em `{ t: 'entrar', assento }` (achado M-4).
+   * - `snapshotHz`: inteiro positivo divisor de 60 — a cadência da sala é `60 / snapshotHz` ticks
+   *   (`e4.3`/AC 10) e o buffer do cliente divide por ele (`e4.5`/AC 7).
+   *
+   * ⚠️ SEGURANÇA — `{ t: 'sala' }` é mensagem **por assento, nunca broadcast**, na mesma regra do
+   * `{ t: 'visao' }` (`e4.3`/AC 8). Um broadcast entregaria o segredo de um jogador ao outro, que o usaria
+   * para reassentar no lugar dele (`e4.4`/AC 7: segredo válido derruba a conexão antiga). Contrato que
+   * `net/sala.ts` (`e4.3`) enforca, provado pela guarda de `e4.3`/AC 11 (e).
+   */
+  | {
+      t: 'sala'
+      versao: typeof VERSAO_DO_FIO
+      jogador: Jogador
+      estado: 'aguardando' | 'jogando' | 'encerrada'
+      assento: string
+      snapshotHz: number
+    }
   /** a projeção com segredo de `match/` — o servidor manda a visão, nunca `EstadoPartida` */
   | { t: 'visao'; v: VisaoPartida }
   /** §3.4 — o relógio de RF-04 é do servidor; o cliente só EXIBE o prazo que recebe pronto */
