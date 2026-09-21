@@ -2,14 +2,14 @@
 
 ## Status
 
-Draft
+Ready
 
 ## Executor Assignment
 
 ```yaml
 executor: "@dev"
 quality_gate: "@qa"
-quality_gate_tools: ["npm run check", "npm run sim:check (hash idêntico esperado — esta story não toca sim/ nem match/)", "sim:check rodado antes e depois, diff da saída completa vazio", "git diff --stat restrito ao escopo do AC 10 — confirmar ausência de src/net/snapshot.ts, src/net/projecao.ts, src/client/render.ts e src/tools/determinism.ts (conflito com e4.2, em implementação)", "revisão manual: cada evento novo carrega o atraso e a escala em vigor no INSTANTE DA GRAVAÇÃO, não do export; dado exportado antes desta story não é lido como atraso 0 / escala 1.0 por omissão"]
+quality_gate_tools: ["npm run check", "npm run sim:check (hash idêntico esperado — esta story não toca sim/ nem match/)", "sim:check rodado antes e depois, diff da saída completa vazio", "git show --stat <commit(s) desta story> restrito ao escopo do AC 10 — medir pelo commit desta story, NUNCA pela árvore de trabalho compartilhada; confirmar ausência de src/net/snapshot.ts, src/net/projecao.ts, src/client/render.ts e src/tools/determinism.ts (conflito com e4.2, ver AC 3)", "revisão manual: cada evento novo carrega o atraso e a escala em vigor no INSTANTE DA GRAVAÇÃO, não do export; dado exportado antes desta story não é lido como atraso 0 / escala 1.0 por omissão"]
 ```
 
 ## Story
@@ -31,10 +31,11 @@ precisar fazer.
 fixou `ESCALA_HP = 6.0` (`src/chars/tuning.ts:10`). `e3.5` — criou o coletor (`client/telemetria.ts`) e o
 agregador (`tools/telemetria.ts`).
 
-**Não depende de `e4.2`** (que está sendo implementada agora), mas os dois trabalhos coexistem sobre o mesmo
-diretório `src/`. `e4.2` é dona de `src/net/snapshot.ts`, `src/net/projecao.ts`, e das **únicas** alterações
-permitidas em `src/tools/determinism.ts` e `src/client/render.ts` (AC 14 de `e4.2`) — inclusive um golden
-hash e uma guarda de ida-e-volta que não podem se mover. Esta story não toca nenhum dos quatro arquivos (ver
+**Não depende de `e4.2` em conteúdo, mas é SEQUENCIADA depois dela** (ver AC 3). `e4.2` está sendo
+implementada agora na mesma árvore de trabalho, e é dona de `src/net/snapshot.ts`, `src/net/projecao.ts`, e
+das **únicas** alterações permitidas em `src/tools/determinism.ts` e `src/client/render.ts` (AC 14 de
+`e4.2`) — a guarda de ida-e-volta (AC 7) e a asserção QA-D8-01 (AC 13) que ela acrescenta ao `sim:check`,
+com o golden hash que as duas stories mantêm idêntico. Esta story não toca nenhum dos quatro arquivos (ver
 AC 3 e AC 10) e não decide sozinha o que fazer se um conflito de merge aparecer — nesse caso, resolver
 localmente sem alterar o conteúdo que é escopo de `e4.2`.
 
@@ -83,15 +84,35 @@ roteamento.
    vazio — mesmo padrão de prova usado em `e4.1`/`e4.2`.
 3. **Conflito de arquivo em andamento com `e4.2` (story em implementação no momento em que esta foi
    escrita).** `e4.2` é dona de `src/net/snapshot.ts`, `src/net/projecao.ts`, e das únicas alterações
-   permitidas em `src/tools/determinism.ts` e `src/client/render.ts` — inclusive um golden hash e uma
-   guarda de ida-e-volta próprios. Esta story **não toca nenhum dos quatro arquivos**, em nenhuma hipótese.
-   `git diff --stat` desta story não deve conter nenhum deles.
+   permitidas em `src/tools/determinism.ts` e `src/client/render.ts` — a guarda de ida-e-volta e a
+   asserção QA-D8-01 que ela acrescenta ao `sim:check`. Esta story **não toca nenhum dos quatro arquivos**,
+   em nenhuma hipótese. `git show --stat` do(s) commit(s) desta story não deve conter nenhum deles.
+
+   **Sequenciamento explícito (adicionado na validação @po):**
+   - **A implementação desta story começa só depois que o commit de implementação de `e4.2` existir**, ou
+     seja, quando as alterações de `e4.2` em `render.ts`, `determinism.ts`, `net/snapshot.ts` e
+     `net/projecao.ts` tiverem saído da árvore de trabalho para um commit. A dependência não é de conteúdo,
+     é de prova. Com `e4.2` ainda não commitada na mesma árvore, (a) o `sim:check` "antes e depois" do AC 2
+     absorveria as linhas novas da guarda de `e4.2`, e o `diff` deixaria de sair vazio por causa dela; e
+     (b) qualquer `git diff --stat` da árvore mostraria os arquivos de `e4.2` como se fossem desta story.
+     Não é preciso esperar `e4.2` chegar a Done.
+   - **`client/main.ts`.** O AC 14 de `e4.2` proíbe **a `e4.2`** de alterá-lo, e o gate de `e4.2` confere
+     "`main.ts` intocado". Se esta story tocar `main.ts` (AC 10, só ligação), a mudança vai num commit
+     **desta** story, posterior ao de `e4.2`. A conferência de `e4.2` continua válida porque é feita sobre
+     o(s) commit(s) de `e4.2`, não sobre a árvore.
+   - **Forma preferida, que elimina o contato com `main.ts`:** carimbar dentro de `registrar()` em
+     `client/telemetria.ts`, importando ali `ATRASO_ALVO_TICKS` e `ESCALA_HP` (`client/ → todos` está na
+     tabela). Os três pontos de chamada em `main.ts` (`:134`, `:238`, `:319`) não mudam, nem a assinatura
+     `registrar(partida, eventos)`. `tools/telemetria.ts:3` importa de `client/telemetria.ts` **só tipos**
+     (`import type`, que é apagado na execução), então essa forma não cria aresta de execução
+     `tools/ → net/`. Se o `@dev` escolher outra forma que exija `main.ts`, registra o motivo no Dev Agent
+     Record.
 4. **Cada evento novo grava o atraso e a escala em vigor no INSTANTE DA GRAVAÇÃO, não do export.** Como o
    `localStorage` acumula entre trocas de build (`e3.5` AC 4 / docblock de `CHAVE`,
    `client/telemetria.ts:20-25`), um único array pode conter eventos escritos sob código antigo (atraso 0)
    e código novo (atraso 6) — carimbar só no momento do `exportar()` (`client/telemetria.ts:137-144`)
    atribuiria o valor ATUAL a eventos que foram gravados sob um valor diferente. A gravação já carimba
-   `partida` por evento (`registrar`, `client/telemetria.ts:131-136`); o carimbo novo segue o mesmo
+   `partida` por evento (`registrar`, `client/telemetria.ts:132-136`); o carimbo novo segue o mesmo
    mecanismo — por evento, não por export.
 
    **A forma exata do campo é decisão do `@dev` (ou handoff para `@architect`, ver abaixo), restrita por:**
@@ -107,7 +128,11 @@ roteamento.
      além de) carimbar o campo por evento, documentar explicitamente no Dev Agent Record por que isso
      também satisfaz o AC 5 — bump de versão sozinho separa por **chave de armazenamento** o que for
      gravado a partir da troca, mas não tem efeito retroativo sobre o que já estiver acumulado hoje,
-     misturado, sob `v1`.
+     misturado, sob `v1`. **O bump também tem um modo de falha próprio:** `ler()` e `exportar()` só
+     enxergam a chave corrente (`client/telemetria.ts:161` e `:139`). O acúmulo que ficar sob `v1` deixa
+     de ser exportável pelo jogo e fica órfão no `localStorage`, sem nenhum chamador que o leia. Se houver
+     bump, o @dev registra no Dev Agent Record o destino do acúmulo `v1`: exportado antes, lido junto como
+     "desconhecido", ou perda aceita explicitamente. Descarte silencioso não é aceitável.
    - se o `@dev` julgar que a forma deve ser fixada pelo `@architect` antes da implementação (porque
      nenhum documento de arquitetura a fixa hoje), este AC vira **handoff** — registrado no Dev Agent
      Record, no mesmo padrão de `e4.1`/`e4.2` (documento de forma é decisão do `@architect`, quem
@@ -131,7 +156,9 @@ roteamento.
    justificativa registrada no Dev Agent Record, que só o atraso é resolvido nesta story e a escala fica
    para outra story, isso é aceitável — mas precisa ser decisão explícita, não omissão silenciosa.
 9. `docs/evidence/telemetria/README.md` ganha uma entrada anotando a fronteira `b8e8a41` (2026-09-21,
-   `e4.1`, `INPUT_DELAY_TICKS` 0→6 efetivo no modo local), no mesmo formato da tabela/linha do tempo já
+   `e4.1`: sai o literal `INPUT_DELAY_TICKS = 0` de `client/main.ts`, e o cast humano do modo local passa
+   a usar `ATRASO_ALVO_TICKS` = 6, de `net/protocolo.ts`). A entrada anota também a fronteira do commit
+   desta story, a partir do qual os eventos trazem o carimbo, no mesmo formato da tabela/linha do tempo já
    existente no arquivo (seção "A linha do tempo intercala exatamente com os commits da bissecção de
    e3.6" é o precedente de formato a seguir, não a copiar literalmente — o evento aqui é outro).
 10. **Escopo de arquivos.**
@@ -139,7 +166,7 @@ roteamento.
     | Permitido | Motivo |
     |---|---|
     | `src/client/telemetria.ts` | o coletor — campo(s) novos por evento, leitura de dado antigo tratada como "desconhecido" |
-    | `src/client/main.ts` | **só a ligação**: repassar ao coletor o valor já lido de `ATRASO_ALVO_TICKS` (import já existe, `main.ts:8`) e de `ESCALA_HP` (import novo, de `chars/tuning.ts`) no ponto de gravação — nenhuma regra de jogo nova |
+    | `src/client/main.ts` | **só se a forma escolhida exigir** (a forma preferida do AC 3 não exige), em commit posterior ao de `e4.2` (AC 3), e **só a ligação**: repassar ao coletor o valor já lido de `ATRASO_ALVO_TICKS` (import já existe, `main.ts:8`) e de `ESCALA_HP` (import novo, de `chars/tuning.ts`) no ponto de gravação — nenhuma regra de jogo nova |
     | `src/tools/telemetria.ts` | o agregador — agrupamento por (atraso, escala), avisos de mistura e de dado desconhecido |
     | `docs/evidence/telemetria/README.md` | anotação da fronteira (AC 9) |
 
@@ -149,7 +176,7 @@ roteamento.
     `src/tools/determinism.ts` (conflito com `e4.2`, ver AC 3), `src/net/snapshot.ts`,
     `src/net/projecao.ts` (não existem ainda nesta story; são de `e4.2`).
 
-    **Nenhuma seta nova na tabela de camadas** (`architecture-e4.md` §2.2, linhas 280-287): `client/ →
+    **Nenhuma seta nova na tabela de camadas** (`architecture-e4.md` §2.2, linhas 279-287): `client/ →
     net/` e `client/ → chars/` já existem na tabela (`client/ → todos`); `tools/ → chars/` já existe na
     tabela. O desvio pré-existente `tools/telemetria.ts → client/` (tipos de `client/telemetria.ts`,
     símbolos de `client/input.ts`) já foi julgado no gate de `e3.5` e não cresce nesta story — nenhum
@@ -223,6 +250,11 @@ não existe (AC 4, 6, 7).
 
 ## Tasks / Subtasks
 
+- [ ] Task 0 — Pré-condição de sequência (AC: 2, 3)
+  - [ ] Confirmar que o commit de implementação de `e4.2` existe e que `git status --short` não mostra
+        `render.ts`, `determinism.ts`, `net/snapshot.ts` nem `net/projecao.ts` modificados ou não
+        rastreados. Registrar no Dev Agent Record o hash de `e4.2` usado como base
+
 - [ ] Task 1 — Decidir a forma do carimbo (AC: 4, 8)
   - [ ] Escolher: campo por evento, e/ou bump de `CHAVE`/`versao`; nome do(s) campo(s); se cobre
         `ESCALA_HP` nesta story ou fica para outra — registrar a decisão e a justificativa no Dev Agent
@@ -235,7 +267,8 @@ não existe (AC 4, 6, 7).
   - [ ] Em `ler()`, tratar acúmulo anterior sem o campo como "desconhecido" na leitura — nunca reescrever
         com um valor assumido
 
-- [ ] Task 3 — `client/main.ts`, ligação (AC: 4, 8, 10)
+- [ ] Task 3 — `client/main.ts`, ligação (AC: 3, 4, 8, 10). **Pular se a forma escolhida carimbar dentro de
+      `registrar()`** (forma preferida do AC 3); nesse caso `main.ts` não aparece no diff
   - [ ] Repassar `ATRASO_ALVO_TICKS` (import já existe, `main.ts:8`) ao coletor no ponto de gravação
   - [ ] Se AC 8 estiver dentro do escopo: importar `ESCALA_HP` de `../chars/tuning.ts` e repassar do mesmo
         jeito — nenhuma regra de jogo nova, só ligação
@@ -253,8 +286,8 @@ não existe (AC 4, 6, 7).
 - [ ] Task 6 — Verificação (AC: 1, 2, 3, 10)
   - [ ] `npm run check` — 0 erros
   - [ ] `npm run sim:check` antes e depois da mudança — `diff` da saída completa vazio
-  - [ ] `git diff --stat` restrito ao escopo do AC 10 — confirmar ausência de `src/net/snapshot.ts`,
-        `src/net/projecao.ts`, `src/client/render.ts`, `src/tools/determinism.ts`
+  - [ ] `git show --stat` do(s) commit(s) desta story, restrito ao escopo do AC 10: confirmar ausência de
+        `src/net/snapshot.ts`, `src/net/projecao.ts`, `src/client/render.ts`, `src/tools/determinism.ts`
   - [ ] Teste de aceitação do AC 5: fixture/export sintético com duas combinações (atraso, escala),
         confirmar que dá para particionar só com o conteúdo do arquivo
   - [ ] Teste de compatibilidade do AC 7: export sem os campos novos não quebra o agregador
@@ -341,7 +374,7 @@ export const ESCALA_HP = 6.0
 
 ### Por que o agregador não deve importar `net/protocolo.ts` diretamente
 
-A tabela de camadas (`architecture-e4.md` §2.2, linhas 280-287) permite `tools/ → sim/, chars/, bot/,
+A tabela de camadas (`architecture-e4.md` §2.2, linhas 279-287) permite `tools/ → sim/, chars/, bot/,
 match/, shop/` — **não** `tools/ → net/`. `e4.2` (AC 11) já registrou que abrir `tools/ → net/` é uma seta
 nova que "ninguém aprovou ainda" e a tratou como handoff ao `@architect`, não como fato consumado. Esta
 story evita o problema por construção: o agregador só precisa **ler o campo já gravado no arquivo
@@ -349,13 +382,13 @@ exportado** — ele nunca precisa importar a constante-fonte, porque o valor his
 diferente do valor atual da constante. Isso também é logicamente mais correto: um arquivo antigo gravado
 sob `ATRASO_ALVO_TICKS = 6` continua correto mesmo que a constante mude no futuro.
 
-[Fonte: `docs/architecture-e4.md:280-287`; `docs/stories/e4.2.snapshot-e-projecao.story.md`, AC 11]
+[Fonte: `docs/architecture-e4.md:279-287`; `docs/stories/e4.2.snapshot-e-projecao.story.md`, AC 11]
 
 ### O desvio de camada pré-existente, e por que ele não cresce aqui
 
 ```
-Ela é ANTERIOR a esta story (desvio já julgado no gate de e3.5) e não entrou neste commit e o sim:check
-não a carrega.
+A única ocorrência é src/tools/telemetria.ts → client/. Ela é ANTERIOR a esta story (desvio
+já julgado no gate de e3.5), não entrou neste commit e o sim:check não a carrega.
 ```
 
 `src/tools/telemetria.ts` já importa de `client/` (o tipo `EventoRegistrado`/`ArquivoTelemetria` de
@@ -401,6 +434,9 @@ da bissecção de e3.6"]
   exportadas de lá.
 - Não decide `SNAPSHOT_HZ` nem qualquer assunto de `e4.2` — arquivos e responsabilidades continuam
   totalmente separados (AC 3).
+- Não dá chamador de UI a `limpar()` (`client/telemetria.ts:145`). O gate de `e4.1` registra que ela não
+  tem chamador. A mitigação manual do gate continua sendo `localStorage.removeItem('bb.telemetria.v1')`
+  no console. Um botão de zerar, se o usuário quiser, é outra story.
 
 ### Testing
 
@@ -434,3 +470,4 @@ _(a preencher pelo @qa)_
 | Date | Version | Description | Author |
 |---|---|---|---|
 | 2026-09-21 | 1.0 | Story criada a partir do achado `E41-TEL-002` do gate `PENDING` de `e4.1` (`docs/qa/gates/e4.1-ativar-atraso-de-input.yml`, severidade medium), conforme roteamento do @po registrado no Change Log v1.4.0 de `docs/stories/e4.1.ativar-atraso-de-input.story.md`. Escopo: `client/telemetria.ts`, `client/main.ts` (ligação), `tools/telemetria.ts`, `docs/evidence/telemetria/README.md`. A forma exata do carimbo (nome de campo, por evento vs. bump de versão, cobertura de `ESCALA_HP`) é deixada como decisão do `@dev`/`@architect` (AC 4, 8), por não haver documento de arquitetura que a fixe hoje. Registrado o conflito de arquivo em andamento com `e4.2` (AC 3, 10): nenhum dos quatro arquivos que `e4.2` está implementando/restringindo é tocado. Não bloqueia o re-gate de `e4.1`; precede qualquer coleta humana usada como evidência de `debt.9` (pré-condição b) ou baseline de P4.4. Não decide a pergunta aberta de `debt.9` v1.1. | River (@sm) |
+| 2026-09-21 | 1.1 | **Validação @po: GO 10/10** (8/10 antes das correções: itens 5 "dependências" e 8 "riscos" estavam parciais). **Status: Draft → Ready.** **Conferido na fonte antes de emendar:** `client/telemetria.ts:25` (`CHAVE`), `:20-25` (docblock), `:87-95` (docblock de `EventoRegistrado`), `:132-136` (`registrar` carimba `partida`), `:137-144`/`:139` (`exportar`, `versao: CHAVE`), `:145` (`limpar`), `:161` (`ler` só lê a chave corrente); `tools/telemetria.ts:2-3` (import de valor de `client/input.ts` e **só de tipo** de `client/telemetria.ts`), `:154-158` (aviso de `mag`, TEL-E35-001), `:164-170` (`anguloErro`), `:201-202` (aceita `{versao,...}` ou array cru, não confere `versao`); `chars/tuning.ts:10` (`ESCALA_HP = 6.0`) e `chars/index.ts:3` (já o importa); `net/protocolo.ts:38` (`ATRASO_ALVO_TICKS = 6`); `client/main.ts:1`, `:8` e os três pontos de chamada de `registrar` (`:134`, `:238`, `:319`); `architecture-e4.md:279-287` (`client/ → todos` existe, `tools/ → net/` não existe, `tools/ → chars/` existe); `b8e8a41` (2026-09-21, só `main.ts` + story, troca o literal `INPUT_DELAY_TICKS = 0` por `ATRASO_ALVO_TICKS`); `docs/evidence/telemetria/README.md` (a seção de formato citada existe e nenhuma entrada de `b8e8a41` existe ainda, o que é correto: é o AC 9); as citações do gate `E41-TEL-002` e do Change Log v1.4.0 de `e4.1` conferem, com as elisões marcadas; `debt.9` v1.1 registra a pergunta aberta; `e4.2` AC 11 ("ninguém aprovou ainda") e AC 14 (proíbe `main.ts` **à própria `e4.2`**). **Correções no lugar:** **(1) Sequenciamento com `e4.2`, agora explícito no AC 3** (antes era "não depende"). A implementação de debt.10 começa só depois que o commit de implementação de `e4.2` existir; não é preciso esperar Done. O motivo é de prova: hoje `render.ts`/`determinism.ts` estão modificados e `net/snapshot.ts`/`net/projecao.ts` estão não rastreados na mesma árvore. Com isso, o `sim:check` antes/depois do AC 2 absorveria a guarda nova de `e4.2`, e `git diff --stat` mostraria os arquivos dela. Nova Task 0. A verificação de escopo passa de `git diff --stat` (árvore) para `git show --stat` do(s) commit(s) desta story, em `quality_gate_tools`, AC 3 e Task 6. **(2) `main.ts`:** vira "só se a forma exigir", em commit posterior ao de `e4.2`, e a conferência "main.ts intocado" de `e4.2` é feita sobre o commit de `e4.2`. Fica registrada a **forma preferida**, que elimina o contato: carimbar dentro de `registrar()` importando as duas constantes em `client/telemetria.ts`. A tabela de camadas permite, e como `tools/telemetria.ts:3` é `import type`, não nasce aresta de execução `tools/ → net/`. A decisão de forma continua do @dev/@architect (AC 4). Task 3 pode ser pulada. **(3) AC 4, risco que faltava:** um bump para `v2` deixa o acúmulo `v1` órfão, porque `ler`/`exportar` só enxergam a chave corrente. O destino desse acúmulo passa a ser declarado obrigatoriamente. **(4) AC 3 e "Depende de":** "um golden hash e uma guarda próprios" de `e4.2` estava impreciso. O golden hash é do projeto e `e4.2` o mantém idêntico; o que `e4.2` acrescenta é a guarda de ida-e-volta (AC 7) e a asserção QA-D8-01 (AC 13). **(5) AC 9:** `INPUT_DELAY_TICKS` 0→6 nomeava uma constante que não existe mais (E41-TST-003). Passa a descrever a troca real do `b8e8a41` e pede também a fronteira do commit desta story. **(6) Citações:** tabela de camadas `280-287` → `279-287` (3 lugares), `registrar` `:131-136` → `:132-136`, e a citação do gate em Dev Notes restaurada verbatim. **(7) "NÃO faz":** sem chamador de UI para `limpar()`; a mitigação continua no console, conforme o gate. Complexidade: o mandato diz tamanho S e a seção CodeRabbit diz "Medium"; os dois ficam, por medirem coisas diferentes (superfície e decisão de forma). | Pax (@po) |
