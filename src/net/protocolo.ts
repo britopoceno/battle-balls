@@ -1,4 +1,4 @@
-import type { Decisao, Jogador, ResultadoRodada, VisaoPartida } from '../match/types.ts'
+import type { Decisao, EventoPartida, Jogador, ResultadoRodada, VisaoPartida } from '../match/types.ts'
 import type { Ball, Command, Effect, Projectile, SimEvent, World, Zone } from '../sim/types.ts'
 
 /**
@@ -19,10 +19,13 @@ import type { Ball, Command, Effect, Projectile, SimEvent, World, Zone } from '.
  * subir servidor nenhum. (Sem nomear a biblioteca de propósito: o gate de pureza é um grep, e um
  * comentário que casa com ele é ruído no gate.)
  *
- * DIREÇÃO DAS SETAS (§2.2) — `net/ → sim/, match/`, **só tipos**. Nunca de `tools/`, `client/`, `bot/`
- * nem `chars/`. `Decisao`, `VisaoPartida`, `ResultadoRodada` e `Jogador` vêm de `match/types.ts`;
- * `Command` e as entidades do mundo vêm de `sim/types.ts`. Nada é redeclarado aqui — uma segunda
- * definição de qualquer um deles é a lição de C3 se repetindo.
+ * DIREÇÃO DAS SETAS (§2.2) — **deste arquivo**: `net/protocolo.ts → sim/, match/`, **só tipos**. Nunca de
+ * `tools/`, `client/`, `bot/` nem `chars/`. `Decisao`, `VisaoPartida`, `ResultadoRodada`, `EventoPartida`
+ * e `Jogador` vêm de `match/types.ts`; `Command` e as entidades do mundo vêm de `sim/types.ts`. Nada é
+ * redeclarado aqui — uma segunda definição de qualquer um deles é a lição de C3 se repetindo. (A regra
+ * "só tipos" é deste arquivo, não de `net/` inteira: `net/sala.ts` importa execução de `match/` e `sim/`
+ * (`e4.3`), e `net/codec.ts` importa `VERSAO_DO_FIO` daqui (`e4.9`), cada um pelo motivo registrado na
+ * sua story. `architecture-e4.md` §11.6.2, `e4.10`.)
  */
 
 /**
@@ -61,8 +64,12 @@ export const SNAPSHOT_HZ = 30
  *
  * Começa em `1`, não em `0`: um servidor sem o campo manda `undefined`, e esse caso falha pelo mesmo
  * caminho de um número errado.
+ *
+ * Histórico: `1` (`e4.9`); `2` (`e4.10`, §11.6.2) — `DoServidor` ganhou `{ t: 'evento' }`. O layout do
+ * `snap` não mudou; a fixture congelada (`FIO_CONGELADO`, `tools/determinism.ts`) ganhou a entrada 2 só
+ * com a lista de variantes nova.
  */
-export const VERSAO_DO_FIO = 1
+export const VERSAO_DO_FIO = 2
 
 /**
  * §5.1, classe 1 — o ESTÁTICO DA RODADA: o que não muda de um tick para o outro, mandado uma vez em
@@ -146,7 +153,8 @@ export type DoCliente =
  * SERVIDOR → CLIENTE.
  *
  * Vocabulário FECHADO, mesmo precedente de `AimSpec` (`e2.2`) e mesma regra de `DoCliente`: estender
- * é ato deliberado, revisado, não acidente. Cobre as fases da sala (§6), a partida, o prazo e a rodada.
+ * é ato deliberado, revisado, não acidente. Cobre as fases da sala (§6), a partida, o prazo, a rodada e a
+ * telemetria da partida (`{ t: 'evento' }`).
  */
 export type DoServidor =
   /**
@@ -186,3 +194,18 @@ export type DoServidor =
   /** `Transicao.erro` pelo fio — decisão ilegal recusada, nunca aplicada pela metade */
   | { t: 'erro'; motivo: string }
   | { t: 'ping'; id: number }
+  /**
+   * §11.6.2, Decisão 1 (`e4.10`) — `EventoPartida` pelo fio: UMA mensagem por evento, nunca um lote, na
+   * ordem de `Transicao.eventos`, logo depois do `{ t: 'visao' }` da transição que o produziu.
+   *
+   * **Extensão deliberada do vocabulário fechado** (`e4.0`/AC 10): um `t` novo, revisado na §11.6.2, e
+   * por isso `VERSAO_DO_FIO` subiu de 1 para 2 (regra da §11.6.1: muda a forma de `DoServidor`). Um
+   * cliente de antes da variante falha alto pela lista fechada do decodificador, em vez de ler `undefined`.
+   *
+   * ⚠️ SEGURANÇA (RF-04) — mensagem **por assento, com filtro**, numa regra só: o assento do jogador `j`
+   * recebe `e` se e só se `e` não tem o campo `jogador`, ou `e.jogador === j`. `rodadaFim` e `partidaFim`
+   * vão aos dois; `compra`, `trocaDeBuild` e `buildPadrao` só ao dono — um broadcast do `buildPadrao`
+   * contaria ao oponente a build secreta antes da largada (M-6). Quem enforca é `net/sala.ts`; eventos
+   * produzidos com o assento vago não são reenviados no reassentamento.
+   */
+  | { t: 'evento'; e: EventoPartida }

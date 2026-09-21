@@ -57,7 +57,7 @@ import {
   type RodadaEmCurso,
   type Sala,
 } from '../net/sala.ts'
-import { jogadorDoLado, placarDe, type Decisao, type Jogador, type VisaoPartida } from '../match/index.ts'
+import { jogadorDoLado, placarDe, type Decisao, type EventoPartida, type Jogador, type VisaoPartida } from '../match/index.ts'
 import { jogarPartida, type PartidaGravada } from './partida.ts'
 
 const CHARS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'chars')
@@ -1301,6 +1301,8 @@ function guardaCodec(a: AchadosCodec): { linhas: string[]; problemas: string[]; 
     },
     erro: { t: 'erro', motivo: 'não é a sua vez' },
     ping: { t: 'ping', id: 7 },
+    // e4.10 (AC 8 d) — só valores que o tipo aceita, sem asserção de tipo: uma asserção calaria o `satisfies`
+    evento: { t: 'evento', e: { t: 'compra', rodada: 1, jogador: 0, itemId: 'chumbo', trilha: 'fisica', preco: 4, ouroDepois: 5 } },
   } satisfies { [K in Exclude<DoServidor['t'], 'snap'>]: Extract<DoServidor, { t: K }> }
   const naoSnap: DoServidor[] = [...Object.values(amostras), { t: 'visao', v: visaoPara(aposDraft, 1) }]
   let naoSnapFalhas = 0
@@ -1467,6 +1469,11 @@ const FIO_CONGELADO: readonly { versao: number; snap: string; variantes: string 
     snap: '{"t":"snap","seq":4,"s":[1234.57,0,1,960,540,17.25,[[7,100.25,200.5,0.75,432.13,1,55.55,183.35,["slow","shield"]]],[[8,10.5,20.75,300.12,-40.46,5.56,"#b98cff"]],[[9,"wall",30.25,40.5,1.234,60.13,9.99,2.35,"#8a8"]],[{"t":"hit","x":1.5,"y":2.5,"amount":3.14159,"targetId":7,"crit":true}]]}',
     variantes: 'erro,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao',
   },
+  {
+    versao: 2,
+    snap: '{"t":"snap","seq":4,"s":[1234.57,0,1,960,540,17.25,[[7,100.25,200.5,0.75,432.13,1,55.55,183.35,["slow","shield"]]],[[8,10.5,20.75,300.12,-40.46,5.56,"#b98cff"]],[[9,"wall",30.25,40.5,1.234,60.13,9.99,2.35,"#8a8"]],[{"t":"hit","x":1.5,"y":2.5,"amount":3.14159,"targetId":7,"crit":true}]]}',
+    variantes: 'erro,evento,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao',
+  },
 ]
 
 /** Caminho e valores da primeira posição em que dois JSON divergem (`s[6][0][4]`), para a mensagem. */
@@ -1621,10 +1628,13 @@ interface ConferenciaDeEnvios {
   assentamentos: number
   visoes: number
   pelaFronteira: number
-  /** debt.14, AC 4 — passos em que a `partida` mudou de identidade com a sala `jogando` */
+  /** debt.14, AC 4 — passos em que a `partida` mudou de identidade com a sala fora de `aguardando` (e4.10 AC 13) */
   transicoes: number
   /** debt.14, AC 4 — rodadas fechadas com `rodadaFim`/`rodadaInicio` conferidos por assento */
   rodadasFechadas: number
+  /** e4.10, AC 8 — passos que acrescentaram evento a `Sala.eventos`, e `{t:'evento'}` entregues em todos os passos */
+  passosComEventos: number
+  eventosEntregues: number
 }
 
 /** Toda chamada a `passo()` da guarda passa por aqui, e o AC 11 (e) e o AC 8 são conferidos em TODO passo. */
@@ -1637,28 +1647,33 @@ interface Condutor {
   /** debt.14, AC 4 — a rodada em curso já vista, e quantos `rodadaInicio` cada assento recebeu nela */
   rodadaVista: RodadaEmCurso | null
   inicios: Map<string, number>
+  /** e4.10, AC 8 — todo `e` recebido em `{t:'evento'}`, por assento, na ordem; e os assentos que já viram `encerrada` */
+  eventosRecebidos: Map<string, EventoPartida[]>
+  encerradas: Set<string>
 }
 
 function novoCondutor(sala: Sala, rotulo: string, problemas: string[]): Condutor {
   return {
     sala, hz: sala.config.snapshotHz, rotulo, problemas,
-    conf: { salas: 0, assentamentos: 0, visoes: 0, pelaFronteira: 0, transicoes: 0, rodadasFechadas: 0 },
-    rodadaVista: null, inicios: new Map(),
+    conf: { salas: 0, assentamentos: 0, visoes: 0, pelaFronteira: 0, transicoes: 0, rodadasFechadas: 0, passosComEventos: 0, eventosEntregues: 0 },
+    rodadaVista: null, inicios: new Map(), eventosRecebidos: new Map(), encerradas: new Set(),
   }
 }
 
 /**
  * `debt.14`, AC 4 (`E43-TST-002`) — a COBERTURA da entrega, não só a projeção de quem recebeu. Conta os envios
  * do passo POR TIPO e por assento (nunca a lista completa: `e4.10` acrescenta `{t:'evento'}` depois das visões):
- *  - passo em que `partida` muda de identidade e a sala termina `jogando` → pelo menos um `{t:'visao'}` a cada
- *    assento conectado (a queda no draft devolve a sala a `aguardando`, §6, e fica fora pela condição);
+ *  - passo em que `partida` muda de identidade e a sala termina fora de `aguardando` → pelo menos um `{t:'visao'}`
+ *    a cada assento conectado. Inclui o passo final, que termina `encerrada` e leva a visão com a fase `fim` e o
+ *    placar final (e4.10 AC 13, DEBT14-TST-001). A queda no draft devolve a sala a `aguardando` (§6) e fica fora
+ *    pela condição; o encerramento por `'anular'` não muda a `partida` e não conta;
  *  - passo que fecha rodada → exatamente um `rodadaFim` por rodada fechada a cada assento conectado, nenhum ao
  *    vago (R-02), e pelo menos um `rodadaInicio` na rodada a cada assento conectado (o reassentado recebe dois).
  */
 function conferirCobertura(c: Condutor, antes: Sala, porTipo: Map<string, Map<string, number>>, falha: (m: string) => void): void {
   const s = c.sala
   const conta = (k: string, t: string) => porTipo.get(k)?.get(t) ?? 0
-  if (s.partida !== antes.partida && s.fase === 'jogando') {
+  if (s.partida !== antes.partida && s.fase !== 'aguardando') {
     c.conf.transicoes++
     for (const j of JOGADORES_SALA) {
       const k = s.assentos[j]
@@ -1706,10 +1721,25 @@ function conduzir(c: Condutor, agora: number, entrada: EntradaDaSala[]): Envio[]
   const salasVistas = new Set<DoServidor>()
   const ultimaVisao = new Map<string, VisaoPartida>()
   const porTipo = new Map<string, Map<string, number>>()
+  // e4.10, AC 8 (c) — por assento, o tipo da mensagem anterior no passo, e os `e` recebidos no passo
+  const anterior = new Map<string, DoServidor['t']>()
+  const eventosNoPasso = new Map<string, EventoPartida[]>()
   for (const { assento, msg } of r.envios) {
     const m = porTipo.get(assento) ?? new Map<string, number>()
     m.set(msg.t, (m.get(msg.t) ?? 0) + 1)
     porTipo.set(assento, m)
+    if (msg.t === 'evento') {
+      const ant = anterior.get(assento)
+      if (ant !== 'visao' && ant !== 'evento') {
+        falha(`{t:'evento'} (${msg.e.t}) ao assento '${assento}' veio depois de ${ant === undefined ? 'nada' : `{t:'${ant}'}`} — os eventos saem num bloco logo depois da {t:'visao'} da transição (e4.10 AC 7, AC 8 c)`)
+      }
+      if (c.encerradas.has(assento)) falha(`{t:'evento'} (${msg.e.t}) ao assento '${assento}' depois do {t:'sala'} encerrada (e4.10 AC 7, AC 8 c)`)
+      const lista = eventosNoPasso.get(assento) ?? []
+      lista.push(msg.e)
+      eventosNoPasso.set(assento, lista)
+    }
+    if (msg.t === 'sala' && msg.estado === 'encerrada') c.encerradas.add(assento)
+    anterior.set(assento, msg.t)
     if (aguardando.has(assento)) {
       if (msg.t !== 'sala') falha(`primeiro envio ao assento recém-assentado '${assento}' foi {t:'${msg.t}'}, não {t:'sala'} (AC 11 e)`)
       aguardando.delete(assento)
@@ -1739,7 +1769,46 @@ function conduzir(c: Condutor, agora: number, entrada: EntradaDaSala[]): Envio[]
     }
   }
   conferirCobertura(c, antes, porTipo, falha)
+  conferirEventos(c, antes, eventosNoPasso, falha)
   return r.envios
+}
+
+/** e4.10, AC 7 — a regra do filtro, escrita de novo aqui (e não importada da sala), para a guarda poder discordar. */
+function visivelPara(j: Jogador): (e: EventoPartida) => boolean {
+  return (e) => !('jogador' in e) || e.jogador === j
+}
+
+/**
+ * `e4.10`, AC 8 (a, b) — em TODO passo de todo condutor: os `{t:'evento'}` que cada assento recebeu são,
+ * profundamente e na ordem, os eventos que o passo acrescentou a `Sala.eventos`, filtrados pela regra para o
+ * jogador daquele assento; o assento vago não recebe nenhum, e nenhuma chave fora dos assentos recebe. Passo sem
+ * evento novo (assentamento, reassentamento, recusa) não entrega nenhum: é a prova de "sem reenvio".
+ */
+function conferirEventos(c: Condutor, antes: Sala, eventosNoPasso: Map<string, EventoPartida[]>, falha: (m: string) => void): void {
+  const s = c.sala
+  // a queda no draft zera `Sala.eventos` (§6): aí tudo o que houver no log é do passo
+  const novos = s.eventos.length >= antes.eventos.length ? s.eventos.slice(antes.eventos.length) : s.eventos
+  if (novos.length > 0) c.conf.passosComEventos++
+  for (const k of eventosNoPasso.keys()) {
+    if (!s.assentos.includes(k)) falha(`{t:'evento'} endereçado a '${k}', que não ocupa assento (e4.10 AC 7)`)
+  }
+  for (const j of JOGADORES_SALA) {
+    const k = s.assentos[j]
+    if (k === null) continue
+    const recebidos = eventosNoPasso.get(k) ?? []
+    const esperados = s.conectados[j] ? novos.filter(visivelPara(j)) : []
+    if (!profundamenteIgual(recebidos, esperados)) {
+      falha(
+        `assento do jogador ${j} (${s.conectados[j] ? 'conectado' : 'vago'}) recebeu {t:'evento'} [${recebidos.map((e) => e.t).join(',')}] num passo que ` +
+          `produziu [${novos.map((e) => ('jogador' in e ? `${e.t}${e.jogador}` : e.t)).join(',')}]; esperado [${esperados.map((e) => e.t).join(',')}] ` +
+          '(sem jogador → os dois; com jogador → só o dono; nenhum ao vago nem em reenvio — e4.10 AC 7)',
+      )
+    }
+    c.conf.eventosEntregues += recebidos.length
+    const acumulado = c.eventosRecebidos.get(k) ?? []
+    acumulado.push(...recebidos)
+    c.eventosRecebidos.set(k, acumulado)
+  }
 }
 
 /** AC 16, caminho feliz — `parseDoCliente(JSON.parse(JSON.stringify(msg)))`, sempre. */
@@ -1795,6 +1864,9 @@ interface ResumoBo5 {
   mortaRecusada: boolean
   alheiaRecusada: boolean
   conf: ConferenciaDeEnvios
+  /** e4.10, AC 8 (a) — tamanho de `Sala.eventos` no fim, e quantos `{t:'evento'}` cada assento recebeu */
+  eventosLog: number
+  eventosPorAssento: [number, number]
 }
 
 function bo5PelaSala(g: PartidaGravada, problemas: string[]): ResumoBo5 {
@@ -1805,7 +1877,7 @@ function bo5PelaSala(g: PartidaGravada, problemas: string[]): ResumoBo5 {
   const resumo: ResumoBo5 = {
     seed: g.matchSeed, puladas: [], rodadas: 0, placar: '', vencedores: '', hashesIguais: 0, casts: 0, castsMortos: 0,
     snaps: 0, eventos: 0, foraDaCadencia: 0, rejeitadas: 0, prazo: false, reassentou: false, mortaRecusada: false,
-    alheiaRecusada: false, conf: c.conf,
+    alheiaRecusada: false, conf: c.conf, eventosLog: 0, eventosPorAssento: [0, 0],
   }
   let agora = T0_SALA
   conduzir(c, agora, [{ assento: K0, conexao: 'assentou' }])
@@ -1941,6 +2013,25 @@ function bo5PelaSala(g: PartidaGravada, problemas: string[]): ResumoBo5 {
   if (!resumo.reassentou) falha('a Bo5 não exercitou o reassentamento no meio de uma rodada (AC 11 e)')
   if (!resumo.mortaRecusada) falha('a Bo5 não exercitou o cast de bola morta (AC 6)')
   if (!resumo.alheiaRecusada) falha('a Bo5 não exercitou a decisão com d.jogador alheio (AC 16)')
+  // e4.10, AC 8 (a, c) — a partida inteira: cada assento recebeu Sala.eventos filtrado para o jogador dele, na
+  // ordem, e o partidaFim chegou aos dois antes do {t:'sala'} encerrada (`conduzir` proíbe evento depois dele)
+  const log = c.sala.eventos
+  for (const j of JOGADORES_SALA) {
+    const k = CHAVES_SALA[j]
+    const recebidos = c.eventosRecebidos.get(k) ?? []
+    const esperados = log.filter(visivelPara(j))
+    if (!profundamenteIgual(recebidos, esperados)) {
+      falha(`o assento do jogador ${j} recebeu ${recebidos.length} {t:'evento'} [${recebidos.map((e) => e.t).join(',')}], esperado Sala.eventos filtrado: ${esperados.length} [${esperados.map((e) => e.t).join(',')}] (e4.10 AC 8 a)`)
+    }
+    if (!recebidos.some((e) => e.t === 'partidaFim') || !c.encerradas.has(k)) {
+      falha(`o assento do jogador ${j} não recebeu o partidaFim antes do {t:'sala'} encerrada (e4.10 AC 7, AC 8 c)`)
+    }
+    resumo.eventosPorAssento[j] = recebidos.length
+  }
+  if (!log.some((e) => 'jogador' in e) || !log.some((e) => !('jogador' in e))) {
+    falha(`canário: Sala.eventos da Bo5 [${log.map((e) => e.t).join(',')}] não tem evento com jogador E sem jogador — o filtro não seria medido (e4.10 AC 8 a)`)
+  }
+  resumo.eventosLog = log.length
   resumo.rodadas = h.length
   resumo.placar = placarSala.join('-')
   resumo.vencedores = h.map((x) => x.vencedor).join(' ')
@@ -2190,7 +2281,7 @@ function salaNegativos(problemas: string[]): { linha: string; conf: ConferenciaD
     const tipos = wo.map((e) => `${e.assento === K0 ? 0 : 1}:${e.msg.t}`).join(',')
     const hist = c.sala.partida.historico[0]
     const woOk =
-      tipos === '0:snap,0:rodadaFim,0:visao' && hist !== undefined && hist.vencedor === 0 && c.sala.partida.fase === 'loja' && c.sala.pausa?.desde === agora
+      tipos === '0:snap,0:rodadaFim,0:visao,0:evento' && hist !== undefined && hist.vencedor === 0 && c.sala.partida.fase === 'loja' && c.sala.pausa?.desde === agora
     if (!woOk) {
       falha(`W.O. de R-02 na rodada: envios [${tipos}], vencedor ${hist?.vencedor}, fase ${c.sala.partida.fase}, nova pausa ${c.sala.pausa?.desde} (AC 13)`)
     }
@@ -2243,7 +2334,7 @@ function salaNegativos(problemas: string[]): { linha: string; conf: ConferenciaD
  *    (iii) queda em `builds` (nos primeiros 10 s, antes de o prazo de R-02 alcançar o de RF-04) e na `loja`
  *    abrindo a pausa por conta própria, com o W.O. da fase no estouro.
  */
-function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas: string; conf: ConferenciaDeEnvios[] } {
+function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas: string; eventos: string; conf: ConferenciaDeEnvios[] } {
   const falha = (m: string) => anotar(problemas, `  ✗ sala debt.14: ${m}`)
   const [K0, K1] = CHAVES_SALA
   const confs: ConferenciaDeEnvios[] = []
@@ -2269,7 +2360,7 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
   }
   /** AC 3 — recusa pelo assento alheio (1 {t:'erro'} só a ele, estado intacto, log intacto) e controle positivo */
   const aceitas: string[] = []
-  const recusaEControle = (c: Condutor, d: Decisao, agora: number): void => {
+  const recusaEControle = (c: Condutor, d: Decisao, agora: number): Envio[] => {
     const dono = CHAVES_SALA[d.jogador]
     const alheio = CHAVES_SALA[d.jogador === 0 ? 1 : 0]
     const p = c.sala.partida
@@ -2277,24 +2368,28 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
     const oraculo = aplicar(p, d).erro
     if (oraculo !== undefined) {
       falha(`${d.t}/j${d.jogador} num momento em que aplicar() já recusaria (${oraculo}) — o caso não testaria a checagem da sala (AC 3)`)
-      return
+      return []
     }
     const env = decidirPor(c, alheio, d, agora)
     if (c.sala.partida !== p || c.sala.decisoes.length !== nLog) {
       falha(`${d.t} em nome do jogador ${d.jogador} vinda do assento do outro chegou a aplicar() / mudou o estado (AC 3)`)
-      return
+      return []
     }
     if (env.length !== 1 || env[0].msg.t !== 'erro' || env[0].assento !== alheio) {
       falha(`${d.t} com d.jogador alheio: esperado 1 {t:'erro'} só ao remetente, veio ${JSON.stringify(env.map((e) => [e.assento, e.msg.t]))} (AC 3)`)
-      return
+      return []
     }
     const env2 = decidirPor(c, dono, d, agora)
     if (c.sala.partida === p || errosPara(env2).length !== 0 || c.sala.decisoes.length !== nLog + 1) {
       falha(`controle positivo: ${d.t}/j${d.jogador} do assento DONO não foi aceita (partida ${c.sala.partida === p ? 'intacta' : 'mudou'}, ${errosPara(env2).length} erro(s)) (AC 3)`)
-      return
+      return []
     }
     aceitas.push(d.t)
+    return env2
   }
+  /** e4.10, AC 8 (b) — os `{t:'evento'}` de um passo, por assento, como `assento:tipoJogador` */
+  const eventosDoPasso = (env: Envio[]) =>
+    env.flatMap((e) => (e.msg.t === 'evento' ? [`${e.assento === K0 ? 0 : 1}:${e.msg.e.t}${'jogador' in e.msg.e ? e.msg.e.jogador : ''}`] : [])).join(',')
 
   // ---- AC 3, fase builds (a única janela): build e buildPadrao do jogador 1, depois pronto do 0 abre a rodada 0
   const v = nova('variantes', { tetoDeTicks: TETO })
@@ -2331,6 +2426,7 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
   }
 
   // ---- AC 3, fase loja: a primeira loja em que aplicar() aceita a compra do jogador 1 E a troca do jogador 0
+  let trocaTxt = 'trocaDeBuild ✗'
   const compra: Decisao = { t: 'compra', jogador: 1, slot: 0, itemId: 'chumbo' }
   const troca: Decisao = { t: 'trocaDeBuild', jogador: 0, slot: 0, abilityIndex: 1, passiveIndex: 0 }
   const aceitaria = (d: Decisao) => aplicar(v.sala.partida, d).erro === undefined
@@ -2353,7 +2449,12 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
   } else {
     agora += 100
     recusaEControle(v, compra, agora)
-    recusaEControle(v, troca, agora)
+    const envTroca = recusaEControle(v, troca, agora)
+    // e4.10, AC 8 (b) — a seed 1 da Bo5 não tem trocaDeBuild (M-5): o controle positivo acima é o sintético
+    const eventosTroca = eventosDoPasso(envTroca)
+    if (eventosTroca !== '0:trocaDeBuild0') {
+      falha(`trocaDeBuild do jogador 0: {t:'evento'} no passo [${eventosTroca}], esperado [0:trocaDeBuild0] — só ao assento dono (e4.10 AC 8 b)`)
+    } else trocaTxt = 'trocaDeBuild sintético (loja) → só ao assento dono'
     recusaEControle(v, { t: 'pronto', jogador: 1 }, agora)
   }
 
@@ -2394,8 +2495,17 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
   conduzir(b, tQueda + prazoR02 - 1, [])
   const intactoB = b.sala.partida === pB
   const tWo = tQueda + prazoR02
-  conduzir(b, tWo, [])
+  const nEventosB = b.sala.eventos.length
+  const envWo = conduzir(b, tWo, [])
   const ultB = b.sala.decisoes[b.sala.decisoes.length - 1]
+  // e4.10, AC 8 (b) — M-6 da §11.6.2: o buildPadrao do ausente entra no log, e o presente (não pronto) recebe ZERO
+  // {t:'evento'} no passo; um broadcast contaria a ele a build secreta do oponente antes da largada
+  let m6Txt = 'M-6 ✗'
+  const novosB = b.sala.eventos.slice(nEventosB).map((e) => ('jogador' in e ? `${e.t}${e.jogador}` : e.t)).join(',')
+  const eventosWo = eventosDoPasso(envWo)
+  if (novosB !== 'buildPadrao1' || eventosWo !== '' || b.sala.conectados[1] || b.sala.partida.prontos[0]) {
+    falha(`M-6: o W.O. de builds pôs [${novosB}] em Sala.eventos (esperado [buildPadrao1]) e entregou {t:'evento'} [${eventosWo}] (esperado nenhum ao presente não pronto) (e4.10 AC 8 b)`)
+  } else m6Txt = "M-6: W.O. em builds põe o buildPadrao do ausente no log e 0 {t:'evento'} ao presente não pronto"
   const woB = ultB?.t === 'buildPadrao' && ultB.jogador === 1 && b.sala.partida.fase === 'builds' && b.sala.partida.prontos[1] && !b.sala.partida.prontos[0] && tWo < prazoB
   if (!abriuB || !intactoB || !woB) {
     falha(`queda em builds: pausa aberta pela queda ${abriuB}, estado intacto antes do prazo ${intactoB}, W.O. ${JSON.stringify(ultB)} fase ${b.sala.partida.fase} (AC 5 iii)`)
@@ -2411,7 +2521,7 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
   const variantes = `d.jogador alheio recusado com 1 {t:'erro'} só ao remetente, estado e log intactos, num estado em que aplicar() aceitaria, ` +
     `com controle positivo do assento dono: ${aceitas.join(', ')} (${aceitas.length}/6 casos; compra e trocaDeBuild na ${lojas}ª loja, ouro [${ouro}], sala descartável) · draft na Bo5`
   const bordas = `${tetoTxt} · ${prazoTxt} · queda sem pausa anterior abre a pausa sozinha: ${buildsTxt}; ${lojaTxt}`
-  return { variantes, bordas, conf: confs }
+  return { variantes, bordas, eventos: `${m6Txt} · ${trocaTxt}`, conf: confs }
 }
 
 function guardaSala(): { linhas: string[]; problemas: string[] } {
@@ -2446,6 +2556,15 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
   const vb = salaVariantesEBordas(problemas)
   const confs = [b.conf, ...neg.conf, ...vb.conf]
   const soma = (k: keyof ConferenciaDeEnvios) => confs.reduce((s, x) => s + x[k], 0)
+  // e4.10, AC 13 (b) — piso da cobertura (DEBT14-TST-002): sem ele, uma conferência que parasse de contar (ou a
+  // condição de volta a `jogando`, que pula o passo final) sairia ✓ com menos transições
+  const PISO_TRANSICOES = 53
+  const PISO_RODADAS_FECHADAS = 6
+  if (soma('transicoes') < PISO_TRANSICOES || soma('rodadasFechadas') < PISO_RODADAS_FECHADAS) {
+    problemas.push(
+      `  ✗ sala cobertura: ${soma('transicoes')} transição(ões) (piso ${PISO_TRANSICOES}) e ${soma('rodadasFechadas')} rodada(s) fechada(s) (piso ${PISO_RODADAS_FECHADAS}) — a conferência por assento deixou de ver passos (e4.10 AC 13, DEBT14-TST-002)`,
+    )
+  }
   const ok = (n: number) => (problemas.length === 0 && n === 0 ? '✓' : '✗')
   linhas.push(
     `sala pura      ${problemas.length === 0 ? '✓ ok' : '✗ falhou'} — net/sala.ts: a Bo5 inteira por passo() reproduz tools/partida.ts; a sala não acrescenta regra de jogo (e4.3)`,
@@ -2460,9 +2579,13 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
       '(parseDoCliente(JSON.parse(JSON.stringify(msg))), AC 16)',
     neg.linha,
     `  por variante ${ok(0)} ${vb.variantes} (debt.14, E43-TST-001)`,
-    `  cobertura    ${ok(0)} ${soma('transicoes')} transição(ões) de partida com a sala jogando → ≥1 {t:'visao'} a cada assento conectado · ${soma('rodadasFechadas')} rodada(s) fechada(s): ` +
+    `  cobertura    ${ok(0)} ${soma('transicoes')} transição(ões) de partida com a sala fora de aguardando → ≥1 {t:'visao'} a cada assento conectado · ${soma('rodadasFechadas')} rodada(s) fechada(s): ` +
       "1 rodadaFim a cada assento conectado e nenhum ao vago, ≥1 rodadaInicio na rodada (reassentado: o da largada + o da volta) · queda no draft → só {t:'sala'} (§6) · contagem por tipo e por assento (debt.14, E43-TST-002)",
     `  bordas       ${ok(0)} ${vb.bordas} (debt.14, E43-TST-003)`,
+    `  eventos      ${ok(0)} Bo5: ${b.eventosLog} EventoPartida em Sala.eventos → ${b.eventosPorAssento[0]} {t:'evento'} ao assento do jogador 0 e ${b.eventosPorAssento[1]} ao do 1, ` +
+      `= o log filtrado (sem jogador → os dois; com jogador → só o dono), na ordem · em todo passo de ${confs.length} sala(s): os {t:'evento'} de cada assento = os eventos novos ` +
+      `do passo filtrados (${soma('passosComEventos')} passo(s) com evento, ${soma('eventosEntregues')} entregues), nenhum ao vago nem no (re)assentamento · bloco logo depois da ` +
+      `{t:'visao'}, nenhum depois do encerrada, partidaFim antes do encerrada aos 2 · ${vb.eventos} (e4.10, §11.6.2)`,
   )
   return { linhas, problemas }
 }

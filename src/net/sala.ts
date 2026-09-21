@@ -338,6 +338,22 @@ function enviarVisao(n: Sala, envios: Envio[]): void {
   paraCadaAssento(n, (j, chave) => envios.push({ assento: chave, msg: { t: 'visao', v: visaoPara(n.partida, j) } }))
 }
 
+/**
+ * `e4.10` (§11.6.2, Decisão 1) — os eventos de UMA transição, um `{t:'evento'}` por evento, na ordem de
+ * `Transicao.eventos`, com o filtro de segredo numa regra só: o assento do jogador `j` recebe `e` se e só
+ * se `e` não tem `jogador` (`rodadaFim`, `partidaFim` → os dois) ou `e.jogador === j` (`compra`,
+ * `trocaDeBuild`, `buildPadrao` → só o dono; o `buildPadrao` diz a build secreta, RF-04/M-6). Chamada
+ * logo depois de `enviarVisao` em `decidir` e em `encerrarRodada`, antes de `sincronizar`, e em nenhum
+ * outro lugar: nem no primeiro assentamento, nem no reassentamento (sem reenvio — a `visao` reconstrói).
+ */
+function enviarEventos(n: Sala, eventos: readonly EventoPartida[], envios: Envio[]): void {
+  for (const e of eventos) {
+    paraCadaAssento(n, (j, chave) => {
+      if (!('jogador' in e) || e.jogador === j) envios.push({ assento: chave, msg: { t: 'evento', e } })
+    })
+  }
+}
+
 /** Mensagens sem segredo (o mundo é o mesmo para os dois), ainda assim endereçadas assento a assento. */
 function enviarAosDois(n: Sala, envios: Envio[], msg: DoServidor): void {
   paraCadaAssento(n, (_, chave) => envios.push({ assento: chave, msg }))
@@ -519,6 +535,7 @@ function decidir(n: Sala, d: Decisao, agora: number, envios: Envio[], remetente:
   n.partida = t.estado
   n.eventos.push(...t.eventos)
   enviarVisao(n, envios)
+  enviarEventos(n, t.eventos, envios)
   sincronizar(n, agora, envios)
 }
 
@@ -609,6 +626,7 @@ function encerrarRodada(n: Sala, r: RodadaEmCurso, vencedor: Jogador | -1, agora
   n.eventos.push(...t.eventos)
   enviarAosDois(n, envios, { t: 'rodadaFim', resultado })
   enviarVisao(n, envios)
+  enviarEventos(n, t.eventos, envios)
   sincronizar(n, agora, envios)
 }
 

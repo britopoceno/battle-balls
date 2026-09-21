@@ -402,6 +402,7 @@ const T_DO_SERVIDOR = {
   rodadaFim: true,
   erro: true,
   ping: true,
+  evento: true,
 } as const satisfies Record<DoServidor['t'], true>
 
 /**
