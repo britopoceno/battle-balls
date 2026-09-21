@@ -1,0 +1,269 @@
+schema: 1
+story: 'debt.11'
+story_title: 'Guarda automática da telemetria no `sim:check` — achado `DEBT10-TST-001`'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 13 ACs estão MET, e DEBT10-TST-001 está fechado: as 4 mutações que o gate de debt.10 mostrou
+  invisíveis agora reprovam o sim:check. Conferi tudo do zero, sem confiar no Dev Agent Record. check,
+  sim:check e build saíram com exit 0, e o golden hash ficou idêntico. O diff da saída inteira do
+  sim:check contra um worktree de 971686b^ (f8be842) é um único bloco `55a56,58`, só com `>`. Os
+  greps do AC 11 dão exatamente os 2 arquivos. As provas (a), (b) e (c) do AC 4 batem byte a byte no
+  Node v24.13.1. Reapliquei as 6 mutações da story (M1, M1b, M2, M3, MR1 e as duas formas de MR2), e
+  todas saíram com exit 1. Das minhas 14 mutações, as 10 nocivas que estão dentro do alcance declarado
+  foram pegas, e a benigna (formato de número) passou verde, como o R5 exige. Um script meu importou a
+  guarda, comparou 219 descritores próprios antes e depois e não achou nenhum vazamento atribuível a
+  ela. Fica em CONCERNS, e não PASS, por um MEDIUM de alcance (DEBT11-TST-001). A guarda confere que o
+  carimbo EXISTE e é finito, não que ele tem o valor CERTO. Com `registrar()` gravando
+  `atrasoTicks: 0, escalaHp: 1` literais, o sim:check sai com 0. Isso rotula errado a população, que é
+  exatamente a contaminação da evidência de debt.9 e de P4.4 que a story existe para impedir. A
+  correção é barata e cabe nas setas já declaradas. Há ainda um LOW com dono.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:971686b (implementação). `git show --stat 971686b` lista 4 arquivos, todos da lista fechada
+  do AC 10: src/tools/guarda-telemetria.ts (novo, +322), src/tools/determinism.ts (+12),
+  src/tools/telemetria.ts (+1/−1) e docs/evidence/telemetria/README.md (+2/−2). src/client/telemetria.ts
+  tem zero linhas, porque DEBT10-COD-003 não entrou. package.json, sim/, match/, net/ e os outros
+  arquivos de tools/ também têm zero. 8e027cb (registro do @dev) toca só a story. `git diff --quiet
+  971686b HEAD -- src` deu rc=0 no HEAD bed4603, que é um commit do @architect só em architecture-e4.md.
+  971686b NÃO está em origin/master (merge-base --is-ancestor rc=1), então é commit local e não
+  publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Na árvore principal (src/ idêntico a 971686b), `npm run check`, `npm run sim:check` e
+      `npm run build` deram rc=0. O bundle ficou com 53.27 kB, e nenhum arquivo de client/ importa a
+      guarda nem tools/telemetria.ts: o grep só casa comentários. Rodei `node src/tools/determinism.ts`
+      num worktree descartável de 971686b^ (f8be842), com rc=0. As duas execuções têm stderr de 0 bytes,
+      e "golden hash ✓ ok — 6 seeds batem o baseline" está idêntica. O `diff` das duas saídas inteiras
+      é um único bloco `55a56,58`, depois da última linha existente: `telemetria ✓ ok`, `globais ✓ ok` e
+      uma linha em branco. Nenhuma linha existente mudou nem trocou de lugar. A saída não tem nenhuma
+      linha `[telemetria]` solta, e os 3 avisos (1 de ler() e 2 de agregar()) ficaram capturados.
+  - id: 'Casa e molde (AC 3)'
+    verdict: PASS
+    evidence: >-
+      `verificarTelemetria(): { linhas: string[]; problemas: string[] }` está exportada, e o corpo roda em
+      try/catch/finally. O diff de determinism.ts tem exatamente quatro peças: o import de
+      ./guarda-telemetria.ts, a chamada logo depois de verificarPartida(), o `for … console.log(linha)`
+      depois do último `console.log('')` e um bloco `if (problemasTelemetria.length > 0) { for … ;
+      throw }` no fim, no padrão dos outros. Não há import de client/ nem de tools/telemetria.ts em
+      determinism.ts. Prova de que a guarda não lança: com a mutação Q5 (registrar() lança), o
+      sim:check sai com 1 e imprime "✗ telemetria: a guarda lançou — registrar quebrado". O stack não
+      vaza, e os 6 globais voltam.
+  - id: 'Guarda de entrada (AC 4), Node v24.13.1'
+    verdict: PASS
+    evidence: >-
+      A forma usada é `if (import.meta.main) main()`, a única linha de corpo alterada.
+      (a) `node --input-type=module -e "await import('./src/tools/telemetria.ts')"` imprime "vivo
+      function" com rc=0. (b) `node src/tools/telemetria.ts` sem argumento sai com rc=1, e o stdout e o
+      stderr (`uso: node src/tools/telemetria.ts <arquivo.json>`) são byte a byte iguais (cmp) aos do
+      worktree de f8be842. (c) Os 5 exports de docs/evidence/telemetria/ (…1785815023371, …1785816621271,
+      …1785908807719, …1785909111972, …1785909682703) saem com rc=0 nos dois lados, e o stdout (19 linhas
+      cada) e o stderr são idênticos por cmp.
+  - id: 'Coletor real e restauração dos globais (AC 5 com P1–P3)'
+    verdict: PASS
+    evidence: >-
+      Por leitura: a guarda chama criarTelemetria(), registrar(901, …) e exportar() do client/telemetria.ts
+      real, com um localStorage falso que já tem 1 evento sem carimbo (partida 900) sob CHAVE. As duas
+      direções são afirmadas sobre o JSON que sai do Blob falso, e os eventos são identificados por
+      `partida`, não por índice. P1: são 6 pares (objeto, chave), `console.warn`,
+      `globalThis.localStorage`, `globalThis.document`, `globalThis.Blob`, `URL.createObjectURL` e
+      `URL.revokeObjectURL`. P3: `originais` é capturado inteiro (linha 174) antes do laço de
+      instalação. `instalar` cria sempre com `configurable: true`, e `mesmoDescritor` compara presença
+      e `Object.is` nos 6 campos, sem JSON.stringify. O finally desfaz em ordem inversa só o que foi
+      instalado: com descritor, `defineProperty(original)`; ausente, `Reflect.deleteProperty`, e um
+      `false` vira problema. A conferência roda depois do finally. P2: no Node do projeto, 4 pares caem
+      no ramo "tinha descritor" (console.warn, Blob e os dois de URL), e um canário acusa se nenhum cair.
+      Prova externa: um script meu no scratchpad tirou um snapshot dos descritores próprios de
+      globalThis, URL, console, Blob, Blob.prototype e URL.prototype (219 chaves), importou a guarda e
+      rodou verificarTelemetria(). A comparação campo a campo do depois deu uma única divergência,
+      `Symbol(undici.globalDispatcher.1)`, e dois controles (o mesmo script sem a chamada, e sem nem o
+      import) mostram a mesma divergência: é artefato do meu script, não da guarda. console.warn, Blob e
+      URL.createObjectURL voltam com a MESMA identidade. localStorage e document voltam a ausentes.
+      `new Blob(['x']).text()` funciona depois. Uma segunda execução seguida também dá 0 problemas.
+  - id: 'Fixture em código (AC 6) e definição única (AC 8, R6)'
+    verdict: PASS
+    evidence: >-
+      O FIXTURE é `readonly` em guarda-telemetria.ts: (6, 6) com n=3, (0, 6) com n=2 e 2 sem carimbo (um
+      sem os campos, um com null). O n combinado é 7, e nenhuma população tem 7. O único predicado é
+      `semCarimbo = !Number.isFinite(atraso) || !Number.isFinite(escala)`, o mesmo de populacaoDe(). A
+      asserção "eventos 2 ·" é sobre a população desconhecida de agregar(), que já usa essa definição.
+      Sobre ler(), a guarda só afirma que ele avisou (`avisosDeLer === 0` vira problema), nunca a
+      contagem. O evento com null entra só no agregar(), não no ler(). Ver
+      avaliacoes_pedidas.cod_003_e_r6.
+  - id: 'As 6 mutações da story (AC 7), reaplicadas em worktree descartável de 971686b'
+    verdict: PASS
+    evidence: >-
+      O script aplica cada substituição exatamente uma vez (aborta se não casar 1x, por causa do CRLF),
+      mostra o `git diff --shortstat`, roda o sim:check e restaura com `git checkout -- src`. `git status`
+      do worktree ficou vazio no fim. M1 ({ ...e, partida }): exit 1, "2 evento(s) novo(s) sem
+      atrasoTicks/escalaHp finitos … (M1)". M1b (M1 mais o carimbo no exportar()): exit 1, "o evento
+      antigo saiu carimbado no export … (M1b)". M2 (`?? 0` / `?? 1` no início de populacaoDe()): exit 1,
+      "0 população(ões) desconhecida" e "agregar() não avisou". M3 (`return agregarPopulacao(eventos)`):
+      exit 1, com 5 problemas, incluindo "1 bloco(s) P3.1 e 0 rótulo(s)" e "n combinado (7)". MR1
+      (restaurar() sempre com delete): exit 1, com console.warn, Blob, createObjectURL e revokeObjectURL
+      "não voltou … (tinha descritor próprio)". MR2a (`defineProperty` com value: undefined) e MR2b
+      (`= undefined`): exit 1, com localStorage e document "não voltou … (estava ausente)".
+  - id: 'Mutações próprias (14, diferentes das 6 da story)'
+    verdict: CONCERNS
+    evidence: >-
+      PEGAS (10 nocivas): Q2, ler() reescrevendo o acúmulo com o carimbo de hoje: exit 1 (M1b). Q3,
+      exportar() carimbando só o que falta (`{ atrasoTicks, escalaHp, ...e }`): exit 1 (M1b). Q4, o Blob
+      falso vazando (o finally pula 'Blob'): exit 1, "globalThis.Blob não voltou". Q5, registrar()
+      lançando: exit 1, "a guarda lançou", sem stack. Q6, o predicado `!== undefined` de ler()
+      transplantado para populacaoDe(): exit 1, porque o null vira uma 4ª população ("4 bloco(s)") e a
+      desconhecida abre com "eventos 1". Q7, partição só no rótulo (agregarPopulacao(eventos) em vez de
+      g.eventos): exit 1, "n combinado (7)" e "eventos 7". Q8, console.warn fora da lista de trocas:
+      exit 1, porque "ler() não avisou" e as linhas [telemetria] aparecem soltas. Q10, carimbo só com
+      escalaHp: exit 1 (M1). Q11, restauração com `{ ...original, enumerable: true }`: exit 1, "Blob não
+      voltou". Q14, a linha de seção removida de determinism.ts mais M1: exit 1, porque o bloco throw
+      imprime os problemas sozinho.
+      BENIGNA, deve passar (1): Q1, formato de número em agregarPopulacao() (`toFixed(1)` → `toFixed(3)`
+      e " s"): exit 0. É a prova de que as asserções leem rótulo e cabeçalho, não número formatado (R5).
+      NÃO PEGAS (3): Q12, registrar() com `atrasoTicks: 0, escalaHp: 1` literais: exit 0 → DEBT11-TST-001.
+      Q13, `atrasoTicks ?? 0` só no atraso: exit 0 → DEBT11-TST-002. Q9, o bloco throw desligado
+      (`if (false && …)`) mais M1: exit 0, com a linha "telemetria ✗ 1 problema(s)" impressa. É a mesma
+      propriedade de toda seção de determinism.ts: o call site não se protege sozinho. Nenhuma ação,
+      ver observacoes.
+  - id: 'Seta tools/ → client/ (AC 11)'
+    verdict: PASS
+    evidence: >-
+      `grep -rn "from '\.\./client/" src/tools/` deu 3 linhas: guarda-telemetria.ts:1 → client/telemetria.ts
+      (CHAVE, criarTelemetria e os tipos numa linha só), e telemetria.ts:2 → client/input.ts e :3 →
+      client/telemetria.ts (import type), as duas sem mudança. `grep -rln` com o mesmo padrão devolveu
+      exatamente src/tools/guarda-telemetria.ts e src/tools/telemetria.ts. determinism.ts, harness.ts e
+      partida.ts não aparecem. Não há ciclo: client/telemetria.ts importa só chars/tuning,
+      match/index (tipo) e net/protocolo. Nenhum arquivo de client/ importa tools/telemetria.ts nem a
+      guarda.
+  - id: 'Escopo (AC 10), sequência (AC 12) e prazo (AC 13)'
+    verdict: PASS
+    evidence: >-
+      O --stat está dentro da lista fechada, como descrito em reviewed_revision. O commit de
+      implementação de e4.8 (910add8) é ancestral de 971686b (merge-base rc=0). O pai f8be842 é do @po e
+      toca só 5 stories (e4.3, e4.4, e4.6, e4.7, e4.8), sem nenhum arquivo de src/, então o "antes" que o
+      @dev mediu em 438740b tem o mesmo src/ do meu "antes" em f8be842. e4.3 não começou. Pelo AC 13, a
+      emenda de e4.7 é do @po e não condiciona o fechamento.
+  - id: 'README (AC 9, DEBT10-DOC-002)'
+    verdict: PASS
+    evidence: >-
+      A linha b8e8a41 ganhou a condição "só para um bundle que contém b8e8a41 e não contém o commit de
+      debt.10", com a janela vazia no build publicado e existente só em dev server local. A linha debt.10
+      ganhou "2026-09-21 03:58:44", que é a hora de 3de1cfe (git log --date=iso). Conferi a premissa do
+      "mesmo push" no remoto: b8e8a41 e 3de1cfe NÃO estão em origin/master, cujo último push foi em
+      2026-08-16 (44311f6). b8e8a41 é ancestral de 3de1cfe, e a história é linear, então um push de
+      master leva os dois juntos. O placeholder do hash ficou, e está certo: o AC pede a hora, e o
+      comando citado resolve para 3de1cfe.
+
+top_issues:
+  - id: 'DEBT11-TST-001'
+    severity: medium
+    category: tests
+    owner: '@dev (rota pelo @po; prazo: o de R10, antes da primeira coleta usada como evidência de debt.9 ou de P4.4/e4.7)'
+    finding: >-
+      A guarda afirma que o carimbo dos eventos novos EXISTE e é finito, não que ele tem o VALOR que o
+      build aplica. Com `eventos.push({ ...e, partida, atrasoTicks: 0, escalaHp: 1 })` em registrar()
+      (Q12), o sim:check sai com 0. Um build com atraso 6 passaria a gravar eventos rotulados "atraso 0
+      · ESCALA_HP ×1", e o agregador os reportaria como uma população conhecida e plausível, sem aviso.
+      É a contaminação que debt.9 (pré-condição b) e o baseline de P4.4 não podem receber, e que a
+      story existe para pegar. O AC 5 pede só "finitos", então o AC está cumprido e isto é alcance, não
+      desvio. É o mesmo padrão de E48-TST-001: a guarda cobre a lista de mutações do AC, não a
+      propriedade vizinha. Observação: hoje ATRASO_ALVO_TICKS = 6 e ESCALA_HP = 6.0, então um carimbo
+      com os dois campos TROCADOS é invisível até para uma checagem de valor, enquanto os dois valores
+      forem iguais.
+    suggested_action: >-
+      Uma asserção a mais em guarda-telemetria.ts: todo evento novo no export tem
+      `atrasoTicks === ATRASO_ALVO_TICKS` e `escalaHp === ESCALA_HP`, importados de net/protocolo.ts e de
+      chars/tuning.ts. As duas setas já estão declaradas: tools/ → net/ desde e4.2 (§2.2) e tools/ →
+      chars/ desde sempre. Nenhuma seta nova para client/ é criada, e o AC 11 continua valendo.
+      Conferir no próprio diff que Q12 reprova. O comentário de populacaoDe() em tools/telemetria.ts
+      ("tools/ → net/ não existe na tabela de camadas") ficou desatualizado desde e4.2. O motivo que ele
+      dá continua certo (o agregador lê o valor gravado, não a constante de hoje), mas a frase sobre a
+      seta deve ser corrigida quando alguém tocar no arquivo. Cabe como item pequeno da próxima story
+      que abrir guarda-telemetria.ts, ou numa debt própria. Sem isso, o @po deve registrar na
+      pré-condição de coleta de e4.7 e debt.9 que o valor do carimbo não é guardado.
+  - id: 'DEBT11-TST-002'
+    severity: low
+    category: tests
+    owner: '@dev (opcional, junto com DEBT11-TST-001)'
+    finding: >-
+      Os 2 eventos sem carimbo do fixture não têm os DOIS campos: um não tem nenhum e o outro tem os dois
+      null. Por isso uma M2 parcial (`atrasoTicks ?? 0` só no atraso, Q13) passa verde: a escala
+      continua ausente e o evento continua desconhecido. Hoje o efeito real é nulo. O coletor grava os
+      dois campos juntos, e o acúmulo antigo não tem nenhum, então só um arquivo editado à mão teria
+      carimbo parcial.
+    suggested_action: >-
+      Acrescentar ao FIXTURE um evento com `{ escalaHp: 6 }` sem atrasoTicks (e/ou o inverso), que deve
+      cair na desconhecida. O cabeçalho esperado passa a ser "eventos 3 ·". Barato, e fecha a M2 campo a
+      campo.
+
+avaliacoes_pedidas:
+  blob_substituido: >-
+    Coberto pela mesma disciplina, e aceitável. `globalThis.Blob` é o 4º item de `trocas`. O descritor
+    dele é capturado antes da primeira instalação junto com os outros, e ele cai no ramo "tinha
+    descritor" (value, writable true, enumerable false, configurable true no Node 24.13.1). Por isso é
+    restaurado com defineProperty(original) e conferido campo a campo depois do finally. Provei as
+    duas direções. Um vazamento dele (Q4) e uma restauração com o atributo errado (Q11) reprovam o
+    sim:check. No meu script externo, `globalThis.Blob === BlobAntes` e `new Blob(['x']).text()`
+    funcionam depois. O R3 não o lista pelo nome, mas o AC 5 diz "todo global instalado (…
+    `localStorage`, `document`, etc., e qualquer propriedade de global nativo trocada …)" e "para cada
+    par … e qualquer outro". O Blob é exatamente "qualquer propriedade de global nativo trocada". O
+    motivo é bom: Blob.text() é assíncrono, e trocá-lo mantém verificarTelemetria() síncrona, no molde
+    de verificarPartida. Se um Node futuro tornar Blob não configurável, instalar() lança, o catch
+    reporta, e o que já foi instalado é desfeito. A falha é alta, não calada. Um risco menor, que não
+    vira achado: se baixar() passar a montar o Blob com bytes em vez de string, `String(parte)` gera
+    lixo, e JSON.parse lança dentro do try. É um falso alarme alto, nunca um verde falso.
+  cod_003_e_r6: >-
+    Consistente. O R6/AC 8 diz, literalmente, que se DEBT10-COD-003 não entrar, "a guarda não afirma nada
+    sobre a contagem de ler() para null/string". A guarda cumpre: sobre ler(), só `avisosDeLer === 0`
+    vira problema, que é presença do aviso e não contagem. O evento antigo do cenário do coletor não
+    tem os campos (undefined), e nele as duas definições concordam. O evento com null do fixture vai
+    só para o agregar(). A asserção "eventos 2 ·" é sobre a população desconhecida do agregar(), que já
+    usa `!Number.isFinite`, a definição que o R6 fixa. O "3 console.warn capturado(s)" da linha de
+    status é impresso, não afirmado. Q6 mostra que a definição fixada tem dente: transplantar o
+    `!== undefined` de ler() para o agregador reprova. DEBT10-COD-003 continua aberto, como low opcional
+    do gate de debt.10.
+  dois_commits_e_pai_f8be842: >-
+    Aceitável, e exigido pela letra, como em e4.8. A lista fechada do AC 10 não inclui a story, e o AC
+    12 manda conferir o escopo por `git show --stat` do commit próprio. Um commit único com a story
+    poria um 5º arquivo fora da lista. 971686b tem só os 4 permitidos, e 8e027cb só a story, nas
+    seções do @dev (checkboxes, Dev Agent Record, File List, Change Log e Status), com AC e escopo
+    intocados. O pai ser f8be842 (@po), e não o commit do gate de e4.8, não afeta nada. Ele toca só
+    stories, então o src/ de 971686b^ é idêntico ao de 438740b, a base que o @dev declarou. Por isso a
+    minha comparação contra 971686b^ e a dele contra 438740b medem a mesma coisa. A pré-condição do AC
+    12 (implementação de e4.8 ancestral e determinism.ts limpo no início) vale. O @dev registrou o pai
+    no Dev Agent Record, e a rastreabilidade se mantém.
+  readme_doc_002: >-
+    Correto, e fecha DEBT10-DOC-002 como sugerido. Conferi a premissa contra o remoto, e não só pelo
+    texto: nenhum dos dois commits está publicado, e a história é linear, então o build publicado
+    continua em atraso 0 sem carimbo, e depois do próximo push fica em atraso 6 COM carimbo. A janela
+    "atraso 6 sem carimbo" existe só em dev server local, como a linha agora diz. A afirmação é uma
+    previsão sobre um push futuro. Só seria falsificada por um push parcial (por exemplo
+    `git push origin b8e8a41:master`), que ninguém faz neste repo. A hora da linha debt.10 bate com
+    3de1cfe. As três linhas da tabela agora têm o mesmo formato.
+
+observacoes:
+  - >-
+    O Status foi escrito "Ready for Review", e o canônico de story-lifecycle.md é "InReview". Não afeta o
+    gate. A transição registrada é Ready for Review → Done.
+  - >-
+    CodeRabbit não roda nesta máquina (WSL). A cobertura veio de check, sim:check e build, da leitura
+    linha a linha de guarda-telemetria.ts e dos diffs de determinism.ts, telemetria.ts e README, de 20
+    mutações de runtime (as 6 da story mais 14 minhas), de um teste externo de vazamento de globais com
+    dois controles e das provas do AC 4 contra o worktree de f8be842.
+  - >-
+    Q9: desligar o bloco throw de determinism.ts deixa a guarda falhar em silêncio, com "✗" impresso e
+    exit 0. Toda seção do sim:check tem essa propriedade, e remover um throw é um ato visível no diff.
+    Não é achado desta story. É a lição recorrente de que o call site não se testa sozinho, registrada
+    para quem revisar diffs de determinism.ts.
+  - >-
+    package.json não tem `engines`. O sim:check já exige um Node com type stripping, e o CLI exige
+    import.meta.main, sem o qual ficaria mudo sem erro, como o @dev registrou. O CI (Node 20) só roda
+    vite build e não é afetado. Anterior a esta story, sem ação.
+  - >-
+    Worktrees descartáveis (971686b^ e 971686b) removidos no fim. `git worktree list` mostra só a árvore
+    principal.
+
+waiver: { active: false }
+updated: '2026-09-21T08:20:00Z'

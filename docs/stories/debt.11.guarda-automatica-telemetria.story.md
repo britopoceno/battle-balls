@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready for Review
+Done
 
 > **Ready, com pré-condição de início (v1.1).** @dev: esta story começa **depois do commit de
 > implementação de `e4.8`**, com `git status --short src/tools/determinism.ts` vazio. Ordem registrada pelo
@@ -710,7 +710,69 @@ aberto para uma story futura.
 
 ## QA Results
 
-_A preencher pelo @qa._
+### Review Date: 2026-09-21
+
+### Reviewed By: Quinn (Test Architect)
+
+**Gate: CONCERNS** → `docs/qa/gates/debt.11-guarda-automatica-telemetria.yml`. Revisão:
+`971686b` (implementação). O src/ do HEAD é idêntico ao de `971686b`. `8e027cb` toca só esta story.
+Nenhum dos dois está em `origin/master`.
+
+**Resumo.** Os 13 ACs estão MET, e `DEBT10-TST-001` está fechado. Conferi tudo do zero, sem confiar no
+Dev Agent Record. Fica em CONCERNS, e não PASS, por um MEDIUM de alcance: a guarda confere que o carimbo
+existe e é finito, não que ele tem o valor certo (`DEBT11-TST-001`).
+
+**Verificação independente**
+- **AC 1/2:** `npm run check`, `npm run sim:check` e `npm run build` saíram com rc=0, e o golden hash
+  ficou idêntico. O diff da saída inteira do `sim:check` contra um worktree de `971686b^` (`f8be842`) é
+  um único bloco `55a56,58`, só com `>` (`telemetria`, `globais` e uma linha em branco). stderr tem 0
+  bytes nos dois lados, e não há linha `[telemetria]` solta.
+- **AC 3:** o diff de `determinism.ts` tem só o import, a chamada, o laço de impressão e o bloco `throw`.
+  A guarda não lança: com `registrar()` lançando, o `sim:check` sai com 1, com "a guarda lançou", e os
+  globais voltam.
+- **AC 4 (Node v24.13.1):** (a) importar o módulo mantém o processo vivo, rc=0. (b) Sem argumento, o
+  CLI sai com rc=1, e stdout/stderr são byte a byte iguais aos de `f8be842`. (c) Nos 5 exports reais,
+  stdout e stderr são idênticos por `cmp`, e todos saem com rc=0.
+- **AC 5 (P1–P3):** são 6 pares (objeto, chave), incluindo `URL.createObjectURL`/`revokeObjectURL`,
+  `console.warn` e `Blob`. Os descritores são capturados antes do laço, o par ausente é criado com
+  `configurable: true`, e a comparação é campo a campo com `Object.is`. O ramo "tinha descritor" roda
+  em 4 pares. Um script meu comparou 219 descritores próprios antes e depois da guarda. A única
+  divergência também aparece nos dois controles sem a guarda, então não é vazamento dela. Identidades
+  preservadas, `localStorage`/`document` de volta a ausentes, e o `Blob` real funciona depois.
+- **AC 6/8:** o fixture fica em código, e o n combinado 7 não aparece em nenhuma população. Há um só
+  predicado, `!Number.isFinite`. Sobre `ler()`, a guarda só afirma que ele avisou, nunca a contagem.
+- **AC 7:** reapliquei M1, M1b, M2, M3, MR1, MR2a e MR2b, e todas saíram com exit 1. Das minhas 14
+  mutações, 10 nocivas foram pegas: carimbo reescrito em `ler()`, carimbo só no que falta em
+  `exportar()`, `Blob` falso vazando, `registrar()` lançando, predicado de `ler()` no agregador,
+  partição só no rótulo, `console.warn` não capturado, carimbo só com escala, atributo do descritor
+  errado e linha de seção removida. A benigna (formato de número) passou verde, como o R5 exige.
+  Não pegas: carimbo com valor literal errado (→ `DEBT11-TST-001`), M2 só no atraso (→ `DEBT11-TST-002`)
+  e bloco `throw` desligado (propriedade de toda seção, sem ação).
+- **AC 10/11/12:** o `--stat` tem os 4 arquivos da lista fechada. `grep -rln` dá exatamente
+  `guarda-telemetria.ts` e `telemetria.ts`, e as 2 linhas antigas estão sem mudança. `910add8` é
+  ancestral. O pai `f8be842` só toca stories.
+- **AC 9:** a premissa do "mesmo push" foi conferida no remoto: nem `b8e8a41` nem `3de1cfe` estão em
+  `origin/master`, e a história é linear. A hora 03:58:44 bate com `3de1cfe`.
+
+**Avaliações pedidas**
+1. **`Blob` substituído:** está coberto pela mesma disciplina (4º par, ramo "tinha descritor",
+   conferido depois do `finally`). Um vazamento e um atributo errado reprovam. É aceitável: o AC 5
+   cobre "qualquer propriedade de global nativo trocada", e a troca mantém a guarda síncrona.
+2. **`DEBT10-COD-003` fora:** é consistente com o R6, que diz literalmente que sem o COD-003 a guarda
+   não afirma a contagem de `ler()`. Ela afirma só a presença do aviso.
+3. **Dois commits, com `f8be842` como pai:** é correto e exigido pela letra do AC 10, como em `e4.8`.
+   `f8be842` só toca stories, então o src/ de `971686b^` é igual ao da base declarada, `438740b`.
+4. **README (`DEBT10-DOC-002`):** está correto e fecha o achado.
+
+**Achados**
+
+| ID | Severidade | Dono | Resumo |
+|---|---|---|---|
+| `DEBT11-TST-001` | medium | @dev, via @po; prazo R10 | Com `registrar()` gravando `atrasoTicks: 0, escalaHp: 1` literais, o `sim:check` sai com 0. A população é rotulada errado, sem aviso. Correção: afirmar `=== ATRASO_ALVO_TICKS` / `=== ESCALA_HP` nos eventos novos, com as setas `tools/ → net/` e `tools/ → chars/` já declaradas. Até lá, o @po registra na pré-condição de coleta de `e4.7`/`debt.9` que o valor do carimbo não é guardado. |
+| `DEBT11-TST-002` | low | @dev (opcional) | Nenhum evento do fixture tem carimbo parcial, então uma M2 só no atraso passa. Efeito real nulo hoje. |
+
+**Refatoração pelo QA:** nenhuma. **Status:** Ready for Review → **Done** (CONCERNS, por
+`story-lifecycle.md`).
 
 ## Change Log
 
@@ -720,3 +782,4 @@ _A preencher pelo @qa._
 | 2026-09-21 | 1.1 | **Validação @po: GO 10/10 (8/10 antes das correções: itens 3 "AC testáveis" e 5 "dependências" estavam parciais). Status: Draft → Ready.** **R1–R10 conferidos um a um contra `architecture-e4.md` §2.2 (`6f8ee7c`, linhas 341–476):** R1→AC 3, R2→AC 4, R3→AC 5, R4→AC 6, R5→AC 7, R6→AC 8, R7→AC 10, R8→AC 2, R9→AC 12, R10→AC 13, e a seta declarada→AC 11. As citações de Dev Notes batem com a fonte, com as elisões marcadas. **Fatos conferidos:** `tools/telemetria.ts` tem 307 linhas, com `main()` em `:289`, `process.exit(1)` sem `argv[2]` e `main()` incondicional em `:307`; `:2` importa valor de `client/input.ts` (`ARRASTO_MAX`, `LIMIAR_ARRASTO_PX`) e `:3` faz `import type` de `client/telemetria.ts`; `agregar` exportado em `:84`, `populacaoDe` com `Number.isFinite` em `:62-64` (o alvo da M2), `agregarPopulacao` em `:146` e o cabeçalho `'P3.1  mediana…'` em `:170`. `client/telemetria.ts` exporta `CHAVE` (`:35`) e `criarTelemetria` (`:145`). `localStorage` só aparece dentro de funções (`persistir` `:150`, `ler` `:191`), e `document` só em `baixar` (`:220`). O carimbo está em `registrar` (`:163`), `exportar` em `:167`, e `ler` usa `=== undefined` (`:202`, alvo de `DEBT10-COD-003`). `partida.ts:880` traz `verificarPartida(): { linhas; problemas }`. `determinism.ts` tem 985 linhas, com import em `:38`, chamada em `:859`, impressão em `:902` e bloco `throw` em `:960-963`. Node local é 24.13.1: `import.meta.main` foi medido em arquivos de scratchpad (`true` como entrada, `false` importado) e está declarado em `@types/node` 26.1.2 (`web-globals/importmeta.d.ts:9`). O CI (`deploy-pages.yml`) usa Node 20, mas só roda `vite build`, que não empacota `tools/`, e por isso o CLI mudo em Node antigo não chega ao CI. Mutações M1/M1b/M2/M3 conferidas contra o gate de `debt.10` (evidência "Mutações próprias"). Há 5 exports em `docs/evidence/telemetria/`, e as linhas `b8e8a41`/`debt.10` do README estão como AC 9 descreve. `3de1cfe` é de 2026-09-21 03:58:44 −03. **Correções no lugar:** **(1) AC 11 — contagem errada.** "Exatamente as 3 linhas" confundia os pares da tabela de §2.2 com linhas do grep. A própria §2.2 diz que o grep "deve devolver só os **dois arquivos**". Hoje o grep devolve 2 linhas de 1 arquivo. Depois de `debt.11`, devolve essas 2 linhas mais 1 ou 2 de `guarda-telemetria.ts`, conforme o @dev junte ou separe `import type`. Com a redação antiga, a forma com `import type` separado reprovaria um código correto. O critério agora é por arquivo e destino (`grep -rln` = os 2 arquivos, as 2 linhas pré-existentes sem mudança e todo destino novo em `client/telemetria.ts`). Corrigido no AC 11, em `quality_gate_tools`, na Task 6 e em Testing. **(2) AC 5 — "nunca `delete`" contra "voltar a `undefined`".** No Node 24.13.1, `localStorage` e `document` **não têm descritor próprio** em `globalThis` (medido). Sem `delete`, a restauração deixaria uma propriedade que não existia antes, e as duas exigências do AC eram incompatíveis. A regra agora segue o motivo que R3 declara: com descritor original, `defineProperty` e nunca `delete` (protege um `localStorage` nativo futuro); sem descritor, remove-se a propriedade que a própria guarda criou. Critério: descritor antes igual ao descritor depois, inclusive ausente. **@architect: interpretação de R3 registrada para ratificação, não bloqueante.** **(3) AC 5 + Task 1 — cenário do coletor explícito.** O AC 7 exige que a M1b reprove, mas nenhum AC obrigava pré-carregar um evento antigo sem carimbo nem afirmar que ele continua sem carimbo no export, que é o que pega a M1b ("velho ganhou carimbo", no gate). Agora é explícito, junto com a asserção do carimbo nos novos, que pega a M1. É a sugestão (b) do gate. **(4) "Depende de" e AC 12 (R9) — decisão do @po.** Os estados estavam desatualizados: `e4.3` e `e4.8` apareciam como Draft e as duas estão Ready desde `b76b6ff`. Fica registrada a ordem **`e4.8` → `debt.11` → `e4.3`**, idêntica à de `e4.8` v1.1.0 e `e4.3` v1.4.0 e sem contradizê-las. A exceção da regra de `e4.3` também entra: se `e4.3` começar antes, esta começa depois do commit dela. A pré-condição de início passa a ser `git status --short src/tools/determinism.ts` vazio, e a Task 0 foi alinhada. `e4.6` sai da lista de candidatas a base, porque depende de `e4.3`. **(5) AC 13 e "Depende de" (R10) — decisão do @po: sim.** `e4.7` deve listar `debt.11` como **pré-condição de coleta**, não de início: nenhuma partida cujo export entre na evidência do AC 8 de `e4.7` é jogada antes do commit de implementação desta story. `e4.7` **não foi editada** nesta validação, e a emenda fica roteada ao @po. **Registrado, fora desta story:** `debt.9` (Draft) tem o mesmo prazo pela pré-condição (b), e a mesma pré-condição de coleta vale para ela na próxima edição. **Não editado (Dev Notes são do @dev):** os bullets de "O que esta story explicitamente NÃO faz" sobre `e4.7` e sobre a base de sequência continuam verdadeiros, porque a decisão foi do @po e não da story, e foram superados pelos AC 12/13. `quality_gate: @qa` fora da lista do task genérico é convenção do projeto em todas as stories. | Pax (@po) |
 | 2026-09-21 | 1.2 | **AC 5 e AC 7 recebem as precisões P1–P3 da ratificação de R3 pelo @architect (`docs/architecture-e4.md` §2.2, bloco "Ratificação (2026-09-21…)", commit `d72325b`). Status: continua Ready.** A leitura de R3 registrada na v1.1 (com descritor, `defineProperty` e nunca `delete`; ausente, `delete` da propriedade criada; critério "descritor depois = antes, ausente conta como estado") foi ratificada. **AC 5:** o período "Critério verificável" foi trocado **verbatim** pelo texto do delta de §2.2: critério por par (objeto, chave), alcançando `URL.createObjectURL` (P1); comparação campo a campo, `value`/`get`/`set` por `Object.is` e atributos por igualdade, nunca `JSON.stringify` (P3); todos os descritores capturados antes da primeira instalação e propriedade ausente criada com `configurable: true` (P3); a guarda confere o critério ela mesma depois do `finally`; ramo "tinha descritor" exercitado pelo menos uma vez no Node do projeto (P2). A referência final do AC passa a citar a ratificação. **AC 7:** entram **MR1** (restauração sempre com `delete`) e **MR2** (caso ausente restaurado por atribuição, `= undefined` ou `defineProperty` com `value: undefined`), com a redação de P2, às M1/M1b/M2/M3, com o mesmo registro no Dev Agent Record; "as 4" vira "as 6". **Repetições alinhadas:** `quality_gate_tools` (6 mutações e um item novo para a restauração), CodeRabbit Focus Areas e a linha do @qa em Specialized Agents (a linha antiga "nunca por `delete`" contradizia o AC 5 desde a v1.1), Task 1 (captura prévia, `configurable: true`, conferência campo a campo, ramo exercitado), Task 5 (MR1, MR2) e Testing. **Fatos conferidos no Node 24.13.1 desta sessão:** `localStorage` e `document` sem descritor próprio em `globalThis`; `URL.createObjectURL` e `URL.revokeObjectURL` com descritor próprio do objeto `URL` (`value`, `writable`, `enumerable`, `configurable`, os três `true`); `baixar()` em `src/client/telemetria.ts:219-224` chama os dois. **Não editado:** Dev Notes (a citação de R3 continua a da fonte original; a ratificação vive em §2.2 e nos AC 5/7), a menção às "4 mutações" do gate em Story, "Depende de" e na citação do achado (referem-se ao gate de `debt.10`, e continuam verdadeiras). Nenhum outro AC muda, conforme o delta. **Readiness:** o delta fecha brechas sem mudar escopo de arquivo, sequência nem dependência; o @architect o declara não bloqueante. GO 10/10 mantido. | Pax (@po) |
 | 2026-09-21 | 1.3 | **Implementação @dev: Ready → InProgress → Ready for Review.** Commit de implementação `971686b` (base `438740b`, caso normal do AC 12, depois do commit de implementação de `e4.8`, `910add8`). Arquivos: `src/tools/guarda-telemetria.ts` (novo), `determinism.ts` (+12: import, chamada, linha de seção e `throw`), `tools/telemetria.ts` (`if (import.meta.main) main()`) e `docs/evidence/telemetria/README.md` (`DEBT10-DOC-002`). `DEBT10-COD-003` não entrou. check, sim:check e build saem com 0; o golden hash é idêntico; o diff do `sim:check` tem só 3 linhas inseridas no fim. As 6 mutações (M1, M1b, M2, M3, MR1 e as duas formas de MR2) saem com exit 1. As provas do AC 4 (a/b/c) foram registradas no Node v24.13.1. Detalhes no Dev Agent Record. | Dex (@dev) |
+| 2026-09-21 | 1.4 | **Gate @qa: CONCERNS. Status: Ready for Review → Done.** Gate em `docs/qa/gates/debt.11-guarda-automatica-telemetria.yml`, revisão `971686b`. Os 13 ACs estão MET, e `DEBT10-TST-001` está fechado. check, sim:check e build saíram com 0, o golden hash ficou idêntico e o diff contra `971686b^` é só inserção (`55a56,58`). As provas do AC 4 batem byte a byte. As 6 mutações da story reprovam, e 10 das minhas 14 também. Não há vazamento de globais. Achados: `DEBT11-TST-001` (medium, valor do carimbo não guardado, @dev via @po, prazo R10) e `DEBT11-TST-002` (low, fixture sem carimbo parcial). | Quinn (@qa) |
