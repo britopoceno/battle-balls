@@ -14,7 +14,9 @@
 > **Revisões:** 2026-09-21 (`e4.1` — §4.1) · 2026-09-21 (`e4.2` — §1.2, §2.2, §5.1, §5.2, **§5.5
 > codificação do fio, decidida**, §5.6, §9, §11.6, §12/R-05, Anexos A e B). Evidência da revisão de
 > `e4.2` em `docs/evidence/e4-codificacao-fio/`. · 2026-09-21 (`debt.10` → `debt.11` — §2.2: **seta
-> `tools/ → client/` declarada** e casa da guarda de telemetria decidida; Anexos A e B).
+> `tools/ → client/` declarada** e casa da guarda de telemetria decidida; Anexos A e B). · 2026-09-21
+> (E48-ARC-003, gate de `e4.8` — **§11.6.1: versão do fio e fixture congelada decididas**; §0, §5.5,
+> §6, §10, Anexos A e B).
 
 ---
 
@@ -30,6 +32,7 @@
 | RF-42 / P4.2 — anti-cheat | §8 | Fechado pela via mais barata: em rede o cliente **não simula**. Não há o que validar |
 | Segredo da build (§13.6 de E3 — "convenção reforçada por tipo") | §8.2 | **Fecha aqui.** `visaoPara` deixa de ser convenção e vira fato de fio |
 | Onde a rede mora, sem tocar em `sim/` | §2 | Camada `net/` + entrada `server/`. `sim/`, `match/` e `shop/` **intactos**; `render.ts` muda **só em anotações de tipo** (emenda de 2026-09-21, §5.1) |
+| Versão do fio e fixture congelada | §11.6.1 | **Decididas em 2026-09-21** (E48-ARC-003): `VERSAO_DO_FIO` no `{t:'sala'}`, conferida pelo decodificador, em story nova antes da `e4.3`; texto de um `snap` congelado no `sim:check` (`debt.12`) |
 | Codificação do fio | §5.5 | **Decidida em 2026-09-21** (`e4.2`): o `{t:'snap'}` vai como tupla posicional em JSON, com quantização que preserva prontidão; o resto do protocolo fica JSON com nomes; deflate é lever, não premissa |
 | O relógio de parede de RF-04, que hoje é do cliente | §3.4 | **Muda de dono**: vai para o servidor. Sem isso, um jogador estagna a partida de graça |
 | Determinismo entre Node e Chrome | §1.5 | **Medido pela primeira vez no projeto.** Diverge em bits, converge no hash quantizado — e o porquê disso não ser garantia está na §11.1 |
@@ -861,7 +864,8 @@ número que o código não entrega. (a) é a correção do instrumento; a decis�
   binário. O ganho de E (eventos em tupla) sobre D é ~10 B/quadro e não paga a legibilidade perdida.
 - **Um arquivo a mais de responsabilidade**: `net/codec.ts`, criado por `e4.8` (`910add8`) com o
   parser e o codec de saída. Serializador e parser do fio moram juntos, puros, sob `sim:check`.
-- **Descompasso de versão** entre cliente e servidor — §11.6.
+- **Descompasso de versão** entre cliente e servidor — §11.6; mitigação decidida na §11.6.1 (versão no
+  `{t:'sala'}` e fixture congelada).
 
 **Tabela de quantização do fio.** É **precisão de exibição**, na mesma linha de `EPS_POSICAO_PX` de
 `e4.2`, e não tem relação nenhuma com o `toFixed(4)` do `hash()` (§11.1). Passo `q = 0,01`:
@@ -1011,6 +1015,8 @@ fase:  aguardando ──(2 assentos ocupados)──▶ jogando ──(partidaFim
   reassinar: o servidor manda `{t:'visao'}` + `{t:'rodadaInicio'}` + o próximo snapshot, e o cliente
   volta ao ar sem estado próprio para reconciliar. Este é o segundo dividendo do modelo autoritativo
   depois do anti-cheat, e vale registrar que ninguém o projetou — ele cai.
+  *(2026-09-21, §11.6.1: a reconexão é de graça para o ESTADO. A IDENTIDADE é o segredo de assento,
+  que chega em `{t:'sala'}.assento`. Por isso o `{t:'sala'}` é mensagem por assento, nunca broadcast.)*
 - **Desconexão durante a rodada é decisão de produto**, não de arquitetura. Ver §12/R-02.
 
 ---
@@ -1110,7 +1116,7 @@ Na mesma forma da §11.2 de E3:
 
 | # | Passo | Verificação | Golden hash |
 |---|---|---|---|
-| 0 | `net/protocolo.ts`: tipos de mensagem, `ATRASO_ALVO_TICKS`, `SNAPSHOT_HZ`; `net/codec.ts` (`e4.8`) | `npm run check` | **idêntico** |
+| 0 | `net/protocolo.ts`: tipos de mensagem, `ATRASO_ALVO_TICKS`, `SNAPSHOT_HZ`; `net/codec.ts` (`e4.8`); `VERSAO_DO_FIO` e `{t:'sala'}` com `versao`/`assento` (`e4.9`, §11.6.1) | `npm run check`; guarda de versão no `sim:check` | **idêntico** |
 | 1 | Ativar o atraso no modo local (`INPUT_DELAY_TICKS` 0 → 6, via a constante única) — **P4.1** | `sim:check` verde; jogar e sentir | **idêntico** (§4.2) |
 | 2 | `net/snapshot.ts` + `net/projecao.ts`: `World → Snapshot → forma de render`, ida e volta | teste de ida-e-volta: projetar o snapshot e desenhar dá a mesma tela | **idêntico** |
 | 3 | `net/sala.ts` pura + cobertura no `sim:check`: partida inteira em sala, sem socket | nova guarda no `sim:check`: sala headless reproduz o mesmo placar de `tools/partida.ts` | **idêntico** |
@@ -1206,6 +1212,233 @@ no `{t:'sala'}` (é mudança de protocolo, portanto `net/protocolo.ts`, ato deli
 agora**: seria abrir o vocabulário de `e4.0` por um risco que esta fase não tem como materializar.
 Regra até lá: **mudar o layout da tupla é mudança de protocolo**, revisada como tal, nunca refatoração.
 
+> **Superado em 2026-09-21 pela §11.6.1.** O "não entra agora" acima valia enquanto nenhum servidor
+> saía do `localhost`. O gate de `e4.8` (E48-ARC-003) mostrou que o gatilho não tinha dono, e que a
+> regra "mudança de protocolo" não tinha nada mecânico que a forçasse. O texto fica como registro.
+
+#### 11.6.1 Versão do fio e fixture congelada — decididas *(2026-09-21, E48-ARC-003, gate de `e4.8`)*
+
+Entrada: `docs/qa/gates/e4.8-codec-do-fio.yml` (E48-ARC-003, low), roteado pelo @po em `f8be842`
+(`e4.8` v1.4.0; `e4.7` v1.4.0, AC 12). São duas decisões: a fixture dourada do fio em `debt.12`, e a
+forma e a story da versão do formato no `{t:'sala'}`. Na mesma leitura apareceu um achado vizinho
+(M-4), que abre a mesma variante e por isso entra junto.
+
+**Medições desta sessão** (Node 24.13.1, `src/net/codec.ts` em `f8be842`, script descartável que importa
+o codec real e não altera nada):
+
+- **M-1. A amostra sugerida pelo gate não discrimina todas as trocas.** `codificarDoServidor` sobre
+  `snapshotSintetico(1000, 1200, 50)` (`determinism.ts`) dá 231 B com **três colisões de valor** dentro
+  da mesma tupla: `snap[1] = snap[5] = 0` (`over`, `arena.pad`), `bola[0] = bola[5] = 1` (`id`, `alive`) e
+  `bola[2] = bola[7] = 200` (`y`, restante da habilidade). Trocar qualquer um desses pares nos dois lados
+  deixa o texto **byte-idêntico**. Medido: as três trocas dão `texto === congelado`. Congelar essa amostra
+  pega M9 (`hp` 500 ≠ `ultCharge` 50), mas deixa passar três outras mutações com a mesma forma de M9.
+- **M-2. Uma amostra construída para isso tem zero colisões.** A amostra da decisão 1, abaixo, codifica
+  em 287 B, sem nenhum valor repetido entre posições escalares da mesma tupla. Com ela M9 e `over ↔ pad`
+  mudam os bytes. Ela também passa no **ponto fixo** `codificar(decodificar(t)) === t`. Isso foi medido
+  nesta amostra e depende de ponto flutuante: o `abilityReadyAt` decodificado é
+  `1417.9199999999998`, e o `tetoQ` o devolve a `183.35`. Não é propriedade geral do codec.
+- **M-3. Hoje a versão não seria conferida por ninguém.** `decodificarDoServidor('{"t":"sala","versao":2,
+  "jogador":0,"estado":"aguardando"}')` devolve a mensagem com o campo a mais, sem erro. Toda variante
+  que não é `snap` sai por `m as DoServidor` (`codec.ts:426`). Um campo de versão só no tipo, sem
+  checagem, seria decorativo.
+- **M-4. Achado: o `{t:'sala'}` não tem onde levar o segredo de assento.** `e4.0`/AC 12 (e o comentário
+  em `protocolo.ts:104`) e `e4.4`/AC 7 dizem que o segredo é "devolvido no primeiro `{t:'sala'}`". Mas
+  `DoServidor['sala']` é `{ t; jogador; estado }` (`protocolo.ts:136`), sem campo para isso. Como está,
+  `e4.4`/AC 7 não é implementável dentro do escopo de `e4.4`/AC 13, que proíbe `src/net/`. O `e4.0` passou
+  pelo gate com essa contradição, e nenhum gate posterior a pegou porque nada ainda produz um
+  `{t:'sala'}`.
+
+**Decisão 1 — fixture congelada do fio: CONFIRMADA em `debt.12`, com a amostra corrigida.**
+
+- **O que congela:** o texto de **um** `{t:'snap'}`, produzido por `codificarDoServidor({ t: 'snap', s:
+  AMOSTRA_DO_FIO, seq: 4 })`. Só o `snap`, porque é a única variante posicional. As outras vão como JSON
+  com nomes (§5.5), degradam com elegância, e a forma delas já é presa pelo `satisfies` das `amostras`
+  da guarda `não-snap`. Congelar o texto delas congelaria só a ordem de chaves do `JSON.stringify`.
+- **Qual snapshot:** **não** é o `snapshotSintetico`, pelo M-1. É uma função própria, com estes valores
+  exatos, escolhidos por duas propriedades: (a) nenhuma posição escalar repete valor dentro da mesma
+  tupla, então **qualquer** permutação muda os bytes; (b) todo campo quantizado está fora da grade de
+  0,01, e onde a regra importa o valor separa uma regra da outra (`ultCharge` 55.559: piso 55.55 ≠
+  arredondado 55.56; restante 183.341: teto 183.35 ≠ arredondado 183.34). Assim, trocar a regra de
+  quantização também muda os bytes.
+  ```ts
+  { time: 1234.567, over: false, winner: 1, arena: { w: 960, h: 540, pad: 17.254 },
+    balls: [{ id: 7, x: 100.25, y: 200.5, facing: 0.75, hp: 432.126, alive: true, ultCharge: 55.559,
+              abilityReadyAt: 1234.567 + 183.341, effects: [{ kind: 'slow' }, { kind: 'shield' }] }],
+    projectiles: [{ id: 8, x: 10.5, y: 20.75, vx: 300.123, vy: -40.456, radius: 5.555, color: '#b98cff' }],
+    zones: [{ id: 9, kind: 'wall', x: 30.25, y: 40.5, angle: 1.234, halfLen: 60.126, radius: 9.994,
+              pull: 2.345, ownerColor: '#8a8' }],
+    events: [{ t: 'hit', x: 1.5, y: 2.5, amount: 3.14159, targetId: 7, crit: true }] }
+  ```
+  Texto que ela produz em `f8be842` (287 B):
+  `{"t":"snap","seq":4,"s":[1234.57,0,1,960,540,17.25,[[7,100.25,200.5,0.75,432.13,1,55.55,183.35,["slow","shield"]]],[[8,10.5,20.75,300.12,-40.46,5.56,"#b98cff"]],[[9,"wall",30.25,40.5,1.234,60.13,9.99,2.35,"#8a8"]],[{"t":"hit","x":1.5,"y":2.5,"amount":3.14159,"targetId":7,"crit":true}]]}`.
+  **Este texto é conferência, não fonte.** `debt.12` gera a fixture a partir do codec no commit em que
+  começa. Se o resultado divergir desta linha, o codec mudou desde `f8be842` sem mudança de protocolo
+  registrada, e isso é achado, não ajuste.
+- **Onde mora:** inline em `src/tools/determinism.ts`, no bloco do codec, ao lado da guarda que já
+  existe. É o mesmo padrão do `BASELINE` do golden hash, e é o único arquivo que `debt.12` pode tocar.
+  Um JSON à parte acrescentaria arquivo ao escopo sem ganhar nada: a revisão continua sendo um diff.
+- **Forma:** uma lista **só de acréscimo**, com uma entrada por versão:
+  `FIO_CONGELADO: readonly { versao: number; snap: string }[]`, que nasce com
+  `[{ versao: 1, snap: '<texto acima>' }]`.
+- **O que a guarda confere** (linha própria no `sim:check`, junto das do codec):
+  1. `codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO, seq: 4 }) === última.snap`. Se falhar, a
+     mensagem aponta a **primeira posição divergente** da tupla, com o caminho (`s[6][0][4]`), o valor
+     congelado e o atual, e diz o que fazer: "se foi de propósito, incremente `VERSAO_DO_FIO` em
+     `net/protocolo.ts` e ACRESCENTE uma entrada; nunca edite uma existente (§11.6.1)".
+  2. `última.versao === VERSAO_DO_FIO`, importado de `net/protocolo.ts` pela seta `tools/ → net/` que já
+     existe. As versões são consecutivas a partir de 1, e `FIO_CONGELADO.length === VERSAO_DO_FIO`.
+  3. Ponto fixo: `codificarDoServidor(decodificarDoServidor(última.snap)) === última.snap`. Isso prende o
+     decodificador ao mesmo texto, independente das rodadas. Não é redundante: (1) sozinho prende só o
+     codificador. (1) e (3) juntos prendem os dois lados, e (3) mais a fidelidade das rodadas pega uma
+     mudança só no decodificador.
+  4. Canário da propriedade discriminante: no texto congelado, nenhuma posição escalar de uma mesma
+     tupla repete valor, e `AMOSTRA_DO_FIO` mantém `pisoQ(ultCharge) ≠ q(ultCharge)` e
+     `tetoQ(restante) ≠ q(restante)`. Se alguém "simplificar" a amostra, a guarda perde o dente e avisa,
+     na mesma lógica do contrafactual ingênuo de `e4.8`.
+- **Contrafactual (item (d) de `debt.12`):** M9 (`hp ↔ ultCharge` nos dois lados), `over ↔ pad` nos dois
+  lados (a troca que o M-1 mostra passar com a amostra antiga) e `pisoQ → q` no `ultCharge` fazem o
+  `sim:check` sair com rc=1, numa cópia descartável.
+- **Como uma mudança deliberada de formato atualiza a fixture, sem carimbo automático.** Tudo num
+  **único commit**:
+  1. muda o layout (ou a forma de qualquer variante, ou o significado de algum campo);
+  2. incrementa `VERSAO_DO_FIO` em `net/protocolo.ts`;
+  3. **acrescenta** `{ versao: N+1, snap: <texto novo> }` ao fim de `FIO_CONGELADO`. A entrada de uma
+     versão publicada é fato histórico, igual a uma linha do golden hash, e **não se edita**;
+  4. a mensagem de commit diz "mudança de protocolo" e cita as posições que mudaram.
+
+  O que é mecânico e o que não é, sem enfeitar: a guarda **obriga** o passo 2 quando há o passo 3 (item
+  2), e obriga os dois quando o texto muda (item 1). Ela **não consegue** impedir o carimbo automático
+  clássico, que é editar a última entrada no lugar sem subir a versão. Nada dentro de um arquivo
+  editável impede isso. O que a lista só de acréscimo compra é uma **forma de diff** que denuncia o
+  carimbo: o caminho legítimo mostra só linhas acrescentadas em `FIO_CONGELADO` e uma linha trocada em
+  `protocolo.ts`. Qualquer linha **removida ou alterada** dentro de `FIO_CONGELADO` é carimbo, e o @qa
+  reprova olhando o `git show`. Com uma entrada só, os dois caminhos teriam a mesma forma de diff, e a
+  revisão não teria como separá-los.
+  Depois de `e4.7`, há um quinto passo, que é de operação e fica com o @devops: publicar o servidor na
+  mesma janela do push. O Pages republica o cliente a cada push em `master`, e um cliente de versão nova
+  contra um servidor antigo fecha a conexão (decisão 2). Esse é o comportamento certo, mas ninguém joga
+  até o servidor subir.
+- **Se `debt.12` for sequenciada antes da versão existir** (fora da ordem recomendada abaixo), a
+  fixture nasce com `versao: 1` literal e só com os itens 1, 3 e 4. O item 2 entra na story da versão,
+  que já precisa tocar `determinism.ts`.
+
+**Decisão 2 — versão do formato no `{t:'sala'}`: forma e story.**
+
+- **Constante:** `export const VERSAO_DO_FIO = 1` em `net/protocolo.ts`, comentada com a regra de
+  quando sobe: muda o layout ou a quantização de `codec.ts`; muda a forma de qualquer variante de
+  `DoCliente`/`DoServidor`; ou muda o significado ou a unidade de um campo. **Não** sobe com `SNAPSHOT_HZ`
+  nem com o deflate: são levers de operação, sobrescritos na subida do servidor sem rebuild
+  (`e4.7`/AC 4). Amarrá-los à versão faria o override derrubar os clientes. Começa em 1, não em 0: um
+  servidor sem o campo manda `undefined`, e esse caso tem de falhar pelo mesmo caminho de um número
+  errado.
+- **Campo:** `{ t: 'sala'; versao: typeof VERSAO_DO_FIO; jogador; estado; assento }`. O tipo é o
+  **literal** da constante, então quem produz a mensagem não consegue pôr outro número (o `tsc`
+  recusa), e subir a constante muda o tipo junto. O tipo não protege quem **recebe**: o decodificador
+  devolve `m as DoServidor`, e o `versao` sairia tipado `1` mesmo com `2` no fio (M-3). Por isso a
+  checagem é em runtime.
+- **Onde se confere: no decodificador, não no cliente.** Em `decodificarDoServidor`, quando
+  `t === 'sala'` e `campo(m, 'versao') !== VERSAO_DO_FIO` (inclusive ausente, `"1"` e `2`), ele
+  **lança** com as duas versões na mensagem: "versão do fio N no servidor, M neste cliente —
+  descompasso (architecture-e4.md §11.6.1)". Motivos: (i) o codec é puro e está sob o `sim:check`,
+  e o `client/` não está; (ii) o tratamento já está decidido. O `e4.5` v1.4.0 fecha a conexão em
+  qualquer lançamento do decode, loga e não reconecta sozinho. Num descompasso de versão, isso é
+  exatamente o certo, porque reconectar repetiria o erro em laço. O `e4.5` não ganha linha de código
+  por isso, só um quarto caso no texto do AC 3.
+- **Ordem no fio:** o `{t:'sala'}` é o **primeiro** envio a toda conexão assentada, nova ou reassentada.
+  O `e4.4`/AC 8 já lista essa ordem para a reconexão. Com isso, a versão é conferida antes do primeiro
+  `snap` ser decodificado. Sem essa ordem, um descompasso de mesma aridade desenharia um quadro de
+  lixo antes de a conexão fechar.
+- **O que o cliente faz no descompasso:** o que o `e4.5`/AC 3 já decide (loga, fecha, não reconecta
+  sozinho). Recomendo, e o @po decide se vira obrigatório: uma mensagem na tela que separe os dois
+  sentidos, porque o remédio é oposto. Servidor mais novo que o cliente é uma aba velha, e
+  **recarregar** resolve. Cliente mais novo que o servidor é o Pages na frente do servidor, e recarregar
+  **não** resolve: é esperar o servidor subir. As duas versões já vêm na mensagem do erro.
+- **Extensão do vocabulário fechado, dita explicitamente:** acrescentar `versao` e `assento` ao
+  `{t:'sala'}` **estende `DoServidor`**, que `e4.0`/AC 10 declarou fechado. É o "ato deliberado e
+  revisado" que aquele AC exige, e a revisão é este bloco. A lista `T_DO_SERVIDOR` de `codec.ts` não
+  muda, porque nenhum `t` novo entra. As `amostras` da guarda `não-snap` de `determinism.ts` deixam de
+  compilar até ganharem os dois campos, e isso é o `satisfies` fazendo o trabalho dele. `DoCliente` e
+  `parseDoCliente` **não mudam**: o fio de subida é JSON com nomes, parseado estrito, e um cliente que
+  recebeu o `{t:'sala'}` com versão errada para de falar.
+- **`assento: string`, o achado M-4:** é o segredo que o cliente reapresenta em
+  `{t:'entrar', assento}`. Usa o mesmo nome nas duas direções de propósito: o que chega em
+  `sala.assento` volta em `entrar.assento`. Entra na mesma story porque abre a mesma variante, e abrir
+  `{t:'sala'}` duas vezes seria dois atos de protocolo em vez de um. **Segurança:** esse campo transforma
+  `{t:'sala'}` em mensagem **por assento**, na mesma regra do `{t:'visao'}` (`e4.3`/AC 8). Um broadcast
+  de `{t:'sala'}` entregaria o segredo de um jogador ao outro, e com ele o outro reassenta no lugar dele
+  (`e4.4`/AC 7: segredo válido derruba a conexão antiga). A sala é quem produz o `{t:'sala'}`
+  (`e4.3`/AC 4: envios são dado), então o segredo tem de estar na mão dela. O caminho de menor
+  movimento é o `e4.4` usar o segredo do stream próprio como a chave de `EntradaDaSala.assento`. Assim
+  a sala endereça e preenche com a mesma string, e o servidor não reescreve `DoServidor` depois que a
+  sala o produz.
+- **Story que implementa: nova, sugestão `e4.9` (o número é do @sm), entre `debt.11` e `e4.3`.**
+  Escopo: `src/net/protocolo.ts` (constante, os dois campos, e o comentário de `DoCliente.entrar`
+  passando a ser verdade); `src/net/codec.ts` (só a metade de SAÍDA: a checagem no decodificador e o
+  comentário do LAYOUT, que deixa de dizer "risco aceito até haver deploy"; `parseDoCliente` não muda,
+  e o diff prova); `src/tools/determinism.ts` (a amostra `sala` com os campos novos, e a guarda: a versão
+  certa volta idêntica; ausente, `2` e `"1"` lançam; contrafactual: sem a checagem, a guarda falha). O
+  `codec.ts` passa a importar **um valor** de `protocolo.ts`: a regra "só `import type`" de `e4.8`/AC 7
+  vira "só tipos, mais `VERSAO_DO_FIO`". A seta não muda: é `net/ → net/`, e `protocolo.ts` não tem
+  import de runtime.
+  **Por que antes da `e4.3`:** a `e4.3` cria `sala.ts`, que produz o `{t:'sala'}`. Com os campos já no
+  tipo, a `e4.3` os preenche ao nascer, sem tocar `protocolo.ts` (que o AC 15 dela proíbe). Depois da
+  `e4.3`, a story nova teria de editar `sala.ts` também. E a `debt.12`, que vem depois da `e4.3`, já
+  encontra `VERSAO_DO_FIO` e amarra a fixture desde a primeira linha. O custo no caminho crítico é nulo
+  enquanto R-05 bloquear a `e4.4`.
+  Ordem de `determinism.ts`: `e4.8` → `debt.11` → **`e4.9`** → `e4.3` → `debt.12` → `e4.6`, com a
+  regra de `e4.3` v1.5.0 (só começa com `git status --short src/tools/determinism.ts` vazio).
+
+**Alternativas rejeitadas, com o custo de cada uma:**
+
+| opção | por que não |
+|---|---|
+| `e4.4` recebe a versão | Reabre o AC 13 para **quatro** arquivos (`protocolo.ts`, `codec.ts`, `sala.ts`, `determinism.ts`). Mistura mudança de protocolo com socket numa story em Draft por R-05, e a versão chegaria depois da `e4.3`. |
+| `e4.5` recebe a versão | Mesma reabertura (AC 14), e chega **depois** do servidor da `e4.4` existir sem versão. |
+| `e4.7` recebe a versão (onde está o gatilho hoje) | O momento serve, mas é story de medição (AC 11 limita `src/`), e todo cliente publicado entre a `e4.5` e ela sairia sem a checagem. Com a versão antes da `e4.5`, **todo cliente com código de rede que já existiu confere a versão**, e essa invariante só se compra agora. |
+| `debt.12` recebe a versão | A `debt.12` é só `determinism.ts` por um motivo: um caso novo que falha contra o código de hoje é achado, e não correção no próprio commit. Abrir `codec.ts` nela desmonta essa disciplina. |
+| `e4.3` recebe a versão | É a maior story da fase, cortada justamente para não juntar gates, e o AC 15 proíbe `protocolo.ts` e `codec.ts`. |
+| Subprotocolo do WebSocket (`Sec-WebSocket-Protocol: bb-fio-1`) | Padrão e elegante, mas no navegador a recusa aparece como fechamento 1006, indistinguível de queda de rede. O `e4.5` reconectaria em laço, que é o oposto do que o AC 3 decidiu. |
+| O cliente manda a versão em `{t:'entrar'}` | Abre `DoCliente` e o parser de entrada, que é a superfície de segurança da fase, para ganhar só um log no servidor. Pode vir depois, se a telemetria de operação pedir. |
+
+**Deltas para o @po / @sm** (este documento não edita story):
+
+- **`debt.12` (a criar):** o item (c) fica **confirmado**, com a amostra e os quatro itens da guarda
+  descritos acima, no lugar de "string de `codificarDoServidor` sobre `snapshotSintetico`". No item (d),
+  as mutações passam a incluir M9, `over ↔ pad` e `pisoQ → q`. Continua só `determinism.ts`.
+- **`e4.9` (nova):** escopo, sequência e guarda como acima. Depende de `debt.11`. É pré-condição de
+  `e4.3`.
+- **`e4.3`:** o "Depende de" ganha `e4.9`, e a "Sequência" ganha `e4.9` antes dela. A sala preenche
+  `versao: VERSAO_DO_FIO` e `assento` (a chave do assento de destino) em todo `{t:'sala'}`, e a guarda do
+  AC 11 confere três coisas na Bo5: todo `{t:'sala'}` sai **por assento** e carrega o segredo do
+  **próprio** destinatário, nunca o do outro; todo `{t:'sala'}` tem `versao === VERSAO_DO_FIO`; e o
+  primeiro envio a um assento recém-assentado é o `{t:'sala'}`. Escopo de arquivos: nenhuma mudança.
+- **`e4.4`:** o AC 7 ganha a frase "o segredo é a chave de assento passada à sala em
+  `EntradaDaSala`; o servidor não reescreve `DoServidor`". O AC 8 já põe o `{t:'sala'}` primeiro na
+  reconexão, e o texto passa a dizer que isso vale também na primeira entrada. **O AC 13 não muda**:
+  com a `e4.9` antes, a `e4.4` não precisa de `src/net/`. A linha (2) da v1.5.0 ("se o @architect decidir
+  que a versão entra nesta story") se resolve por "não entra".
+- **`e4.5`:** o AC 3 ganha o caso (iv): `{t:'sala'}` com `versao` diferente de `VERSAO_DO_FIO` (ou
+  ausente). O tratamento é o mesmo dos outros três. No Testing, uma verificação manual: um servidor
+  local com `VERSAO_DO_FIO + 1` faz o cliente logar, fechar e **não** reconectar. A mensagem na tela
+  que separa os dois sentidos é recomendação, e o @po decide se vira obrigatória. **O AC 14 não muda.**
+- **`e4.7`:** com a `e4.9` antes da `e4.4`, a condição "enquanto `{t:'sala'}` não carregar número de
+  versão" do AC 12 já estará falsa quando a `e4.7` rodar. O AC 12 passa a pedir: o README registra, por
+  partida, o commit do servidor, o do cliente (ou "Pages @ sha") e o `VERSAO_DO_FIO`. O cliente do
+  Pages fica permitido, porque um descompasso nem chega a jogar. Mas veja O-1 antes de soltar a regra
+  do mesmo commit nas partidas da varredura.
+- **`e4.8`, `e4.0`:** Done, nada muda. A extensão do vocabulário de `e4.0` está registrada aqui.
+
+**O-1 (observação para o @po, não decidida aqui):** a varredura de `SNAPSHOT_HZ` do `e4.7`/AC 4
+sobrescreve a taxa **só no servidor**. O `ATRASO_DE_BUFFER` do cliente (`e4.5`/AC 7, "≥ 1 intervalo de
+snapshot") é dimensionado por um intervalo, e a única taxa que o cliente conhece é o `SNAPSHOT_HZ`
+compilado no bundle. A 20 Hz com buffer dimensionado para 30, o cliente
+esvazia o buffer e treme, e o tremor seria atribuído à taxa, não ao buffer. A varredura sairia enviesada
+contra a taxa baixa, que é a que a bateria favorece. Há duas saídas baratas: a taxa efetiva vai no
+`{t:'sala'}` e o cliente dimensiona o buffer por ela (seria um terceiro campo, e se entrar deve entrar
+na `e4.9`, para não abrir a variante duas vezes); ou o `e4.7` fixa o buffer pela **menor** taxa da
+varredura. Qual delas é decisão de escopo do @po. Registro porque, depois que a `e4.9` fechar, o custo
+de um campo a mais é uma versão nova.
+
 ---
 
 ## 12. Ressalvas e o que este documento devolve ao @pm / usuário
@@ -1270,11 +1503,11 @@ reler R-05 com o número novo. **Não reabre D-05.**
 
 | Arquivo | Estado | Papel |
 |---|---|---|
-| `src/net/protocolo.ts` | **novo** (`e4.0`) | Tipos de mensagem, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro. *(O "codec" que esta linha citava foi para `codec.ts`.)* |
-| `src/net/codec.ts` | **novo** (`e4.8`, `910add8`) | `parseDoCliente` (entrada, `e4.8`/AC 4) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro, só `import type` |
+| `src/net/protocolo.ts` | **novo** (`e4.0`); **muda** (`e4.9`) | Tipos de mensagem, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro. *(O "codec" que esta linha citava foi para `codec.ts`.)* `e4.9`: `VERSAO_DO_FIO`, e `{t:'sala'}` ganha `versao` e `assento` (§11.6.1) |
+| `src/net/codec.ts` | **novo** (`e4.8`, `910add8`); **muda** (`e4.9`, só a saída) | `parseDoCliente` (entrada, `e4.8`/AC 4) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro; só tipos, mais o valor `VERSAO_DO_FIO` de `protocolo.ts` desde `e4.9`, que faz o decodificador lançar em versão divergente (§11.6.1) |
 | `src/net/snapshot.ts` | **novo** (`e4.2`) | `World → EstaticoDaRodada`, `ProdutorDeSnapshot` (acumula eventos; contrato da §5.6). Puro. Só campos da §5.1 |
 | `src/net/projecao.ts` | **novo** (`e4.2`) | `Snapshot + estático + CHARS → VisaoDoMundo`, a forma que `render.ts` passou a declarar. Puro |
-| `src/net/sala.ts` | **novo** | Máquina de estados da sala. Pura, relógio injetado (§3.2) |
+| `src/net/sala.ts` | **novo** (`e4.3`) | Máquina de estados da sala. Pura, relógio injetado (§3.2). Produz o `{t:'sala'}` por assento, com `versao` e o segredo do destinatário (§11.6.1) |
 | `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento |
 | `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação |
 | `src/client/main.ts` | **muda** | Ganha os modos `local` e `conectado` (§9) |
@@ -1284,7 +1517,7 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | `src/shop/**`, `src/chars/**` | **intactos** | — |
 | `src/client/render.ts` | **muda só em anotações de tipo** (`e4.2`) | 10 linhas, nenhuma de corpo: `World`/`Ball` → `VisaoDoMundo`/`BolaVisivel` (§5.1, emenda) |
 | `src/client/telas.ts`, `input.ts`, `layout.ts` | **intactos** | §5.1 |
-| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), codec (`e4.8`), sala (`e4.3`), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
+| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), codec (`e4.8`), versão do fio (`e4.9`), sala (`e4.3`), fio congelado e parser por tabela (`debt.12`, §11.6.1), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
 | `src/tools/guarda-telemetria.ts` | **novo** (`debt.11`) | Guarda headless do carimbo e da partição de telemetria, chamada pelo `sim:check`. Um dos dois únicos arquivos de `tools/` que importam `client/` (§2.2, lista fechada) |
 | `src/tools/telemetria.ts` | **muda só no ponto de entrada** (`debt.11`) | `main()` roda só como entrada do processo. Mantém a seta `tools/ → client/` de `e3.5`, agora declarada (§2.2) |
 | `src/tools/**` (resto) | **intacto** | Não importa `client/` |
@@ -1311,6 +1544,7 @@ citam a story nova.*
 | — | `sim/` segue sem importar de `chars/`, `bot/`, `client/`, `match/`, `shop/`, `net/` | grep + revisão | §2.2 |
 | — | `net/` não importa `ws` nem toca DOM | grep + revisão | §2.3 |
 | — | Codec do fio: prontidão preservada, contrafactual ingênuo reprovado, média ≤ 450 B/quadro *(2026-09-21)* | guarda do `sim:check` (`e4.8`/AC 5) | §5.5 |
+| — | Versão do fio conferida e layout congelado: `{t:'sala'}` com `versao` divergente faz o decodificador lançar; o texto de `AMOSTRA_DO_FIO` bate com a última entrada de `FIO_CONGELADO`, cuja versão é `VERSAO_DO_FIO` *(2026-09-21)* | guardas do `sim:check` (`e4.9`, `debt.12`) + revisão: `FIO_CONGELADO` só cresce | §11.6.1 |
 | — | O `snap` final de cada rodada chega ao fio antes do `rodadaFim` *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 11) + duas abas (`e4.4`/AC 16) | §5.6 |
 | — | Telemetria que vira baseline de P4.4 separa (atraso, `ESCALA_HP`) e não mistura populações *(2026-09-21)* | guarda do `sim:check` (`debt.11`), pronta antes da coleta de `e4.7` | §2.2 (decisão `debt.10` → `debt.11`) |
 | — | Só `tools/telemetria.ts` e `tools/guarda-telemetria.ts` importam `client/`; nenhum arquivo de `client/` importa um dos dois *(2026-09-21)* | `grep -rn "from '\.\./client/" src/tools/` + revisão | §2.2 |
