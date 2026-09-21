@@ -16,7 +16,10 @@
 > `e4.2` em `docs/evidence/e4-codificacao-fio/`. · 2026-09-21 (`debt.10` → `debt.11` — §2.2: **seta
 > `tools/ → client/` declarada** e casa da guarda de telemetria decidida; Anexos A e B). · 2026-09-21
 > (E48-ARC-003, gate de `e4.8` — **§11.6.1: versão do fio e fixture congelada decididas**; §0, §5.5,
-> §6, §10, Anexos A e B).
+> §6, §10, Anexos A e B). · 2026-09-21 (gate de `e4.3` — E43-ARC-001, **seta `server/ → tools/harness.ts`
+> declarada, só `hash`** na §2.2; E43-ARC-002 e E43-REQ-003, **§11.6.2: `EventoPartida` no fio, por
+> assento, com `VERSAO_DO_FIO` 2, e a pausa de R-02 à espera de R-02**; E43-DOC-006, nota da §2.2; §0,
+> §9, §11.6.1, §12/R-02, Anexos A e B).
 
 ---
 
@@ -33,6 +36,7 @@
 | Segredo da build (§13.6 de E3 — "convenção reforçada por tipo") | §8.2 | **Fecha aqui.** `visaoPara` deixa de ser convenção e vira fato de fio |
 | Onde a rede mora, sem tocar em `sim/` | §2 | Camada `net/` + entrada `server/`. `sim/`, `match/` e `shop/` **intactos**; `render.ts` muda **só em anotações de tipo** (emenda de 2026-09-21, §5.1) |
 | Versão do fio e fixture congelada | §11.6.1 | **Decididas em 2026-09-21** (E48-ARC-003): `VERSAO_DO_FIO` no `{t:'sala'}`, conferida pelo decodificador, em story nova antes da `e4.3`; texto de um `snap` congelado no `sim:check` (`debt.12`) |
+| Hash da rodada no servidor; `EventoPartida` no fio | §2.2, §11.6.2 | **Decididos em 2026-09-21** (gate de `e4.3`): `server/main.ts` importa só `hash` de `tools/harness.ts`, por seta declarada com lista fechada; `{t:'evento'}` nova, por assento (privado se tem `jogador`), com `VERSAO_DO_FIO` 2, em story nova depois de `debt.12` |
 | Codificação do fio | §5.5 | **Decidida em 2026-09-21** (`e4.2`): o `{t:'snap'}` vai como tupla posicional em JSON, com quantização que preserva prontidão; o resto do protocolo fica JSON com nomes; deflate é lever, não premissa |
 | O relógio de parede de RF-04, que hoje é do cliente | §3.4 | **Muda de dono**: vai para o servidor. Sem isso, um jogador estagna a partida de graça |
 | Determinismo entre Node e Chrome | §1.5 | **Medido pela primeira vez no projeto.** Diverge em bits, converge no hash quantizado — e o porquê disso não ser garantia está na §11.1 |
@@ -317,6 +321,7 @@ net/     protocolo, snapshot, máquina da sala         → sim/, match/, shop/  
 tools/   arnês, CLI, sim:check           → sim/, chars/, bot/, match/, shop/, net/   ← net/ desde e4.2
                                            + client/ SÓ telemetria (lista fechada)  ← declarada 2026-09-21
 server/  entrada Node: WebSocket, roteamento, relógio → net/, match/, chars/, bot/  ← NOVO
+                                           + tools/harness.ts SÓ `hash` (lista fechada)  ← declarada 2026-09-21, E43-ARC-001
 client/  render, input, telas, rede      → todos
 ```
 
@@ -328,9 +333,17 @@ client/  render, input, telas, rede      → todos
 > para a guarda da sala.
 >
 > **Sem ciclo — conferido no grafo de imports de arquivo, não só por leitura** (40 arquivos de `src/`,
-> busca em profundidade sobre `import`/`export ... from`). `net/` importa só `sim/types.ts`,
-> `match/types.ts` e a si mesmo; nenhum arquivo de `sim/`, `match/`, `shop/`, `chars/` ou `bot/`
-> importa `net/` ou `tools/`. Logo não existe caminho `net/ → … → tools/`, e a seta nova não fecha laço.
+> busca em profundidade sobre `import`/`export ... from`). ~~`net/` importa só `sim/types.ts`,
+> `match/types.ts` e a si mesmo;~~ *(Correção de 2026-09-21, E43-DOC-006, gate de `e4.3`: a frase valia
+> em `e4.2` e ficou velha em duas stories. Medido nesta sessão, no grafo de imports de `5f6c44f` (43
+> arquivos de `src/`): de **execução**, `codec.ts → protocolo.ts` (o valor `VERSAO_DO_FIO`, desde `e4.9`)
+> e `sala.ts → sim/world.ts` (`createWorld`, `step`, `TICK_HZ`), `match/index.ts` (o redutor inteiro),
+> `protocolo.ts` e `snapshot.ts` (desde `e4.3`); **só de tipo**, `protocolo.ts`, `snapshot.ts`,
+> `projecao.ts` e `codec.ts` para `sim/types.ts`, `match/types.ts` e `protocolo.ts`. As setas de
+> `sala.ts` são as primeiras de execução de `net/` para fora de `net/`, e estão todas na tabela (`net/ →
+> sim/, match/`). Nenhuma alcança `tools/`, `client/`, `chars/`, `bot/` ou `server/`. **Zero ciclos de
+> execução** no grafo inteiro, e o argumento abaixo continua de pé.)* Nenhum arquivo de `sim/`, `match/`,
+> `shop/`, `chars/` ou `bot/` importa `net/` ou `tools/`. Logo não existe caminho `net/ → … → tools/`, e a seta nova não fecha laço.
 > Os únicos ciclos de arquivo do projeto são internos a `sim/` e só de tipo (`types.ts ↔ effects.ts`,
 > `types.ts ↔ stats.ts`, ambos `import type`, apagados em runtime), anteriores a esta fase.
 >
@@ -526,6 +539,94 @@ client/  render, input, telas, rede      → todos
 > e **MR2**, como descritas em (P2), às M1/M1b/M2/M3, com o mesmo registro no Dev Agent Record. Nenhum
 > outro AC muda. Não bloqueia o início de `debt.11`, porque o texto atual já aponta a direção certa e o
 > delta só fecha as brechas.
+
+> **Decisão (2026-09-21, E43-ARC-001, gate de `e4.3`) — o servidor tira o `hash` da rodada de
+> `tools/harness.ts`, por uma seta declarada e fechada.** Entrada: `docs/qa/gates/e4.3-sala-pura.yml`
+> (`5f6c44f`, CONCERNS), E43-ARC-001 (medium), que confirma o item em aberto 1 do Dev Agent Record de
+> `e4.3`. A sala recebe `hashDoMundo` injetado (`OpcoesDaSala`, `sala.ts:158`), porque `net/` não importa
+> `tools/`. O AC 12 da `e4.4` proíbe `server/ → tools/`, e o AC 13 proíbe `src/net/` e `src/tools/`. Do
+> jeito que está, a `e4.4` não tem fonte legal para o valor que `registrarRodada` grava em
+> `ResultadoRodada.hash`. Um stub compilaria, e só apareceria no replay da `e4.6`.
+>
+> **O que foi medido nesta sessão** (Node 24.13.1, código em `5f6c44f`, sonda descartável no scratchpad
+> que importa os módulos reais e não altera `src/`):
+>
+> | Medida | Resultado |
+> |---|---|
+> | Onde `hash` é definido e quem o usa | Uma definição, `tools/harness.ts:75` (FNV-1a sobre `WorldView` quantizado). Usam: `runRound` (mesmo arquivo), `tools/determinism.ts` (import direto), `tools/partida.ts` (via `runRound`), `client/main.ts:7` (import direto, pela seta `client/ → tools/harness.ts` já declarada) e `net/sala.ts` (injetado) |
+> | Fecho de execução de `tools/harness.ts` | **6 arquivos**: ele mesmo e `sim/effects.ts`, `physics.ts`, `rng.ts`, `stats.ts`, `world.ts`. Nenhum `node:`, nenhum efeito no topo |
+> | Fecho de execução de `net/sala.ts`, que o servidor carrega de qualquer jeito | 17 arquivos. **Harness − sala = só `tools/harness.ts`**: a seta acrescenta um arquivo ao runtime do servidor, e nada mais |
+> | Ciclos | 43 arquivos em `src/`, **0 ciclos de execução**. Ninguém importa `server/`, e nenhum arquivo de `tools/` importa `server/`. `server/ → tools/` não fecha laço de arquivo nem de pasta |
+>
+> **Opções e trade-offs:**
+>
+> | Opção | A favor | Contra | Veredito |
+> |---|---|---|---|
+> | **A.** Seta declarada `server/main.ts → tools/harness.ts`, só `hash`, lista fechada | Nenhuma linha de código se move, e o golden hash fica imóvel **por construção**, não por medição. Nenhuma story `Done` reabre. É **a mesma seta**, para a **mesma função** e pelo **mesmo motivo**, que `client/main.ts → tools/harness.ts` já tem declarada | `tools/` passa a ser carregado pelo servidor de produção. A injeção continua, e com ela o risco de stub (tratado abaixo) | **Escolhida** |
+> | **B.** Mover `hash` para `sim/hash.ts`, com `harness.ts` reexportando | A sala poderia importar direto, e o stub ficaria impossível por estrutura | `sim/` responde "é preciso disto para resolver o tick?", e não é. A fase tem como invariante escrita não tocar `sim/` (§10, Anexo A: "nem um campo, nem um import"), e toda story de E4 o proíbe. Reabre a `e4.3` (`Done`): a assinatura de `OpcoesDaSala` e a guarda. O golden hash ficaria imóvel só se a cópia for byte a byte, e aí a prova passa a ser o `sim:check`, não a construção | Rejeitada |
+> | **C.** Mover para `net/` | Mesmo ganho de B | Falha na régua de `net/`: o hash existe sem ninguém conectado (golden hash, modo local). E `harness.ts`, que é o golden hash do projeto, passaria a depender da camada de transporte. Reabre a `e4.3` | Rejeitada |
+> | **D.** Cópia de `hash` em `server/` | Nenhuma seta nova | Segunda definição (a lição de C3). Uma cópia que diverge passa calada até o replay da `e4.6` | Rejeitada |
+> | **E.** Mover para `match/` | `ResultadoRodada.hash` é campo de `match/` | `match/` fica intacto em E4 (§3.3: muda quem chama, não o que é), e `match/types.ts:137` registra que quem calcula é o chamador. Reabre a `e4.3` | Rejeitada |
+>
+> **Por que A e não B, que é a única concorrente de verdade.** B compra uma coisa só: o stub fica
+> impossível por estrutura. Esse stub já é pego duas vezes (abaixo), uma delas bit a bit. O preço de B é
+> tocar `sim/` numa fase cuja invariante é não tocar `sim/`, e reabrir uma story fechada. A seta de A já
+> existe no projeto, para esta função, e não criou problema.
+>
+> **Regras da seta:**
+>
+> - **Lista fechada.** Só `src/server/main.ts` importa de `tools/`, e só `hash`, de `tools/harness.ts`:
+>   `import { hash } from '../tools/harness.ts'`. Conferência: `grep -rn "from '\.\./tools/" src/server/`
+>   devolve **uma** linha. Outro arquivo de `server/`, ou outro símbolo, é emenda desta seção.
+> - **Pela referência.** `criarSala({ …, hashDoMundo: hash })`. Sem lambda, sem embrulho, sem condição.
+>   `grep -n "hashDoMundo" src/server/main.ts` mostra `hashDoMundo: hash`.
+> - **Invariante de `harness.ts`**, que agora tem dois consumidores de produção (o bundle do cliente e o
+>   servidor): importa só `sim/` e não tem efeito no topo. Isso já é verdade (medido acima). A regra já
+>   valia para o cliente, e não tem guarda mecânica: o Vite externaliza módulo `node:` num build de
+>   navegador com aviso, não com erro. Quem mudar os imports de `harness.ts` abre handoff, como no
+>   invariante de importabilidade da `tools/ → client/`.
+> - **O teto de ticks continua na configuração da sala.** O servidor não importa `MAX_ROUND_TICKS`. A
+>   tripwire do `sim:check` confere `CONFIG_PADRAO_DA_SALA.tetoDeTicks === MAX_ROUND_TICKS`, e o servidor
+>   não sobrescreve `tetoDeTicks` (o override de operação de `e4.7` é `snapshotHz` e deflate).
+> - **A sala não muda.** A injeção fica. É a porta pela qual o `sim:check` passa a mesma função, e a
+>   `e4.3` está `Done`.
+> - **Sem ciclo de arquivo** é condição da seta, como na `tools/ → client/`.
+>
+> **O que fecha o risco de stub** (a preocupação do gate):
+>
+> 1. **Na `e4.4`, por revisão mecânica:** os dois greps acima entram em `quality_gate_tools`. Um stub, uma
+>    lambda ou outra função aparecem no gate da `e4.4`, e não só no da `e4.6`.
+> 2. **Na `e4.6`, bit a bit:** o AC 5 compara o `ResultadoRodada.hash` que a sala **do servidor** gravou
+>    ao vivo com o `hash()` da reprodução em Node. Um stub `''`, ou uma função diferente, reprova ali. A
+>    guarda do `sim:check` da `e4.6` (AC 7) **não** vê isso, porque injeta ela mesma o `hash` do arnês e
+>    nunca carrega `server/main.ts`. A prova de ponta a ponta é o AC 5, com partida real, e o delta abaixo
+>    deixa isso escrito.
+>
+> **Deltas para o @po** (este documento não edita story):
+>
+> - **`e4.4`, AC 12:** trocar "`server/` importa `net/`, `match/`, `chars/` e `ws`. **Não** importa
+>   `client/` nem `tools/`." por *"`server/` importa `net/`, `match/`, `chars/`, `ws` e, **só em
+>   `src/server/main.ts`, só `hash` de `tools/harness.ts`** (seta declarada em `architecture-e4.md` §2.2,
+>   E43-ARC-001), passado a `criarSala` como `hashDoMundo: hash`, pela referência, sem lambda nem embrulho.
+>   Não importa `client/` nem nenhum outro arquivo de `tools/`."* Em `quality_gate_tools` e Testing:
+>   `grep -rn "from '\.\./tools/" src/server/` devolve exatamente uma linha, e `grep -n "hashDoMundo"
+>   src/server/main.ts` mostra `hashDoMundo: hash`. Nas Dev Notes: a configuração da sala criada pelo
+>   servidor não sobrescreve `tetoDeTicks`. **O AC 13 não muda**, porque nenhum arquivo de `tools/` é
+>   alterado, só importado.
+> - **`e4.6`, AC 5 (acréscimo):** *"Os hashes 'da execução ao vivo' são os `ResultadoRodada.hash` que a
+>   sala do servidor gravou (o `hash` injetado por `server/main.ts`), e não os que a guarda do AC 7 calcula.
+>   Esta comparação é a prova de ponta a ponta de E43-ARC-001: um `hashDoMundo` que não seja o `hash()` de
+>   `tools/harness.ts` reprova aqui."*
+> - **`e4.3`, `tools/harness.ts`, `sim/`:** nada muda.
+>
+> **Segurança.** Nenhuma superfície de entrada nova. O risco da seta é arrastar código de ferramenta para
+> o processo do servidor. A lista fechada o contém: `tools/` tem arquivos com `node:fs`
+> (`determinism.ts`, `guarda-telemetria.ts`, `telemetria.ts`) e com `process.exit` (`telemetria.ts`, sob
+> `import.meta.main`), e nenhum deles entra no fecho de `harness.ts`.
+>
+> **Reabre se:** `harness.ts` ganhar import fora de `sim/` ou efeito no topo; um segundo arquivo de
+> `server/` precisar de `hash` (aí B, com story própria, fica mais barata que alargar a lista); ou a
+> `e4.6` mostrar que o gravador precisa de mais de `tools/` do que o `hash`.
 
 `net/` é **puro**: sem `ws`, sem DOM, sem `Date.now`, sem `Math.random`, sem I/O. Quem tem socket é
 `server/`; quem tem `WebSocket` do navegador é `client/rede.ts`. O motivo é o mesmo de sempre e
@@ -1104,6 +1205,9 @@ Na mesma forma da §11.2 de E3:
 - A telemetria de `e3.5` continua local e continua do cliente: ela mede **o jogador**, não a partida.
   `EventoPartida` passa a chegar pelo fio em vez de sair do redutor local, e o coletor não sabe a
   diferença.
+  *(2026-09-21, §11.6.2: até o gate de `e4.3` nenhuma mensagem do fio levava `EventoPartida`. A variante
+  é `{t:'evento', e}`, por assento: o cliente recebe os eventos sem `jogador` e **só os próprios**, e não
+  os do oponente.)*
 - `render.ts`, `telas.ts`, `input.ts`, `layout.ts`: **intactos**.
   *(Emenda de 2026-09-21: `render.ts` muda em `e4.2` **só em anotações de tipo**, 10 linhas, nenhuma de
   corpo — §5.1. Os outros três seguem intactos.)*
@@ -1279,7 +1383,9 @@ o codec real e não altera nada):
   Um JSON à parte acrescentaria arquivo ao escopo sem ganhar nada: a revisão continua sendo um diff.
 - **Forma:** uma lista **só de acréscimo**, com uma entrada por versão:
   `FIO_CONGELADO: readonly { versao: number; snap: string }[]`, que nasce com
-  `[{ versao: 1, snap: '<texto acima>' }]`.
+  `[{ versao: 1, snap: '<texto acima>' }]`. *(Emenda de 2026-09-21, §11.6.2: a entrada ganha um terceiro
+  campo, `variantes`, com a lista de `t` de `DoServidor`, e a guarda ganha o item 5. Sem isso, uma variante
+  nova sem subir a versão passava pelos itens 1 a 4.)*
 - **O que a guarda confere** (linha própria no `sim:check`, junto das do codec):
   1. `codificarDoServidor({ t: 'snap', s: AMOSTRA_DO_FIO, seq: 4 }) === última.snap`. Se falhar, a
      mensagem aponta a **primeira posição divergente** da tupla, com o caminho (`s[6][0][4]`), o valor
@@ -1387,6 +1493,7 @@ o codec real e não altera nada):
   enquanto R-05 bloquear a `e4.4`.
   Ordem de `determinism.ts`: `e4.8` → `debt.11` → **`e4.9`** → `e4.3` → `debt.12` → `e4.6`, com a
   regra de `e4.3` v1.5.0 (só começa com `git status --short src/tools/determinism.ts` vazio).
+  *(2026-09-21, §11.6.2: a story de `EventoPartida` no fio entra entre `debt.12` e `e4.6`.)*
 
 **Alternativas rejeitadas, com o custo de cada uma:**
 
@@ -1504,6 +1611,238 @@ o incidente.
 - **`e4.5`:** nenhum AC muda. Para as Dev Notes: leitura por nome, sem mesclar (parágrafo acima).
 - **`e4.9`, `debt.12`:** nada muda.
 
+#### 11.6.2 `EventoPartida` no fio, por assento — decidido; a pausa de R-02 espera R-02 *(2026-09-21, E43-ARC-002 e E43-REQ-003, gate de `e4.3`)*
+
+Entrada: `docs/qa/gates/e4.3-sala-pura.yml` (`5f6c44f`, CONCERNS): E43-ARC-002 (medium) e E43-REQ-003
+(low), que confirmam os itens em aberto 3 e 2 do Dev Agent Record de `e4.3`. O primeiro: a §9 e o AC 10 da
+`e4.5` dizem que `EventoPartida` "passa a chegar pelo fio", mas `DoServidor` não tem variante para isso, e
+a sala guarda os eventos em `Sala.eventos` sem enviá-los. O AC 14 da `e4.5` proíbe `src/net/`, então o AC 10
+dela não cabe no escopo dela, e a evidência de telemetria de P4.4 (`e4.7`/AC 8) depende disso. O segundo:
+a pausa de R-02 não aparece no fio.
+
+**Medições desta sessão** (Node 24.13.1, código em `5f6c44f`, a mesma sonda descartável do bloco
+E43-ARC-001 da §2.2, que importa `sala.ts`, `codec.ts`, `partida.ts` e `harness.ts` reais):
+
+- **M-5. Os eventos da Bo5 da guarda.** `jogarPartida(1)`, a `matchSeed` da guarda de `e4.3`: 7 eventos,
+  `rodadaFim` ×3, `partidaFim` ×1, `compra` do jogador 0 ×1, `compra` do jogador 1 ×1 e `buildPadrao` do
+  jogador 1 ×1. **Nenhum `trocaDeBuild`.** A seed 2 tem um `trocaDeBuild` do jogador 0 e duas compras do
+  jogador 1. A seed 12345 tem a forma da seed 1.
+- **M-6. O vazamento que o filtro impede.** Sala com a configuração padrão, os dois assentados, draft
+  feito, fase `builds` (prazo de RF-04 de 30 s). O assento do jogador 1 cai em t = 1 s, com o jogador 0
+  ainda não pronto. Em t = 21 s a pausa de R-02 (20 s) estoura, e `Sala.eventos` ganha `{t:'buildPadrao',
+  rodada: 0, jogador: 1}`. A partida continua em `builds`, com `prontos [false, true]`. A `visao` enviada ao
+  jogador 0 no mesmo passo mostra os dois personagens do oponente com `revelado: false` e sem build. A build
+  do jogador 1 agora é 0/0 nos dois personagens, que é o que `buildPadrao` significa
+  (`aplicarBuildPadrao`, `match/redutor.ts`). **Um broadcast desse evento contaria ao jogador 0 a build
+  secreta do oponente antes da largada**, contra RF-04, e seria a única coisa no fio a contar isso. No
+  caminho do relógio de RF-04 não vaza: o estouro dá a default a todos os que não estão prontos no mesmo
+  passo, e a largada revela tudo junto. A janela existe porque o prazo da pausa (20 s) é menor que o de
+  builds (30 s), que é o default provisório.
+- **M-7. A rodada perdida por W.O. entra na telemetria como rodada humana.** Mesma sala, rodada iniciada,
+  o assento do jogador 1 cai com 0,5 s de rodada, e a pausa estoura: `rodadaFim` com `duracaoMs 500`,
+  `vencedor 0` e `controle ['humano','humano']`. Rodadas decididas por W.O. entram na mediana de P3.1 e na
+  conta de P3.2 como se tivessem sido jogadas.
+- **M-8. O cliente de hoje diante de `{t:'evento'}`.** `decodificarDoServidor` lança `Error` comum
+  ("mensagem sem `t` do vocabulário de DoServidor"), e não `DescompassoDeVersao`. Um cliente de antes da
+  variante, falando com um servidor que a tenha **sem subir a versão**, passa pela checagem de versão e
+  fecha a conexão no primeiro evento. Cai no ramo genérico do `e4.5`/AC 3, sem "recarregue" na tela.
+- **M-9. A guarda de `e4.9` tem a versão seguinte escrita como literal.** `determinism.ts:1215` tem o caso
+  `['versao 2', salaCom('versao', 2), 2]`. Com `VERSAO_DO_FIO = 2`, esse caso deixa de lançar, e a linha
+  `versão fio` do `sim:check` fica vermelha.
+- **M-10 (por leitura dos quatro itens da §11.6.1, não por execução, porque a guarda da `debt.12` ainda não
+  existe).** A fixture congela só o texto do `snap`. Uma variante nova de `DoServidor` sem subir a versão
+  passa pelos itens 1 a 4: o texto do `snap` não muda, e `FIO_CONGELADO.length === VERSAO_DO_FIO` continua
+  1 = 1. A regra "muda a forma de qualquer variante ⇒ sobe" (Decisão 2) teria só a revisão a segurá-la.
+
+**Decisão 1 — variante nova `{ t: 'evento'; e: EventoPartida }`, uma mensagem por evento, por assento.**
+
+- **Por que não o cliente derivar os eventos de `visao`/`rodadaFim`** (a opção (ii) do gate). O
+  `rodadaFim` de `EventoPartida` carrega `controle`, que `ResultadoRodada` não tem: o cliente teria de
+  inventar `['humano','humano']`, que é a suposição que o próprio agregador recusa ("nada de assumir",
+  `tools/telemetria.ts`). O `compra` carrega `trilha`, `preco` e `ouroDepois`: derivá-los é refazer a
+  aritmética de `match/` no cliente, uma segunda definição (C3). E o `buildPadrao` do próprio jogador não
+  se distingue, na `visao`, de "escolheu 0/0 e declarou pronto". Rejeitada.
+- **Por que não pendurar os eventos na `visao`** (`{t:'visao', v, eventos}`). Custaria a mesma subida de
+  versão, misturaria projeção com telemetria, e pediria uma regra a mais: a `visao` também sai no
+  reassentamento, e ali os eventos não podem ser reenviados. Um `t` novo é mais simples, e a lista fechada
+  do decodificador faz um cliente velho falhar alto.
+- **Uma mensagem por evento, e não um lote.** São dezenas por partida (M-5), e a ordem fica trivial.
+- **Tipo:** `e: EventoPartida`, importado **como tipo** de `match/types.ts`, como `protocolo.ts` já faz com
+  `Decisao` e `VisaoPartida`. Nada é redeclarado.
+- **Codec:** `evento: true` em `T_DO_SERVIDOR` (o `satisfies` obriga). Vai como JSON com nomes. O
+  decodificador **não** confere os campos de `e`: pelo critério do adendo E49-REQ-004 acima, `e` não
+  cumpre (i), (ii) nem (iii). Sai tipado de `match/`, não é o mecanismo de descompasso e não é credencial.
+
+**O filtro por assento, numa regra só:** o assento do jogador `j` recebe `e` **se e só se** `e` não tem o
+campo `jogador`, ou `e.jogador === j`. Na prática, `rodadaFim` e `partidaFim` vão aos dois, e `compra`,
+`trocaDeBuild` e `buildPadrao` vão só ao dono. Motivos:
+
+1. **Segredo (RF-04).** O `buildPadrao` diz a build, por definição (M-6).
+2. **A tela não perde nada.** As compras do oponente não são segredo e já chegam: `itens` e `ouro` estão
+   na `VisaoPartida` (`match/visao.ts`: "as compras não são secretas"). O `trocaDeBuild` do oponente já
+   aparece como `revelado: false` mais a queda do `ouro`. O evento não acrescentaria nada ao que a tela
+   pode desenhar.
+3. **A telemetria mede o jogador (§9), e os dois aparelhos de uma partida exportam.** Com o filtro, as
+   compras dos dois arquivos são disjuntas e se somam. Com broadcast, cada compra contaria duas vezes
+   quando os arquivos fossem juntados, e o filtro de P3.3 por `controle` não pegaria, porque os dois
+   jogadores são humanos.
+4. **Uma regra, não uma tabela por variante.** Uma variante futura de `EventoPartida` com `jogador` nasce
+   privada, e uma sem `jogador` nasce pública. O default de uma variante nova com `jogador` é o seguro. Se
+   uma variante futura precisar de outro tratamento, é mudança de protocolo, revisada aqui.
+
+Resíduo, que vira delta para a `e4.7`: `rodadaFim` e `partidaFim` aparecem nos **dois** exports da mesma
+partida, com a mesma `partida` (a seed).
+
+**Ordem nos envios.** Os `{t:'evento'}` de uma transição saem **logo depois** do `{t:'visao'}` dessa
+transição, na ordem de `Transicao.eventos`, e **antes** de qualquer envio que `sincronizar` produza
+(`prazo`, `rodadaInicio`, o `{t:'sala'}` de `encerrada`). Com isso, o `partidaFim` chega antes do
+`encerrada`, e o cliente pode fechar ao ver `encerrada` sem perder o último evento. Na sala de hoje isso é
+chamar o envio de eventos logo depois de `enviarVisao` em `decidir` e em `encerrarRodada`, e em nenhum
+outro lugar.
+
+**Sem reenvio no reassentamento.** Eventos produzidos enquanto um assento está vago não são reenviados
+quando ele volta. A `visao` reconstrói o estado, e a telemetria da ausência não é do jogador. Só eventos sem
+`jogador` podem se perder assim, porque ninguém decide desconectado. O caso concreto é o `rodadaFim` de uma
+rodada perdida por W.O., que não chega ao export do ausente. Isso é coerente com M-7, que fica com R-02.
+
+**Versão: `VERSAO_DO_FIO` sobe de 1 para 2.** É a regra da Decisão 2 da §11.6.1: a forma de `DoServidor`
+muda. Nada com a versão 1 foi publicado, e ainda assim a versão sobe, por três motivos. (a) A regra funciona
+porque não tem exceção. "Não publicado" exigiria julgar o que foi publicado, e o Pages republica a cada push
+em `master`. (b) M-8: sem subir, o cliente velho fecha sem a mensagem certa. (c) O procedimento de mudança
+deliberada (lista só de acréscimo) é exercitado pela primeira vez quando isso não custa nada, antes de
+qualquer deploy. Se ele tiver defeito, aparece agora. O custo é uma entrada a mais em `FIO_CONGELADO`, com
+o mesmo texto de `snap` da versão 1, e o literal de M-9.
+
+**Emenda à Decisão 1 da §11.6.1 — a fixture congela também a lista de variantes.** A entrada passa a ser
+`{ versao: number; snap: string; variantes: string }`. `variantes` é a lista de `t` de `DoServidor`, em
+ordem (`sort()` padrão) e unida por vírgula. A da versão 1 é
+`'erro,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao'`. A guarda deriva a lista atual das chaves de
+`amostras` (a guarda `não-snap`, cujo `satisfies` obriga exatamente uma chave por variante que não é `snap`),
+mais `'snap'`, e ganha o **item 5**: lista atual `===` `última.variantes`, com a mesma mensagem do item 1
+("incremente `VERSAO_DO_FIO` e ACRESCENTE uma entrada"). **Por que só a lista de `t`, e não o texto de cada
+variante:** o que faz um cliente velho lançar, e fechar sem explicação, é a aridade do `snap` (item 1), um
+`t` fora da lista fechada (item 5, novo) e os três campos conferidos do `{t:'sala'}` (`versao`,
+`snapshotHz` e `assento`, e mudá-los é mudar o próprio mecanismo, revisado aqui). Um campo acrescentado a
+outra variante é absorvido pela descida permissiva (E49-REQ-004), e congelar o texto congelaria só a ordem
+de chaves do `JSON.stringify` (argumento da §11.6.1, que continua valendo). Resíduo: um campo **removido**
+ou **renomeado** numa variante que não é `snap` continua segurado só pela revisão. O cliente velho lê
+`undefined` e degrada, sem lançar.
+
+**Story que implementa: nova, sugestão `e4.10` (o número é do @sm).**
+
+- **Escopo:** `src/net/protocolo.ts` (a variante; `VERSAO_DO_FIO = 2`; e o comentário do topo, "`net/ →
+  sim/, match/`, só tipos", passa a dizer que a regra é **deste arquivo**, porque `sala.ts` e `codec.ts`
+  já têm imports de execução); `src/net/codec.ts` (só `T_DO_SERVIDOR`; a seção de ENTRADA não muda, e o
+  diff prova); `src/net/sala.ts` (a função de envio de eventos com o filtro e as duas chamadas; nada mais,
+  e o diff prova); `src/tools/determinism.ts` (a amostra `evento`, a entrada 2 de `FIO_CONGELADO`, o caso
+  de M-9 se a `debt.12` não o tiver tornado relativo, e a extensão da guarda da sala). **Proibidos:**
+  `src/sim/`, `src/match/`, `src/shop/`, `src/chars/`, `src/bot/`, `src/client/`, `src/server/`, `docs/`.
+- **Guarda, no bloco `sala pura` do `sim:check`:**
+  - (a) **Bo5 da guarda (`matchSeed 1`):** para cada assento, a sequência de `e` recebida em `{t:'evento'}`
+    é profundamente igual, e na mesma ordem, a `Sala.eventos` filtrado pela regra para o jogador daquele
+    assento. Pela M-5, são 5 eventos ao assento do jogador 0 (três `rodadaFim`, `partidaFim` e a compra
+    dele) e 6 ao do jogador 1 (os mesmos quatro, a compra dele e o `buildPadrao` dele), de 7 no log.
+  - (b) **Na sala descartável dos negativos:** o cenário de M-6 (queda em `builds`, presente não pronto,
+    estouro da pausa) põe o `buildPadrao` do ausente em `Sala.eventos` e manda **zero** `{t:'evento'}` ao
+    presente naquele passo. E um `trocaDeBuild`, que a seed 1 não tem (M-5), chega só ao assento dono.
+  - (c) **Ordem:** em cada passo e em cada assento, todo `{t:'evento'}` vem depois do `{t:'visao'}` daquele
+    passo e antes de qualquer `{t:'sala'}` com `estado: 'encerrada'`. O `partidaFim` chega aos dois
+    assentos conectados antes do `encerrada`.
+  - (d) **Codec:** a amostra `evento` volta idêntica pela linha `não-snap`.
+  - (e) **Fixture:** `FIO_CONGELADO` ganha `{ versao: 2, snap: <o mesmo texto da versão 1>, variantes: <a
+    lista com 'evento'> }`, só por acréscimo, e os itens 1 a 5 ficam verdes.
+- **Mutações que têm de sair com rc ≠ 0**, cada uma numa cópia descartável: **ME1**, broadcast (sem
+  filtro); **ME2**, o filtro derrubando os eventos sem `jogador` (só `e.jogador === j`); **ME3**, o filtro
+  invertido (só os do oponente); **ME4**, o envio de eventos movido para depois de `sincronizar`
+  (`partidaFim` depois do `encerrada`); **ME5**, eventos enviados só em `decidir`, e não em
+  `encerrarRodada` (somem `rodadaFim` e `partidaFim`); **ME6**, a variante acrescentada com `VERSAO_DO_FIO`
+  mantida em 1 e sem entrada nova. ME6 reprova pelo item 5, e por isso depende da emenda acima estar na
+  `debt.12`.
+- **Saída do `sim:check`:** golden hash idêntico. O antes × depois **não** é só inserção, e a story tem de
+  declarar as linhas que mudam, e nenhuma outra: a linha `não-snap` (contagem de mensagens e de variantes,
+  +1 cada), a linha do fio congelado, se imprimir contagem de entradas, e as linhas novas do bloco `sala
+  pura`.
+- **Sequência:** depois da `debt.12` e antes da `e4.6` na fila de `determinism.ts` (`e4.8` → `debt.11` →
+  `e4.9` → `e4.3` → `debt.12` → **`e4.10`** → `e4.6`). Antes da `e4.5`, que é a consumidora. **Não depende de
+  R-05**, porque é `net/` puro e `tools/`, então o custo no caminho crítico é nulo.
+- **Se R-02 for decidida antes de a `e4.10` começar,** o aviso de pausa entra nela, na mesma subida de
+  versão (a preferência do gate, abrir `DoServidor` uma vez só). Se não for, a `e4.10` não espera.
+
+**Alternativas de story, rejeitadas:**
+
+| opção | por que não |
+|---|---|
+| `e4.5` recebe a variante | O AC 14 proíbe `src/net/`. E um cliente sairia esperando uma mensagem que nenhum servidor manda ainda. |
+| `e4.4` recebe a variante | O AC 13 proíbe `src/net/`, e a story está bloqueada em R-05. Misturaria mudança de protocolo com socket, que é o que a §11.6.1 rejeitou para a versão. |
+| `debt.12` recebe a variante | A `debt.12` é só `determinism.ts` por disciplina: um caso novo que falha contra o código de hoje é achado, não correção no próprio commit. |
+| `e4.3` | Está `Done`, e o AC 15 dela proibia `protocolo.ts` e `codec.ts`. |
+
+**Decisão 2 — a pausa de R-02 não reserva nada no fio agora (E43-REQ-003).** Não entra `estado:
+'pausada'` no `{t:'sala'}`. Três motivos:
+
+1. **A forma depende de R-02.** W.O. imediato (`prazoMs 0`) e "bot assume" não têm pausa. "Pausa com
+   prazo" precisa do tempo restante, como o `{t:'prazo'}`, e um `estado: 'pausada'` solto não leva isso.
+   Reservar o valor agora provavelmente reserva a forma errada, e um valor sem semântica num vocabulário
+   fechado é invenção (Artigo IV).
+2. **`FaseDaSala` é derivado do tipo do fio.** `sala.ts:165` define `FaseDaSala =
+   Extract<DoServidor, { t: 'sala' }>['estado']`. Pôr `'pausada'` no fio muda o tipo da máquina de estados
+   da sala, e todo `n.fase === 'jogando'` de `sala.ts` teria de ser revisto (`avancar`, `cair`, `receber`,
+   `encerrarSala`). A pausa é um estado da partida em curso, não uma fase do ciclo de vida da sala. A forma
+   provável é uma mensagem própria, com o jogador ausente e o restante, decidida com R-02.
+3. **Esperar custa uma subida de versão a mais.** Com o procedimento da §11.6.1, isso é uma linha e uma
+   entrada acrescentada. Antes de deploy não custa nada. Depois de deploy, uma aba velha vê "recarregue",
+   que é o comportamento projetado.
+
+**Dependência registrada.** R-02 (@pm, com ratificação do usuário) → a pergunta inclui "como o presente é
+avisado" (sugestão do gate) → o @architect dá a forma no fio → a story (a `e4.10`, se ainda não tiver
+começado, ou uma nova) sobe a versão. Até lá, o default provisório já produz a pausa invisível. Partidas de
+teste da `e4.5` e da `e4.7` com queda vão ver os `snap` pararem sem motivo na tela, e o AC 1 da `e4.7` já
+registra quedas. **Acréscimos à lista de E43-REQ-004, para a decisão de R-02:** M-7 (rodada perdida por W.O.
+entra em P3.1 e P3.2 como rodada humana) e M-6 (o prazo da pausa menor que o de builds é o que abre a janela
+do `buildPadrao`; o filtro fecha o vazamento, mas a semântica de R-02 precisa saber que ela existe).
+
+**Observação O-2 (não decidida aqui): a seed da partida já está no fio.** `visaoPara` manda `seed` aos dois
+assentos (`match/visao.ts`), e a §6 proíbe derivar o id da sala de `matchSeed` porque "a seed determina
+tudo". Medido nesta sessão: `world.rng` só é consumido no jitter de nascimento das bolas
+(`sim/world.ts:93-96`), que o primeiro `snap` da rodada mostra de qualquer jeito. As seeds das rodadas são
+deriváveis dela, e dão só isso. **Hoje é inofensivo.** Reabre se aparecer um consumidor de `world.rng` no
+meio da rodada (personagens da Fase 5). Aí a `visao` deixa de levar `seed`, e é mudança em `match/`. A
+`e4.5` vai usar `visao.seed` como a chave `partida` da telemetria, e essa troca levaria junto a chave (o id
+da sala serviria).
+
+**Deltas para o @po / @sm** (este documento não edita story):
+
+- **`e4.10` (nova, @sm):** escopo, guarda, mutações, saída do `sim:check` e sequência como acima. Depende de
+  `e4.3` (Done) e de `debt.12`. É pré-condição de `e4.5`.
+- **`debt.12` (Ready):** **AC 5**, a entrada de `FIO_CONGELADO` passa a `{ versao: number; snap: string;
+  variantes: string }`, nascendo com `variantes: 'erro,ping,prazo,rodadaFim,rodadaInicio,sala,snap,visao'`,
+  e a guarda ganha o item 5 (lista derivada das chaves de `amostras` mais `'snap'`, igual a
+  `última.variantes`, com a mensagem do item 1). **AC 6**, uma mutação a mais: **M-VARIANTE**, numa cópia
+  descartável, acrescentar `| { t: 'x' }` a `DoServidor`, `x: true` a `T_DO_SERVIDOR` e uma amostra `x`,
+  sem subir a versão, e o `sim:check` sai com rc ≠ 0 pela linha do fio congelado. **AC 9**, recomendado:
+  o caso `['versao 2', salaCom('versao', 2), 2]` do laço `descompassos` passa a
+  `VERSAO_DO_FIO + 1` (rótulo e valor). O contador continua `4/4`, e a `e4.10` não precisa abrir essa linha.
+  Continua só `determinism.ts`.
+- **`e4.5`, "Depende de":** ganha `e4.10`. **AC 10**, reescrever a frase *"`EventoPartida` passa a chegar
+  pelo fio em vez de sair do redutor local"* como *"`EventoPartida` chega em `{t:'evento', e}` (`e4.10`),
+  e `client/rede.ts`/`client/main.ts` entregam `e` ao coletor, como `telemetria.registrar(seed, [e])`,
+  com `seed` da última `visao`. O coletor não muda."* A verificação passa a ser *"o export de uma partida
+  conectada contém `rodadaFim` de cada rodada, `partidaFim`, `cast` e as compras **do próprio** jogador, e
+  **nenhum** `compra`, `trocaDeBuild` ou `buildPadrao` com `jogador` diferente do jogador do assento (o do
+  `{t:'sala'}`)"*. Para as Dev Notes: no modo conectado o jogador local pode ser o 1, e o cliente não
+  assume `HUMANO = 0`. O `controle` do `rodadaFim` vem do servidor e não é reescrito. **O AC 14 não muda.**
+- **`e4.7`, AC 8 (acréscimo):** *"Cada aparelho exporta o próprio arquivo. `rodadaFim` e `partidaFim`
+  aparecem nos dois exports da mesma partida: P3.1 e P3.2 são agregados por aparelho, ou com os
+  `rodadaFim` deduplicados por (`partida`, `rodada`) antes de juntar, e o README diz qual. As compras são
+  disjuntas entre os dois arquivos (`architecture-e4.md` §11.6.2) e podem ser somadas."* E, recomendado
+  (o @po decide): rodadas terminadas por W.O. de R-02 são marcadas no README e ficam fora de P3.1 e P3.2
+  enquanto R-02 não decidir (M-7).
+- **`e4.6`:** entra depois da `e4.10` na fila de `determinism.ts`. O AC 12 (escopo) não muda.
+- **`e4.4`:** nenhum AC muda por esta seção. Os `{t:'evento'}` estão em `ResultadoDoPasso.envios`, que o
+  AC 15 já manda escrever na ordem devolvida.
+- **R-02 (@pm):** a pergunta ganha "como o presente é avisado" e os dois acréscimos da lista de E43-REQ-004
+  acima.
+
 ---
 
 ## 12. Ressalvas e o que este documento devolve ao @pm / usuário
@@ -1532,6 +1871,13 @@ Não existe requisito. As opções, com o que cada uma custa:
 
 *Recomendação: pausa com prazo curto e W.O. no estouro.* Mas é decisão de produto, não de
 arquitetura, e a quarta linha mostra que a escolha errada cria incentivo perverso.
+
+> **Nota (2026-09-21, gate de `e4.3`, §11.6.2):** o mecanismo está em `net/sala.ts`, com o default
+> provisório marcado (`POLITICA_DE_DESCONEXAO_PROVISORIA`). A decisão continua aberta, e ficou com três
+> perguntas a mais, todas medidas: **como o presente é avisado** (hoje a pausa é invisível no fio, e o fio
+> não reserva nada até esta decisão sair); **se uma rodada perdida por W.O. entra na telemetria como rodada
+> humana** (hoje entra, com `controle ['humano','humano']`); e a semântica por fase que o gate de `e4.3`
+> listou (E43-REQ-004). A forma no fio da resposta é do @architect, e sai numa subida de `VERSAO_DO_FIO`.
 
 ### R-03 — `SNAPSHOT_HZ` sai de medição em aparelho, não daqui *(informativa)*
 
@@ -1568,12 +1914,12 @@ reler R-05 com o número novo. **Não reabre D-05.**
 
 | Arquivo | Estado | Papel |
 |---|---|---|
-| `src/net/protocolo.ts` | **novo** (`e4.0`); **muda** (`e4.9`) | Tipos de mensagem, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro. *(O "codec" que esta linha citava foi para `codec.ts`.)* `e4.9`: `VERSAO_DO_FIO`, e `{t:'sala'}` ganha `versao` e `assento` (§11.6.1) |
-| `src/net/codec.ts` | **novo** (`e4.8`, `910add8`); **muda** (`e4.9`, só a saída) | `parseDoCliente` (entrada, `e4.8`/AC 4) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro; só tipos, mais o valor `VERSAO_DO_FIO` de `protocolo.ts` desde `e4.9`, que faz o decodificador lançar em versão divergente (§11.6.1) |
+| `src/net/protocolo.ts` | **novo** (`e4.0`); **muda** (`e4.9`, `e4.10`) | Tipos de mensagem, `ATRASO_ALVO_TICKS = 6`, `SNAPSHOT_HZ`. Puro. *(O "codec" que esta linha citava foi para `codec.ts`.)* `e4.9`: `VERSAO_DO_FIO`, e `{t:'sala'}` ganha `versao` e `assento` (§11.6.1). `e4.10`: `{t:'evento', e: EventoPartida}` e `VERSAO_DO_FIO = 2` (§11.6.2) |
+| `src/net/codec.ts` | **novo** (`e4.8`, `910add8`); **muda** (`e4.9`, só a saída; `e4.10`, só `T_DO_SERVIDOR`) | `parseDoCliente` (entrada, `e4.8`/AC 4) e `codificarDoServidor`/`decodificarDoServidor` (saída, com o `snap` em tupla, §5.5). Puro; só tipos, mais o valor `VERSAO_DO_FIO` de `protocolo.ts` desde `e4.9`, que faz o decodificador lançar em versão divergente (§11.6.1) |
 | `src/net/snapshot.ts` | **novo** (`e4.2`) | `World → EstaticoDaRodada`, `ProdutorDeSnapshot` (acumula eventos; contrato da §5.6). Puro. Só campos da §5.1 |
 | `src/net/projecao.ts` | **novo** (`e4.2`) | `Snapshot + estático + CHARS → VisaoDoMundo`, a forma que `render.ts` passou a declarar. Puro |
-| `src/net/sala.ts` | **novo** (`e4.3`) | Máquina de estados da sala. Pura, relógio injetado (§3.2). Produz o `{t:'sala'}` por assento, com `versao` e o segredo do destinatário (§11.6.1) |
-| `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento |
+| `src/net/sala.ts` | **novo** (`e4.3`, `99f4ee3`); **muda** (`e4.10`) | Máquina de estados da sala. Pura, relógio injetado (§3.2). Produz o `{t:'sala'}` por assento, com `versao` e o segredo do destinatário (§11.6.1). Recebe `hash` e roster injetados (§2.2, E43-ARC-001). `e4.10`: envia `{t:'evento'}` por assento, com o filtro da §11.6.2 |
+| `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento. Único arquivo de `server/` que importa `tools/`, e só `hash` de `tools/harness.ts`, injetado na sala (§2.2, E43-ARC-001) |
 | `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação |
 | `src/client/main.ts` | **muda** | Ganha os modos `local` e `conectado` (§9) |
 | `package.json` | **muda** | Dependência `ws`; script `server` |
@@ -1582,7 +1928,7 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | `src/shop/**`, `src/chars/**` | **intactos** | — |
 | `src/client/render.ts` | **muda só em anotações de tipo** (`e4.2`) | 10 linhas, nenhuma de corpo: `World`/`Ball` → `VisaoDoMundo`/`BolaVisivel` (§5.1, emenda) |
 | `src/client/telas.ts`, `input.ts`, `layout.ts` | **intactos** | §5.1 |
-| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), codec (`e4.8`), versão do fio (`e4.9`), sala (`e4.3`), fio congelado e parser por tabela (`debt.12`, §11.6.1), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
+| `src/tools/determinism.ts` | **muda** | Ganha guardas no `sim:check`: ida-e-volta do fio (`e4.2`), codec (`e4.8`), versão do fio (`e4.9`), sala (`e4.3`), fio congelado e parser por tabela (`debt.12`, §11.6.1), eventos por assento e versão 2 do fio (`e4.10`, §11.6.2), e a chamada da guarda de telemetria (`debt.11`: import, chamada, linha de seção e `throw`). **Importa `net/`** — seta `tools/ → net/` declarada na §2.2 em 2026-09-21, sem ciclo. **Não importa `client/`** (§2.2, decisão `debt.10` → `debt.11`) |
 | `src/tools/guarda-telemetria.ts` | **novo** (`debt.11`) | Guarda headless do carimbo e da partição de telemetria, chamada pelo `sim:check`. Um dos dois únicos arquivos de `tools/` que importam `client/` (§2.2, lista fechada) |
 | `src/tools/telemetria.ts` | **muda só no ponto de entrada** (`debt.11`) | `main()` roda só como entrada do processo. Mantém a seta `tools/ → client/` de `e3.5`, agora declarada (§2.2) |
 | `src/tools/**` (resto) | **intacto** | Não importa `client/` |
@@ -1613,6 +1959,8 @@ citam a story nova.*
 | — | O `snap` final de cada rodada chega ao fio antes do `rodadaFim` *(2026-09-21)* | guarda do `sim:check` (`e4.3`/AC 11) + duas abas (`e4.4`/AC 16) | §5.6 |
 | — | Telemetria que vira baseline de P4.4 separa (atraso, `ESCALA_HP`) e não mistura populações *(2026-09-21)* | guarda do `sim:check` (`debt.11`), pronta antes da coleta de `e4.7` | §2.2 (decisão `debt.10` → `debt.11`) |
 | — | Só `tools/telemetria.ts` e `tools/guarda-telemetria.ts` importam `client/`; nenhum arquivo de `client/` importa um dos dois *(2026-09-21)* | `grep -rn "from '\.\./client/" src/tools/` + revisão | §2.2 |
+| — | O servidor importa de `tools/` só `hash`, de `harness.ts`, e o injeta na sala pela referência; o hash gravado ao vivo é o do arnês *(2026-09-21)* | `grep -rn "from '\.\./tools/" src/server/` (uma linha) na `e4.4` + replay bit a bit da `e4.6`/AC 5 | §2.2 (E43-ARC-001) |
+| — | `EventoPartida` chega ao cliente por `{t:'evento'}`, e cada assento recebe só os eventos sem `jogador` e os próprios; a lista de variantes de `DoServidor` fica congelada por versão *(2026-09-21)* | guardas do `sim:check` (`e4.10`, `debt.12` item 5) + export de telemetria da `e4.5` | §11.6.2 |
 
 ---
 
