@@ -573,7 +573,10 @@ interpolam.
 - **`world.events`.** São de um tick só e o cliente os consome para os números flutuantes
   (`main.ts:405`). Com snapshot a 30 Hz, os eventos dos ticks intermediários **precisam ser
   acumulados no snapshot**, não descartados — senão metade dos acertos deixa de aparecer na tela.
-  A medição da §1.2 já os incluiu acumulados.
+  ~~A medição da §1.2 já os incluiu acumulados.~~ *(Correção de 2026-09-21, apontada pelo gate de
+  `e4.2`, E42-ARC-001: **não incluiu**. O script da §1.2 serializa só os `hit` do tick corrente, sem
+  acúmulo (`01-banda-cpu-duracao.mjs:97`). A primeira medição com eventos acumulados, de todos os tipos,
+  é a de `e4.2`, e é a que está na §5.5. O acúmulo e o flush de fim de rodada estão na §5.6.)*
 - **`alive` e `hp`.** Booleano não interpola; morte não é meio-caminho.
 - **Início e fim de zona.** Uma Muralha existe ou não existe. Interpolar `expiresAt` produziria
   parede fantasma.
