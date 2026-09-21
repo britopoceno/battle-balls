@@ -1,0 +1,203 @@
+schema: 1
+story: 'debt.14'
+story_title: 'Guarda da sala por variante e por assento — achados `E43-TST-001`, `E43-TST-002`, `E43-TST-003` do gate de `e4.3`'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 8 ACs (v1.1) estão MET. Refiz tudo do zero, sem confiar no Dev Agent Record. check, sim:check e build
+  saíram com rc=0, e o golden hash não mudou. O diff da saída inteira do sim:check contra um worktree de
+  17ecf5c^ (6d525df) tem só `65,66c65,66` (contadores de `assentos` e `autoridade`) e `67a68,70` (as linhas
+  novas `por variante`, `cobertura` e `bordas`). Nenhum veredito muda, e as linhas `bo5` e `flush` ficam
+  byte a byte iguais. Os dois commits tocam só src/tools/determinism.ts, com todos os hunks entre o
+  cabeçalho `sala pura` (1589) e o fim de guardaSala(). Reapliquei as 12 mutações da story, e as 12 deram
+  rc=1, cada uma pela linha nova `✗ sala debt.14`/`✗ sala bo5 … (debt.14 AC 4)`. Rodei também 24
+  mutações minhas. E43-TST-001, E43-TST-002 e E43-TST-003 estão fechados. O veredito é CONCERNS, e não
+  PASS, por um MEDIUM e um LOW, os dois na cobertura do AC 4:
+  (1) DEBT14-TST-001: o passo que leva a partida a `fim` termina com a sala em `encerrada`, e por isso
+  fica fora da regra "≥1 visão a cada assento conectado". Sem visão final (O7), ou com a visão final só
+  para o assento 0 (O7b), o sim:check dá rc=0. O @dev seguiu o AC ao pé da letra (o texto v1.1 diz "termina
+  o passo em `jogando`"), então não é defeito de implementação. A correção de um token (`s.fase !==
+  'aguardando'`) mantém o baseline verde e pega O7 e O7b (F1, F2 e F3, medidos).
+  (2) DEBT14-TST-002: a linha `cobertura` não tem piso. Com conferirCobertura() desligada, ela imprime "✓
+  0 transição(ões) · 0 rodada(s)" com rc=0, inclusive junto com Q5.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:17ecf5c e commit:f9b0312 (implementação). O pai de 17ecf5c é 6d525df (@po, só docs), e o código-base
+  é o de debt.12 (5766137). Entre os dois está 2129004 (@sm, só a e4.10). 96eae5a (registro do @dev) toca
+  só a story. Depois vieram bbef157, 00c628d e b75cf37, só docs. `git diff f9b0312 HEAD -- src` está vazio,
+  e o HEAD que rodei é o mesmo código de f9b0312. f9b0312 NÃO está em origin/master (merge-base
+  --is-ancestor rc=1): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Node v24.13.1. `npm run check` deu rc=0, `npm run sim:check` rc=0 e `npm run build` rc=0 (53.27 kB).
+      "golden hash ✓ ok — 6 seeds batem o baseline" aparece nas duas saídas. Comparei `node
+      src/tools/determinism.ts` do HEAD (= f9b0312 em src/) com o de um worktree descartável de 6d525df
+      (17ecf5c^). O diff tem exatamente dois blocos. `65,66c65,66` troca `assentos` (21→28 {t:'sala'},
+      12→17 assentamentos, 76→119 {t:'visao'}) e `autoridade` (176→198 mensagens pela fronteira), com o ✓
+      mantido nas duas. `67a68,70` acrescenta `por variante ✓`, `cobertura ✓` e `bordas ✓` depois de
+      `negativos`. As linhas `sala pura`, `bo5` e `flush` (62-64) e `negativos` (67) são idênticas. Nada
+      fora do bloco muda ou troca de lugar. Bate com o que o @dev registrou.
+  - id: 'Escopo (AC 7, AC 8) e o a.tar'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 17ecf5c` mostra só src/tools/determinism.ts, com 251 inserções e 2 remoções.
+      `f9b0312` mostra o mesmo arquivo, com 1/1, e só troca o rótulo `variantes` → `por variante`. Os hunks
+      começam em 1621 (ConferenciaDeEnvios), 1630 (Condutor/novoCondutor/conferirCobertura), 1650 e 1679
+      (conduzir), 2170 (salaVariantesEBordas, depois de salaNegativos) e 2199/2214 (guardaSala). No filho, o
+      cabeçalho `sala pura` está na linha 1589, guardaSala() em 2417, e a seção seguinte (Pilar 3) em 2472.
+      Nenhum hunk fica nos imports do topo nem no bloco do codec (988-1588). sala.ts, codec.ts e
+      package.json não aparecem em nenhum dos dois commits. O a.tar: `git show --name-only` de 17ecf5c,
+      f9b0312, 96eae5a e 2129004 não o lista, `git ls-tree -r` dos quatro não o contém, `git log --all --
+      '*a.tar'` sai vazio, e `git status` não o mostra.
+  - id: 'Contrafactual da story, reaplicado (AC 6): as 12'
+    verdict: PASS
+    evidence: >-
+      Script mut.mjs no scratchpad. Cada mutação roda numa cópia nova de `git archive f9b0312 src
+      package.json`, nunca na árvore compartilhada. O `\n` do padrão é normalizado para o EOL do arquivo, e
+      a mutação aborta se o padrão não casar exatamente 1 vez (nenhuma abortou). A cópia é apagada depois.
+      O controle sem mutação deu rc=0. Todas as 12 deram rc=1, e em todas a linha ✗ é uma conferência
+      nova. Q3 (`msg.d.t === 'draft' && …`): 6 linhas `✗ sala debt.14: <variante> em nome do jogador …
+      chegou a aplicar()`, uma por caso. Isenta-build, isenta-buildPadrao, isenta-pronto (2 linhas: builds e
+      loja), isenta-compra e isenta-trocaDeBuild: cada uma pega só a própria variante. Q5: `✗ sala bo5: a
+      partida mudou (fase draft) e o assento conectado do jogador 1 não recebeu {t:'visao'}` (fases draft e
+      builds). Q6: `0 rodadaFim ao assento do jogador 1 (conectado) … esperado 1`, na bo5 e na variantes.
+      Q7: `rodada fechada sem nenhum rodadaInicio ao assento conectado`. Q8: `teto de 30 ticks: rodada
+      aberta no tick 30 … rodadaFim [] (AC 5 i)`. Q12: `{t:'prazo'} ao reassentado [], esperado exatamente
+      um com o restante 5000 ms`. Q13: `queda na loja: pausa aberta pela queda false` e `queda em builds:
+      pausa aberta pela queda false`.
+  - id: 'AC 3 — aplicar() como oráculo e controle positivo (pergunta 1)'
+    verdict: PASS
+    evidence: >-
+      O oráculo é sólido e não torna o negativo vácuo. aplicar() é a mesma função que decidir() chama em
+      sala.ts:510. "aplicar() aceitaria" é, portanto, exatamente a pré-condição da sala sem a checagem de
+      assento. Quando o oráculo recusa, o caso vira ✗ ("o caso não testaria a checagem da sala"), e não é
+      pulado. O dente anti-vácuo é o controle positivo, no MESMO estado, porque a `partida` é conferida
+      idêntica por referência depois do negativo. Provado pelo par da debt.13. O2a (a sala recusa TODA
+      trocaDeBuild vinda de cliente) deu rc=1, pego só por `controle positivo: trocaDeBuild/j0 do assento
+      DONO não foi aceita`. O2b (O2a com o controle desligado) deu rc=0: sem o controle, o negativo passaria
+      vácuo. O2c (só o controle desligado) deu rc=0 (sanidade). O1 (checagem só para o assento 0, `j === 0
+      && …`) deu rc=1 por pronto/j0 e trocaDeBuild/j0, porque os casos vão nas duas direções (alvo j1 do
+      assento 0, alvo j0 do assento 1). Resíduo: oráculo e sala compartilham aplicar(), então um aplicar()
+      permissivo demais não é assunto desta guarda. Quem cobre isso é a Bo5 contra o arnês.
+  - id: 'AC 4 — exclusão emergente da queda no draft (pergunta 2)'
+    verdict: CONCERNS
+    evidence: >-
+      Para o draft, a exclusão é robusta nos dois sentidos. D2 (a queda no draft recria a partida, mas a
+      sala fica `jogando`) deu rc=1, e a regra da cobertura volta a valer sozinha (`✗ sala draft: a partida
+      mudou (fase draft) e o assento conectado do jogador 0 não recebeu {t:'visao'}`), além do caso
+      explícito de §6 em `negativos`. D3 (D2 com a cobertura desligada) continua rc=1 pelo `negativos`. D1 (a
+      queda em builds regride para o caminho do draft e volta a `aguardando`) sai da regra de cobertura,
+      mas `bordas` pega duas vezes (AC 5 iii e AC 5 ii). O custo da condição `s.fase === 'jogando'` não
+      está no draft, e sim em `encerrada`: o passo final (partida → `fim`, sincronizar() → encerrarSala())
+      fica fora da regra. O7 (sem visão no passo final) e O7b (visão final só ao assento 0) deram rc=0.
+      Ver DEBT14-TST-001.
+  - id: 'AC 8 — contagem por tipo sobrevive à e4.10 (pergunta 3)'
+    verdict: PASS
+    evidence: >-
+      Simulei a e4.10 por execução. E1 acrescenta um `{t:'evento'}` depois de TODA visão de enviarVisao(),
+      aos dois assentos. E2 acrescenta um evento privado só ao assento 0. Nos dois casos, nenhuma linha
+      `debt.14` falha: nem a recusa do AC 3 (exatamente 1 envio), nem o controle positivo, a cobertura, o
+      teto, o prazo ou os W.O. O único ✗ é a lista completa da e4.3 no W.O. de R-02 (`envios
+      [0:snap,0:rodadaFim,0:visao,0:evento]`), que a e4.10 já declara que vai atualizar (Tasks, "Atualizar
+      as duas listas completas fixas que a guarda de hoje traz"). A lista do reassentamento
+      (`[sala,visao,rodadaInicio]`) não muda, porque assentar() empurra a visão direto, sem enviarVisao().
+      As conferências novas filtram por `msg.t` (`visao`, `rodadaInicio`, `rodadaFim`, `prazo`, `snap`),
+      então continuam verdes enquanto a e4.10 não renomear tipos nem emitir evento numa recusa, e a
+      §11.6.2 diz que não emite.
+  - id: 'Mutações próprias (24, cópias descartadas)'
+    verdict: CONCERNS
+    evidence: >-
+      Pegas (rc=1): O1, O2a, O4 (cobertura contada POR SALA mais Q5; a contagem por sala deixaria passar
+      a bo5 inteira, e só um passo da `variantes` em que o assento 0 está caído acusa), O5 (2 rodadaFim por
+      assento, `2 rodadaFim … esperado 1`), O5b (O5 com a guarda afrouxada para `<`, pego pelo W.O. da e4.3
+      e pelo teto `[30,30,30,30]`), O6 (caso da loja sem a pré-condição mais o W.O. de loja morto), O8 (o
+      prazo CHEIO no reassentamento, `[30000]`, esperado 5000: guarda de valor, e não só de presença), O9
+      (sem snap final no teto: `snap final no tick 28`), F2, F3, D1, D2, D3. Verdes por desenho (rc=0): O2b
+      e O2c (o par do controle positivo, acima), O4b (a contagem por sala sozinha, equivalente sem mutação
+      de produção), O6b (a pré-condição `pronta(v)` é redundante: os três pós-testes, `desde === agora`,
+      estado intacto e `pronto/j0` com fase `rodada`, já fixam o estado), e F1 (a correção proposta,
+      baseline verde). Verdes que são achado: O3 (conferirCobertura() com `return` na primeira linha) e O3b
+      (O3 mais Q5) deram rc=0, com `cobertura ✓ 0 transição(ões) … 0 rodada(s)` (DEBT14-TST-002). O7 e O7b
+      deram rc=0 (DEBT14-TST-001).
+
+top_issues:
+  - id: 'DEBT14-TST-001'
+    severity: medium
+    category: tests
+    owner: '@po (roteia; dono natural é a e4.10, que já abre o bloco `sala pura` e acrescenta a guarda de ordem em torno do `encerrada`)'
+    finding: >-
+      A regra de visão por assento do AC 4 exclui todo passo que termina com a sala fora de `jogando`. O
+      alvo era a queda no draft (→ `aguardando`), mas a exclusão pega também o passo final da partida:
+      decidir()/encerrarRodada() → enviarVisao() → sincronizar() → encerrarSala() põe a sala em
+      `encerrada` no mesmo passo. Medido: O7 (`if (n.partida.fase !== 'fim') enviarVisao(n, envios)` em
+      encerrarRodada) e O7b (a visão final só ao assento 0) dão rc=0, e todas as linhas ficam ✓. É a mesma
+      classe de E43-TST-002, "todo assento recebe a sua visão", no único passo em que a visão carrega a
+      fase `fim` e o placar final. O `rodadaFim` desse passo continua conferido, porque a regra dele não
+      depende da fase. O @dev implementou o texto do AC 4 v1.1 ("e a sala termina o passo em `fase ===
+      'jogando'`") exatamente como está. Não é defeito de implementação, e sim de alcance do critério.
+    suggested_action: >-
+      Trocar a condição de conferirCobertura() para `s.partida !== antes.partida && s.fase !== 'aguardando'`.
+      Medido: F1 (só a troca) dá rc=0 no código de hoje, e o baseline fica verde. F2 (troca mais O7b) dá
+      rc=1 (`a partida mudou (fase fim) e o assento conectado do jogador 1 não recebeu {t:'visao'}`), e F3
+      (troca mais O7) dá rc=1 nos dois assentos. A exclusão da queda no draft continua emergente
+      (`aguardando`), e o encerramento por 'anular' não muda a partida, então não conta como transição.
+      Mutações de aceite: O7 e O7b com rc=1. O @po decide se isso entra na e4.10 (Ready, GO 8/10), que é
+      a próxima a abrir este bloco e já fixa a ordem "partidaFim antes do encerrada", ou numa story
+      pequena. Tem de ser antes da e4.4 ligar a sala ao socket.
+  - id: 'DEBT14-TST-002'
+    severity: low
+    category: tests
+    owner: '@dev (opcional, na próxima story que abrir o bloco `sala pura`; e4.10 está na fila)'
+    finding: >-
+      A linha `cobertura` usa `ok(0)`, então só acusa se alguma conferência falhar. Ela não exige que
+      alguma conferência tenha rodado. Com conferirCobertura() desligada (O3), ou com a chamada removida de
+      conduzir(), o sim:check dá rc=0 e imprime `cobertura ✓ 0 transição(ões) … 0 rodada(s) fechada(s)`.
+      Junto com Q5 (O3b), também dá rc=0. É o padrão "o call site nunca é testado" das fases 2 e 4. O
+      risco é baixo, porque exige editar o próprio teste, e o contador 52 → 0 apareceria num diff antes ×
+      depois, se alguém o fizesse. A linha `por variante` não tem o problema: um caso que não roda
+      interrompe o roteiro, e o teto ou o caso da loja acusam.
+    suggested_action: >-
+      Piso nos contadores, contra os valores de hoje: `ok(soma('transicoes') >= 52 && soma('rodadasFechadas')
+      >= 6 ? 0 : 1)`, ou no mínimo `> 0`, com uma mensagem em `problemas` e não só no ✓/✗ decorativo.
+      Mutação de aceite: O3 com rc=1.
+
+avaliacoes_pedidas:
+  aplicar_como_oraculo: >-
+    Sólido. O oráculo decide o momento, e um oráculo que recusa vira ✗, nunca pulo silencioso. Quem impede
+    o vácuo é o controle positivo no mesmo estado (ref-igual). O2a/O2b provam que ele é a única defesa
+    contra uma sala que recusa a variante inteira. Não há achado.
+  exclusao_emergente_do_draft: >-
+    Robusta para o draft. D2 reativa a regra sozinha, e D1 é pega por `bordas`. O efeito colateral é
+    excluir também `encerrada`, que deixa a visão final sem cobertura por assento (DEBT14-TST-001, medium).
+    A correção é `!== 'aguardando'` no lugar de `=== 'jogando'`, medida verde e com dente.
+  contagem_por_tipo_apos_e4_10: >-
+    Sim, fica verde. Simulado com E1/E2 (evento depois de toda visão, público e privado): zero ✗ de
+    debt.14. O único ✗ é a lista completa da e4.3 no W.O., que a e4.10 já tem como tarefa atualizar.
+
+observacoes:
+  - >-
+    O Status veio "Ready for Review" (o canônico é "InReview"). A transição foi registrada como Ready for
+    Review → Done, com o mesmo precedente de debt.12.
+  - >-
+    A e4.10 (v1.1.0+, bbef157) ainda diz, na linha 505, "`debt.14`: Ready, commit `7a48214`, sem commit de
+    implementação". Agora há 17ecf5c/f9b0312. É texto de estado, e o @po pode atualizá-lo na próxima
+    passada pela e4.10. Não é achado.
+  - >-
+    O acumulador de `rodadaInicio` zera quando `sala.rodada` vira outro objeto, observado no FIM de um
+    passo. Uma rodada que abrisse e fechasse dentro de um único conduzir() herdaria a contagem da rodada
+    anterior. Nenhuma sala da guarda faz isso (a rodada abre num passo e o teto ou o fim vem em outro), e
+    Q7 é pego na bo5. Sem ação, fica só registrado.
+  - >-
+    `npm run lint` não existe no projeto, e `check` é o gate de tipos. CodeRabbit não roda nesta máquina
+    (sem WSL/CLI). A cobertura veio de check, sim:check e build, do diff da saída inteira contra 17ecf5c^,
+    da leitura hunk a hunk, das 12 mutações da story e de 24 minhas.
+  - >-
+    O worktree descartável de 6d525df foi removido (`git worktree list` mostra só a árvore principal), e
+    as cópias de mutação foram apagadas uma a uma. A árvore compartilhada nunca foi mutada: `git status
+    --short src` saiu vazio.
+
+waiver: { active: false }
+updated: '2026-09-21T11:00:00Z'
