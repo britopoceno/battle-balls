@@ -1,0 +1,245 @@
+schema: 1
+story: 'debt.10'
+story_title: 'Telemetria marca o atraso de input (e `ESCALA_HP`) por evento — achado `E41-TEL-002`'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 12 ACs estão MET. Conferi tudo do zero, sem confiar no Dev Agent Record. check, sim:check e build
+  saíram com exit 0. A saída completa do sim:check num worktree em 3de1cfe^ (b1c0668) e num worktree em
+  3de1cfe tem 46 linhas, e o diff entre as duas é VAZIO, golden hash incluído ("6 seeds batem o
+  baseline"). O sim:check no HEAD (db2408f, que só acrescenta docs de e4.2) é idêntico ao do worktree
+  3de1cfe. O escopo são 4 arquivos, sem snapshot.ts, projecao.ts, render.ts, determinism.ts nem main.ts.
+  O carimbo é gravado dentro de registrar(), lido das constantes-fonte. Evento antigo nunca vira atraso
+  0 nem escala 1.0: ausente, null e string caem em "desconhecido". O agregador particiona e não imprime
+  número combinado. Os 5 exports reais dão métricas idênticas, linha a linha, antes e depois. Rodei 4
+  mutações próprias sobre um arnês do coletor real e sobre o CLI, e as 4 foram pegas. As três perguntas
+  que me pediram para julgar não reprovam (ver `julgamentos`). O CONCERNS vem de uma lacuna de guarda:
+  nada no repositório protege o que esta story entrega. As provas do @dev e as minhas vivem no
+  scratchpad, porque o AC 10 não autoriza arquivo de teste, e o sim:check não carrega nem client/ nem
+  tools/telemetria.ts. Uma edição futura que desfaça a partição passa em check, sim:check e build, e
+  contamina de novo justamente a evidência de debt.9 e de P4.4. Há ainda duas notas baixas no README e
+  no texto dos avisos. Nenhum achado bloqueia. A story vai para Done.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:3de1cfe. `git show --stat` dá 4 arquivos: docs/evidence/telemetria/README.md (+20),
+  docs/stories/debt.10...story.md (+119/−29), src/client/telemetria.ts (+43/−2) e
+  src/tools/telemetria.ts (+97/−2). No total são 279 inserções e 33 remoções. Zero linhas em src/net/, src/chars/, src/sim/, src/match/,
+  src/shop/, src/bot/, client/main.ts, client/render.ts, client/input.ts e tools/determinism.ts. O HEAD
+  no momento do gate é db2408f (gate de e4.2 por outro @qa, só docs). Base de e4.2: b1c0668, anterior
+  ao commit desta story, como o AC 3 exige.
+
+verificacao_independente:
+  - id: 'npm run check / sim:check / build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      `npm run check` (tsc --noEmit) exit 0, sem saída. `npm run sim:check` exit 0, com a linha
+      "golden hash ✓ ok — 6 seeds batem o baseline". `npm run build` (Vite) exit 0.
+  - id: 'sim:check antes × depois, saída completa (AC 2)'
+    verdict: PASS
+    evidence: >-
+      Criei dois worktrees temporários no scratchpad, um em 3de1cfe^ (= b1c0668) e outro em 3de1cfe. Rodei
+      `node src/tools/determinism.ts` em cada um: exit 0, 46 linhas, `diff` VAZIO. Também tirei o
+      cabeçalho do npm da saída do sim:check no HEAD e comparei com o worktree 3de1cfe: idênticas. Isso
+      é esperado por construção, porque nada em sim/ ou match/ mudou e determinism.ts não importa
+      client/telemetria.ts nem tools/telemetria.ts. Portanto a prova é de não-acoplamento, não de
+      comportamento (ver DEBT10-TST-001).
+  - id: 'Escopo (ACs 3, 10)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 3de1cfe` lista só os 4 arquivos permitidos. Nenhum dos quatro de e4.2 aparece, e
+      main.ts também não: a Task 3 foi pulada e a forma preferida do AC 3 foi adotada. Os três pontos de
+      chamada (main.ts:134, :238, :319) e a assinatura `registrar(partida, eventos)` estão inalterados.
+  - id: 'Setas de camada (AC 10)'
+    verdict: PASS
+    evidence: >-
+      client/telemetria.ts ganhou `import { ESCALA_HP } from '../chars/tuning.ts'` e
+      `import { ATRASO_ALVO_TICKS } from '../net/protocolo.ts'`. As duas setas são permitidas pela linha
+      `client/ → todos` (architecture-e4.md §2.2). Os imports de tools/telemetria.ts NÃO mudaram (o grep
+      no diff por linhas de import dá só uma linha de comentário). Continuam `node:fs`, o valor de
+      client/input.ts (que só importa ./layout.ts) e `import type` de client/telemetria.ts, que é
+      apagado na execução. `grep -rn "from '../net/" src/tools/` acha só tools/determinism.ts, que é a
+      seta de e4.2 (AC 11 dela), anterior a este commit e fora do escopo deste gate. tools/telemetria.ts
+      não tem aresta para net/: o agregador lê o valor gravado no arquivo.
+  - id: 'Carimbo no instante da gravação, dentro de registrar() (AC 4)'
+    verdict: PASS
+    evidence: >-
+      No código, client/telemetria.ts:161-164 faz
+      `eventos.push({ ...e, partida, atrasoTicks: ATRASO_ALVO_TICKS, escalaHp: ESCALA_HP })`. Os campos
+      entram depois do spread, então um campo homônimo vindo do evento não os sobrescreve. exportar()
+      serializa `eventos` como está e não carimba. registrar() é o único ponto de escrita: o grep por
+      `eventos.push` e `registrar(` em client/ confirma. Na execução, escrevi um arnês que roda o coletor
+      REAL com localStorage, Blob e document falsos. Pré-carreguei 2 eventos sem carimbo, fiz um
+      registrar() e um exportar(). Resultado: os eventos novos saem com 6/6, os velhos saem SEM as
+      chaves (`!('atrasoTicks' in e)`) tanto no export quanto no localStorage, CHAVE e `versao` continuam
+      'bb.telemetria.v1', e ler() avisa "2 evento(s) ... sem atraso/escala".
+  - id: 'Dado antigo = desconhecido, nunca 0 / 1.0 (ACs 4, 7)'
+    verdict: PASS
+    evidence: >-
+      populacaoDe() usa `Number.isFinite` nos dois campos. Com o meu fixture: evento sem as chaves vai
+      para "atraso desconhecido · ESCALA_HP desconhecida". `atrasoTicks: null` vai para "atraso
+      desconhecido · ESCALA_HP ×6". `"6"` (string) nos dois campos vai para desconhecido/desconhecida.
+      Nenhum desses casos é somado a uma população conhecida.
+  - id: 'Os 5 exports reais, antes × depois (AC 7)'
+    verdict: PASS
+    evidence: >-
+      Rodei `node src/tools/telemetria.ts <export>` nos dois worktrees para os 5 arquivos de
+      docs/evidence/telemetria/: exit 0 nos 10 casos. Em cada diff entram EXATAMENTE 2 linhas: o aviso
+      "N evento(s) sem carimbo" (N = 14/32/154/197/372) e o cabeçalho "população: atraso desconhecido ·
+      ESCALA_HP desconhecida (...)". Nenhuma linha de métrica muda, e isso inclui P3.1, P3.2, P3.3, os
+      extras e RF-36. Os números batem com os do Dev Agent Record.
+  - id: 'Fixture misto próprio, diferente do do @dev (ACs 5, 6)'
+    verdict: PASS
+    evidence: >-
+      Parti do export de 372 eventos e carimbei por partida: (6,6), (0,6), (null,6), ("6","6") e (0,1).
+      Deixei 2 partidas sem carimbo. A partição feita SÓ pelo JSON do arquivo dá
+      {"6|6":87,"0|6":39,"null|6":28,"0|1":43,"undefined|undefined":175}, ou seja, o AC 5 é satisfeito
+      pelo conteúdo do arquivo. O CLI imprime o cabeçalho "⚠ 5 populações ... nenhum número combinado",
+      um console.warn que lista a mistura com as contagens e 5 blocos de P3.1 com n = 4, 3, 4, 2 e 12. A
+      soma é 25 e nenhum bloco tem 25, que era o número combinado. As conhecidas aparecem primeiro e as
+      desconhecidas por último. Os avisos de `mag` saem rotulados por população. Casos de borda: arquivo
+      todo carimbado (6,6) dá uma população só, sem aviso de mistura e com as métricas idênticas às de
+      antes (22.6s, n=25). Array vazio dá exit 0 e zeros. Uma partida dividida entre carimbado e não
+      carimbado dispara o aviso de partida dividida.
+  - id: 'Mutações próprias (ACs 4, 6, 7)'
+    verdict: PASS
+    evidence: >-
+      Todas foram aplicadas no worktree do scratchpad e revertidas com `git checkout`. Worktrees
+      removidos no fim. M1: sem carimbo em registrar(). O arnês reprova com "novo sem carimbo 6/6". M1b:
+      carimbo movido para exportar(), o modo de falha que o AC 4 nomeia. O arnês reprova com "velho ganhou
+      carimbo". Na primeira tentativa a substituição em exportar() não casou por causa de CRLF. Refiz com
+      regex e conferi o diff aplicado antes de aceitar o resultado. M2: `atrasoTicks ?? 0` e
+      `escalaHp ?? 1` em populacaoDe(). No export real, "desconhecid" some (0 ocorrências) e os 372
+      eventos viram "atraso 0 tick(s) · ESCALA_HP ×1", exatamente a omissão silenciosa que o AC 4 proíbe.
+      M3: `agregar()` devolve `agregarPopulacao(eventos)` direto. No misto sai um único P3.1 com n=25, o
+      número combinado. As 4 mutações foram detectáveis, mas SÓ pelas minhas ferramentas no scratchpad.
+      check, sim:check e build passariam nas 4 (DEBT10-TST-001).
+  - id: 'README, fronteira (AC 9)'
+    verdict: PASS
+    evidence: >-
+      A seção nova "Fronteiras de atraso de input e do carimbo por evento (e4.1 → debt.10)" segue o
+      formato de tabela hora × commit da seção de e3.6 e registra 13ee9d8, b8e8a41 e debt.10. O comando
+      citado, `git log --oneline --grep='debt.10\]' -- src/client/telemetria.ts`, resolve para uma única
+      linha: 3de1cfe. É defensável citar por grep em vez de por hash, já que um commit não contém o
+      próprio hash. Duas imprecisões ficam em DEBT10-DOC-002.
+  - id: 'Não-decisão sobre debt.9, e4.1 intocada (ACs 11, 12)'
+    verdict: PASS
+    evidence: >-
+      O diff não toca debt.9 nem e4.1. Nada no código nem no README decide a pergunta aberta de debt.9
+      v1.1. O README só recomenda que coleta usada como evidência tenha "só eventos carimbados", e isso é
+      disciplina de dado, não decisão de critério.
+  - id: 'CodeRabbit'
+    verdict: SKIPPED
+    evidence: >-
+      O CodeRabbit via WSL está indisponível neste ambiente, o mesmo pulo registrado em e3.7, e4.1 e na
+      Dev Agent Record. A revisão independente acima cobre o objetivo.
+
+julgamentos:
+  - pergunta: '1. Não subir a chave para v2 (dado fica em bb.telemetria.v1, antigo sai como desconhecido) — correto frente ao AC 4?'
+    veredito: 'CORRETO'
+    razao: >-
+      O AC 4 exige um carimbo POR EVENTO e trata o bump como opcional ("em vez de, ou além de"). O próprio
+      AC nomeia os dois defeitos do bump: não tem efeito retroativo sobre o que já está misturado sob v1
+      e deixa o acúmulo órfão, porque ler() e exportar() só enxergam a chave corrente. A mudança é
+      aditiva, e a ausência do campo já é a marca de "anterior ao carimbo". O arnês confirma que o
+      acúmulo v1 continua exportável e sai intacto. O destino do acúmulo v1 foi declarado no Dev Agent
+      Record, como o AC exige ("lido junto como desconhecido"). O desvio da intenção original do
+      docblock ("formato muda → v2") está registrado no próprio docblock. Uma ressalva para o futuro:
+      como `versao` continua v1, ela não identifica mais o formato do evento. Uma mudança NÃO aditiva
+      (renomear ou mudar a semântica de um campo) exige bump, e o docblock só justifica o caso aditivo.
+      Não é achado, é leitura para quem mexer depois.
+  - pergunta: '2. O aviso extra de partida dividida entre populações, além dos ACs'
+    veredito: 'ACEITO — sem custo e protege o join de P3.3'
+    razao: >-
+      O aviso só escreve no console e não muda nenhuma métrica. A premissa ("uma partida vive num só
+      carregamento de página") vale no coletor: o carimbo é constante do bundle, e `partida` é
+      `(Math.random() * 1e9) | 0` (main.ts:107), então colisão de id entre builds é desprezível e o
+      aviso não gera ruído com dado real. Ele só dispara com arquivo editado à mão ou mesclado, e aí o
+      join de P3.3 (compra × rodadaFim da mesma partida) seria cortado em silêncio entre seções. É o
+      mesmo espírito "avisar em vez de calar" do AC 6. Reproduzi o aviso com o meu fixture de partida
+      dividida. Não é inflação de escopo: não toca arquivo novo nem muda contrato.
+  - pergunta: '3. Lacuna residual b8e8a41 → 3de1cfe (atraso 6 sem carimbo, indistinguível de atraso 0) — documentada onde o usuário vê antes do smoke de e4.1?'
+    veredito: 'SIM, e na prática a janela é menor do que o README dá a entender'
+    razao: >-
+      Onde o usuário vê: o `pedido_ao_usuario` do gate de e4.1, item 1 ("Antes de jogar: exportar e
+      zerar a telemetria") e a tabela de achados da story de e4.1 (linha 323, "Antes do smoke, exportar
+      e zerar (`localStorage.removeItem('bb.telemetria.v1')`)"). São os dois documentos que o usuário
+      segue para o smoke, e continuam corretos depois de debt.10. O README e o aviso de ler() no console
+      reforçam. Fato que reduz o risco e que nenhum documento registra: b8e8a41 NÃO está em origin/master
+      (master está 18 commits à frente), e o build publicado sai de .github/workflows/deploy-pages.yml.
+      Qualquer push de master leva b8e8a41 e 3de1cfe JUNTOS. Assim, o build publicado nunca rodou atraso
+      6 sem carimbo, e a janela só existe para sessões no dev server local (localhost:5177), com a árvore
+      entre as duas mudanças. Depois do push, o smoke de e4.1 no aparelho já sai carimbado (6, 6) e
+      separado sozinho do acúmulo antigo, mesmo que o usuário esqueça de zerar. Zerar continua sendo
+      recomendado, para o export do smoke sair limpo. O README, porém, afirma "Rodadas gravadas daqui em
+      diante [b8e8a41] têm atraso 6", e isso é falso para o build publicado (DEBT10-DOC-002).
+
+top_issues:
+  - id: 'DEBT10-TST-001'
+    severity: medium
+    category: tests
+    owner: '@po (roteamento) / @architect (onde a guarda vive)'
+    finding: >-
+      Nenhuma guarda no repositório protege o que esta story entrega. As 4 mutações que rodei (sem
+      carimbo, carimbo no export, ausente → 0/1.0, sem partição) passam em check, sim:check e build. Os
+      11 testes do @dev e o meu arnês ficaram no scratchpad, porque o AC 10 não autoriza arquivo de teste,
+      então a omissão é correta dentro do escopo. O sim:check não carrega client/ nem tools/telemetria.ts.
+      É mais uma ocorrência do padrão "o caminho que importa nunca é testado" deste projeto (E41-TST-003
+      na e4.1). Aqui o custo de uma regressão é exatamente o defeito que a story fechou: evidência de
+      debt.9 (pré-condição b) e baseline de P4.4 (e4.7) contaminadas sem nenhum sinal.
+    suggested_action: >-
+      Não é retorno ao @dev. Uma story pequena, ou um item de story existente, acrescenta uma guarda
+      headless: (a) `agregar()` sobre um fixture misto commitado (ex. docs/evidence/telemetria/fixture-
+      misto.json) afirma "nenhum bloco com o n combinado" e "sem carimbo ∈ desconhecido"; (b) o coletor
+      com um localStorage falso afirma o carimbo em registrar() e ausência dele no acúmulo antigo. O lugar
+      natural é o sim:check, depois que e4.2 fechar, porque determinism.ts é dela até lá, ou um script
+      irmão. O @architect decide a seta: a guarda importaria tools/telemetria.ts, que por sua vez importa
+      client/. Tem de estar pronta antes da primeira coleta humana usada como evidência (AC 11).
+  - id: 'DEBT10-DOC-002'
+    severity: low
+    category: docs
+    owner: '@dev'
+    finding: >-
+      README, linha b8e8a41: "Rodadas gravadas daqui em diante têm atraso 6". O efeito não começa no
+      commit, começa quando o bundle chega ao navegador, e o próprio README já registra isso para ESCALA_HP
+      ("jogadas antes do build ×2.0 publicado chegar ao navegador"). b8e8a41 não está em origin/master,
+      então o build publicado continua em atraso 0. Um leitor que reconstrua pela linha do tempo, o
+      procedimento que a story existe para tornar desnecessário, atribuiria atraso 6 a sessões publicadas
+      que foram atraso 0. A linha debt.10 também não traz a hora (3de1cfe é de 2026-09-21 03:58:44 −03),
+      ao contrário das outras duas.
+    suggested_action: >-
+      Emendar a linha: a janela de atraso 6 sem carimbo vale para um bundle que contém b8e8a41 e não
+      contém debt.10. Como os dois vão no mesmo push, no build publicado essa janela é vazia e só existe
+      em sessões de dev server local. Acrescentar a hora na linha debt.10. Não bloqueia: dado sem carimbo
+      é "desconhecido" de qualquer forma, e o agregador não usa o README.
+  - id: 'DEBT10-COD-003'
+    severity: low
+    category: code
+    owner: '@dev (opcional)'
+    finding: >-
+      Os critérios de "sem carimbo" divergem entre o coletor e o agregador. ler() conta
+      `=== undefined`, então `null` não entra no aviso do console. populacaoDe() usa `!Number.isFinite`,
+      então null e string entram, corretamente. Além disso, o aviso "gravados antes de debt.10" e o
+      sufixo "(arquivo ou acúmulo anterior a debt.10)" são aplicados também a carimbo parcial ou
+      malformado (null, string), que não é necessariamente anterior a debt.10. O coletor nunca produz
+      esses casos, e a classificação (desconhecido, nunca somado) está certa. É só texto e contagem de
+      aviso.
+    suggested_action: >-
+      Se alguém tocar no coletor, alinhar ler() a `!Number.isFinite`. No agregador, distinguir "sem
+      carimbo" de "carimbo inválido" no texto. Nenhuma ação necessária agora.
+  - id: 'DEBT10-INFO-004'
+    severity: low
+    category: requirements
+    owner: '@qa (re-gate de e4.1) / @devops (push)'
+    finding: >-
+      E41-TEL-002 está resolvido por esta story. O gate de e4.1 diz que o re-gate curto dá "CONCERNS por
+      E41-TEL-002 se a mira estiver imediata", e essa condição deixa de existir. Como b8e8a41 e 3de1cfe
+      ainda não foram publicados, o smoke no aparelho só roda atraso 6 depois do push, e aí já roda
+      carimbado.
+    suggested_action: >-
+      No re-gate de e4.1, reclassificar E41-TEL-002 como resolvido por debt.10 (3de1cfe) e conferir no
+      export do smoke que os eventos trazem atrasoTicks=6/escalaHp=6. @devops: nenhuma ação especial,
+      porque qualquer push de master publica os dois commits juntos. Não publicar b8e8a41 isolado
+      (cherry-pick ou reset parcial).
+
+waiver: { active: false }
+updated: '2026-09-21T16:00:00Z'

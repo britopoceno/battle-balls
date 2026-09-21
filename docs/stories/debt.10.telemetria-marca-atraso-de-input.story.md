@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready for Review
+Done
 
 ## Executor Assignment
 
@@ -552,7 +552,40 @@ de teste novo (AC 10).
 
 ## QA Results
 
-_(a preencher pelo @qa)_
+### Gate: CONCERNS — Quinn (@qa), 2026-09-21, revisão `3de1cfe`
+
+Gate: `docs/qa/gates/debt.10-telemetria-marca-atraso-de-input.yml`. **Status: Ready for Review → Done.**
+
+**Os 12 ACs estão MET.** Conferi cada um do zero, sem confiar no Dev Agent Record.
+
+| AC | Veredito | Prova independente |
+|---|---|---|
+| 1 | MET | `npm run check` exit 0 |
+| 2 | MET | `sim:check` exit 0, golden hash ok. A saída completa num worktree em `3de1cfe^` (= `b1c0668`) e num em `3de1cfe` tem 46 linhas, e o `diff` é **vazio**. O HEAD (`db2408f`) é idêntico ao worktree de `3de1cfe`. `build` exit 0 |
+| 3, 10 | MET | `git show --stat 3de1cfe` lista 4 arquivos. Não aparecem `snapshot.ts`, `projecao.ts`, `render.ts`, `determinism.ts` nem `main.ts`. Os imports de `tools/telemetria.ts` estão inalterados, sem `tools/ → net/`. As setas novas `client/ → net/` e `client/ → chars/` são permitidas |
+| 4 | MET | O carimbo é gravado dentro de `registrar()` (`:161-164`), depois do spread. Rodei o coletor real num arnês com `localStorage` falso: evento novo sai 6/6, evento antigo sai **sem** as chaves no export e no storage, e a chave continua `v1`. Mutação "carimbo no `exportar()`" → pega |
+| 5 | MET | No meu fixture (5 populações, com `null` e `"6"` string), a partição sai só do JSON do arquivo |
+| 6 | MET | 5 blocos de P3.1 com n = 4/3/4/2/12, nenhum com o 25 combinado, e o cabeçalho "nenhum número combinado". Mutação "sem partição" → sai n=25 e é pega |
+| 7 | MET | Os 5 exports reais: exit 0, e toda linha de métrica é idêntica antes e depois (o diff só acrescenta o aviso e o rótulo da população). Mutação "ausente → 0/1.0" → pega |
+| 8 | MET | `ESCALA_HP` é carimbado pelo mesmo mecanismo |
+| 9 | MET | A seção do README existe. `git log --grep='debt.10\]' -- src/client/telemetria.ts` resolve para `3de1cfe`, e só para ele. Imprecisão baixa em DEBT10-DOC-002 |
+| 11, 12 | MET | `debt.9` e `e4.1` não foram tocadas, e nada foi decidido sobre a pré-condição (b) |
+
+**Julgamentos pedidos:**
+1. **Sem bump para `v2`: correto.** O AC 4 exige carimbo por evento e trata o bump como opcional. O bump deixaria o acúmulo `v1` órfão, e o destino dele foi declarado ("lido junto como desconhecido"). Nota para o futuro: uma mudança **não** aditiva de formato ainda exige bump.
+2. **Aviso de partida dividida: aceito.** Só escreve no console. `partida` é uma seed aleatória de 1e9, então não gera ruído com dado real, e o aviso protege o join de P3.3 contra arquivo mesclado à mão.
+3. **Lacuna `b8e8a41` → `3de1cfe`: documentada onde o usuário a vê.** Está no `pedido_ao_usuario` do gate de `e4.1` e na tabela de achados da story de `e4.1`, que dizem "exportar e zerar antes do smoke". Fato novo: `b8e8a41` **não está em `origin/master`**. Qualquer push publica os dois commits juntos, então o build publicado nunca rodou atraso 6 sem carimbo. A janela só existe em sessões de dev server local.
+
+**Achados (nenhum bloqueia):**
+
+| ID | Sev. | Dono | Resumo |
+|---|---|---|---|
+| DEBT10-TST-001 | medium | @po / @architect | Nenhuma guarda no repositório. As 4 mutações passam em check, sim:check e build, e as provas ficaram no scratchpad porque o AC 10 não autoriza arquivo de teste. Criar uma guarda headless (fixture misto e coletor) antes da primeira coleta usada como evidência de `debt.9` ou P4.4 |
+| DEBT10-DOC-002 | low | @dev | README: "daqui em diante têm atraso 6" conta a partir do commit. O efeito conta a partir do bundle no navegador, e `b8e8a41` não foi publicado. Falta também a hora na linha `debt.10` |
+| DEBT10-COD-003 | low | @dev (opcional) | `ler()` conta sem carimbo com `=== undefined`, e o agregador com `!Number.isFinite`. Carimbo malformado é rotulado "anterior a debt.10". Afeta só texto e contagem de aviso |
+| DEBT10-INFO-004 | low | @qa (re-gate e4.1) / @devops | E41-TEL-002 foi resolvido aqui. O re-gate de `e4.1` não deve mais registrar CONCERNS por ele, e deve conferir `atrasoTicks=6` no export do smoke. Não publicar `b8e8a41` isolado |
+
+CodeRabbit: SKIPPED (WSL indisponível, como em e3.7 e e4.1).
 
 ## Change Log
 
@@ -561,3 +594,4 @@ _(a preencher pelo @qa)_
 | 2026-09-21 | 1.0 | Story criada a partir do achado `E41-TEL-002` do gate `PENDING` de `e4.1` (`docs/qa/gates/e4.1-ativar-atraso-de-input.yml`, severidade medium), conforme roteamento do @po registrado no Change Log v1.4.0 de `docs/stories/e4.1.ativar-atraso-de-input.story.md`. Escopo: `client/telemetria.ts`, `client/main.ts` (ligação), `tools/telemetria.ts`, `docs/evidence/telemetria/README.md`. A forma exata do carimbo (nome de campo, por evento vs. bump de versão, cobertura de `ESCALA_HP`) é deixada como decisão do `@dev`/`@architect` (AC 4, 8), por não haver documento de arquitetura que a fixe hoje. Registrado o conflito de arquivo em andamento com `e4.2` (AC 3, 10): nenhum dos quatro arquivos que `e4.2` está implementando/restringindo é tocado. Não bloqueia o re-gate de `e4.1`; precede qualquer coleta humana usada como evidência de `debt.9` (pré-condição b) ou baseline de P4.4. Não decide a pergunta aberta de `debt.9` v1.1. | River (@sm) |
 | 2026-09-21 | 1.1 | **Validação @po: GO 10/10** (8/10 antes das correções: itens 5 "dependências" e 8 "riscos" estavam parciais). **Status: Draft → Ready.** **Conferido na fonte antes de emendar:** `client/telemetria.ts:25` (`CHAVE`), `:20-25` (docblock), `:87-95` (docblock de `EventoRegistrado`), `:132-136` (`registrar` carimba `partida`), `:137-144`/`:139` (`exportar`, `versao: CHAVE`), `:145` (`limpar`), `:161` (`ler` só lê a chave corrente); `tools/telemetria.ts:2-3` (import de valor de `client/input.ts` e **só de tipo** de `client/telemetria.ts`), `:154-158` (aviso de `mag`, TEL-E35-001), `:164-170` (`anguloErro`), `:201-202` (aceita `{versao,...}` ou array cru, não confere `versao`); `chars/tuning.ts:10` (`ESCALA_HP = 6.0`) e `chars/index.ts:3` (já o importa); `net/protocolo.ts:38` (`ATRASO_ALVO_TICKS = 6`); `client/main.ts:1`, `:8` e os três pontos de chamada de `registrar` (`:134`, `:238`, `:319`); `architecture-e4.md:279-287` (`client/ → todos` existe, `tools/ → net/` não existe, `tools/ → chars/` existe); `b8e8a41` (2026-09-21, só `main.ts` + story, troca o literal `INPUT_DELAY_TICKS = 0` por `ATRASO_ALVO_TICKS`); `docs/evidence/telemetria/README.md` (a seção de formato citada existe e nenhuma entrada de `b8e8a41` existe ainda, o que é correto: é o AC 9); as citações do gate `E41-TEL-002` e do Change Log v1.4.0 de `e4.1` conferem, com as elisões marcadas; `debt.9` v1.1 registra a pergunta aberta; `e4.2` AC 11 ("ninguém aprovou ainda") e AC 14 (proíbe `main.ts` **à própria `e4.2`**). **Correções no lugar:** **(1) Sequenciamento com `e4.2`, agora explícito no AC 3** (antes era "não depende"). A implementação de debt.10 começa só depois que o commit de implementação de `e4.2` existir; não é preciso esperar Done. O motivo é de prova: hoje `render.ts`/`determinism.ts` estão modificados e `net/snapshot.ts`/`net/projecao.ts` estão não rastreados na mesma árvore. Com isso, o `sim:check` antes/depois do AC 2 absorveria a guarda nova de `e4.2`, e `git diff --stat` mostraria os arquivos dela. Nova Task 0. A verificação de escopo passa de `git diff --stat` (árvore) para `git show --stat` do(s) commit(s) desta story, em `quality_gate_tools`, AC 3 e Task 6. **(2) `main.ts`:** vira "só se a forma exigir", em commit posterior ao de `e4.2`, e a conferência "main.ts intocado" de `e4.2` é feita sobre o commit de `e4.2`. Fica registrada a **forma preferida**, que elimina o contato: carimbar dentro de `registrar()` importando as duas constantes em `client/telemetria.ts`. A tabela de camadas permite, e como `tools/telemetria.ts:3` é `import type`, não nasce aresta de execução `tools/ → net/`. A decisão de forma continua do @dev/@architect (AC 4). Task 3 pode ser pulada. **(3) AC 4, risco que faltava:** um bump para `v2` deixa o acúmulo `v1` órfão, porque `ler`/`exportar` só enxergam a chave corrente. O destino desse acúmulo passa a ser declarado obrigatoriamente. **(4) AC 3 e "Depende de":** "um golden hash e uma guarda próprios" de `e4.2` estava impreciso. O golden hash é do projeto e `e4.2` o mantém idêntico; o que `e4.2` acrescenta é a guarda de ida-e-volta (AC 7) e a asserção QA-D8-01 (AC 13). **(5) AC 9:** `INPUT_DELAY_TICKS` 0→6 nomeava uma constante que não existe mais (E41-TST-003). Passa a descrever a troca real do `b8e8a41` e pede também a fronteira do commit desta story. **(6) Citações:** tabela de camadas `280-287` → `279-287` (3 lugares), `registrar` `:131-136` → `:132-136`, e a citação do gate em Dev Notes restaurada verbatim. **(7) "NÃO faz":** sem chamador de UI para `limpar()`; a mitigação continua no console, conforme o gate. Complexidade: o mandato diz tamanho S e a seção CodeRabbit diz "Medium"; os dois ficam, por medirem coisas diferentes (superfície e decisão de forma). | Pax (@po) |
 | 2026-09-21 | 1.2 | **Implementação @dev (YOLO). Status: Ready → InProgress → Ready for Review.** Base `e4.2` = `b1c0668` (Task 0). Forma escolhida: `atrasoTicks`/`escalaHp` por evento, gravados em `registrar()` de `client/telemetria.ts` a partir de `ATRASO_ALVO_TICKS`/`ESCALA_HP`. É a forma preferida do AC 3: `main.ts` fica intocado e a Task 3 foi pulada. Sem bump de `CHAVE`; o acúmulo `v1` continua exportável e sai como população desconhecida. `ESCALA_HP` coberto (AC 8). `tools/telemetria.ts` particiona por (atraso, escala) lidos do arquivo, sem número combinado e com avisos; imports inalterados, sem `tools/ → net/`. README ganha as fronteiras `13ee9d8`/`b8e8a41`/`debt.10` (AC 9). Verificação: `check` ok; `sim:check` com diff antes/depois vazio e golden hash idêntico; `build` ok; os 5 exports reais rodam sem crash e com métricas idênticas; fixture misto particionado; a bateria negativa detectou as 2 regressões plantadas. CodeRabbit indisponível na máquina. | Dex (@dev) |
+| 2026-09-21 | 1.3 | **Gate @qa: CONCERNS. Status: Ready for Review → Done.** Os 12 ACs estão MET, verificados de forma independente: sim:check antes (`b1c0668`) × depois (`3de1cfe`) com diff vazio; 5 exports reais com métricas idênticas; fixture misto próprio; 4 mutações próprias, todas pegas. Achados: DEBT10-TST-001 (medium, sem guarda no repositório), DEBT10-DOC-002, DEBT10-COD-003 e DEBT10-INFO-004 (low). Gate: `docs/qa/gates/debt.10-telemetria-marca-atraso-de-input.yml`. | Quinn (@qa) |
