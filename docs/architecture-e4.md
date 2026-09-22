@@ -23,7 +23,9 @@
 > `'shield'` na amostra do fio**, sem subir versão, na §11.6.1; ponteiro de §12/R-02 para `e4.4`/AC 14).
 > · 2026-09-22 (O-2 do @po, revalidação de `e4.4` v1.9.0 — **§6.1: canal de criação de sala decidido**,
 > o servidor cria a sala sozinho e o id sai no log, sem mudar o fio; achados L-1 a L-3; §0, §6, §12/R-07,
-> Anexo A).
+> Anexo A). · 2026-09-22 (L-3, pedido do @po em `e4.5` v1.9.0 — **§6.2: endereço do servidor no cliente
+> decidido**, de `location` com a porta em duas cópias; Pages fora do portão P4.4; errata do `:5177`; §0,
+> §12/R-08, Anexos A e B).
 
 ---
 
@@ -34,7 +36,7 @@
 | RF-37 — servidor Node autoritativo importando `sim/` | §3 | Fechado. A sala é **pura**, com relógio injetado — mesma disciplina de `match/` (§2.6 de E3) |
 | RF-38 / P4.1 — input delay de 6 ticks | §4 | Fechado. O atraso é agendado **no servidor**, e o cliente perde o direito de escolher o tick |
 | RF-39 — interpolação entre snapshots | §5 | Fechado em forma. **Taxa é lever medido no aparelho** (P4.4), não número decidido aqui |
-| RF-40 — sala por link | §6 | Fechado. Reconexão sai **de graça** do modelo autoritativo. *(2026-09-22, §6.1: **quem cria a sala é o servidor**, sem pedido de cliente; o id sai no log de operação; o fio não muda. O-2 do @po)* |
+| RF-40 — sala por link | §6 | Fechado. Reconexão sai **de graça** do modelo autoritativo. *(2026-09-22, §6.1: **quem cria a sala é o servidor**, sem pedido de cliente; o id sai no log de operação; o fio não muda. O-2 do @po)* *(2026-09-22, §6.2: o cliente acha o servidor por `location`, com a porta numa constante nos dois lados; o Pages fica fora do portão P4.4. L-3)* |
 | RF-41 / P4.3 / D-08 — replay = seed + linha do tempo | §7 | Fechado, **com uma ressalva medida**: bit-exato só vale dentro da mesma engine (§1.5) |
 | RF-42 / P4.2 — anti-cheat | §8 | Fechado pela via mais barata: em rede o cliente **não simula**. Não há o que validar |
 | Segredo da build (§13.6 de E3 — "convenção reforçada por tipo") | §8.2 | **Fecha aqui.** `visaoPara` deixa de ser convenção e vira fato de fio |
@@ -1153,7 +1155,7 @@ não tem campo de id.
 
 | | canal | muda o fio? | escopo que reabre | superfície nova | serve `e4.4`/AC 10 · `e4.5`/AC 13 · `e4.7`/AC 1? |
 |---|---|---|---|---|---|
-| **A** | rota HTTP no mesmo processo (`POST` → `{id}`), antes do WebSocket | não | `e4.5`/AC 12 e 14: um botão "criar sala" pede tela (`telas.ts` está na lista que não muda) e é tela que nenhum documento desenhou (§0: telas de sala são do @ux-design-expert) | endpoint sem autenticação que **aloca memória por pedido**: precisa de teto e de política de CORS (o cliente vem do Vite, `:5177`, ou do Pages, e o servidor tem outra origem) | sim · sim, com UI nova · sim |
+| **A** | rota HTTP no mesmo processo (`POST` → `{id}`), antes do WebSocket | não | `e4.5`/AC 12 e 14: um botão "criar sala" pede tela (`telas.ts` está na lista que não muda) e é tela que nenhum documento desenhou (§0: telas de sala são do @ux-design-expert) | endpoint sem autenticação que **aloca memória por pedido**: precisa de teto e de política de CORS (o cliente vem do Vite, `:5177` *(errata §6.2: `:5173` por padrão)*, ou do Pages, e o servidor tem outra origem) | sim · sim, com UI nova · sim |
 | **B** | variante nova `{t:'criar'}` em `DoCliente` + id no `{t:'sala'}` | **sim**: `VERSAO_DO_FIO` 2 → 3, entrada 3 em `FIO_CONGELADO`, `parseDoCliente`, `T_DO_CLIENTE`, `receber` de `sala.ts:448` | `e4.4`/AC 13 (proíbe `src/net/`) **e** uma story nova de `net/` antes da Task 2, com guarda e mutações | a mesma alocação por pedido de A, agora dentro do fio | sim · sim, com UI nova · sim |
 | **C** | convenção: `{t:'entrar', sala:''}` = criar | **sim**, de forma escondida: muda o **significado** de um campo (regra da §11.6.1: sobe a versão) e ainda precisa do id na volta, que é B | igual a B, sem a honestidade de B | igual a B | igual a B |
 | **D** | **o servidor cria a sala sozinho** e escreve o id no log de operação | **não** | **nenhum**: tudo em `src/server/main.ts` | **nenhuma**: não existe pedido de criação, logo não existe criação a pedido de estranho | sim · sim, colando o link nas duas abas · sim, com quem sobe o servidor passando o link |
@@ -1246,6 +1248,8 @@ passar um `id` a mais. C "funcionaria" sem subir a versão, e é exatamente o ca
   definida uma vez só, em vez de duas cópias (servidor e cliente), pede uma constante em
   `net/protocolo.ts`, que o AC 13 de `e4.4` e o AC 14 de `e4.5` proíbem. Com duas cópias, cada uma cita a
   outra no comentário. É a mesma troca que a §11.6.1 fez com o `snapshotHz`, e o @po escolhe.
+  *(2026-09-22: **resolvido na §6.2**. A recomendação virou regra, com três precisões; o Pages saiu do
+  portão; o `:5177` deste item é errata, porque o Vite serve em 5173 por padrão.)*
 
 **Deltas para o @po** (este documento não edita story):
 
@@ -1286,6 +1290,138 @@ passar um `id` a mais. C "funcionaria" sem subir a versão, e é exatamente o ca
   a escolha entre o cliente do Pages e o Vite na LAN (AC 12). Com a recomendação de L-3, o caminho sem
   decisão extra é a LAN.
 - **§12/R-07 (nova, @pm):** autosserviço de sala fora da Fase 4.
+
+### 6.2 L-3 resolvido: a que endereço o cliente se conecta *(decisão, 2026-09-22, pedido do @po em `e4.5` v1.9.0, `f9e7d05`)*
+
+**A pergunta.** O link dá o id (§6.1). O `WebSocket` do navegador de `e4.5` precisa de esquema, host e
+porta, e nenhum documento os dá. O @po travou só a subtarefa da Task 1 de `e4.5` que abre o socket, e
+pediu duas coisas a mais: conferir a afirmação "duas cópias da porta, porque as duas stories proíbem uma
+constante compartilhada em `src/net/`", e decidir o que fazer com o caminho do Pages do AC 12 de `e4.7`.
+
+**Medido nesta sessão** (Node 24.13.1, `ws` 8.21.3 e Vite 6.4.3 já instalados em `node_modules`, sondas
+descartáveis fora do repositório; nenhuma linha de `src/` alterada, e `src/server/` ainda não existia na
+hora da medição):
+
+| sonda | resultado | o que diz |
+|---|---|---|
+| `new WebSocketServer({ port })`, **sem** `host` | `address()` → `{"address":"::","family":"IPv6"}` | o default do `ws` escuta em **todas** as interfaces, pilha dupla |
+| cliente `ws` do Node contra esse servidor em `localhost`, `127.0.0.1`, `[::1]` e no IPv4 da LAN | as quatro abrem | um servidor que não passa `host` serve as duas abas e o celular sem mudar nada |
+| mesmo cliente com `Origin: https://exemplo.github.io` | aceito nas quatro | o `ws` não confere `Origin` por padrão (`verifyClient: null`, `node_modules/ws/lib/websocket-server.js:80`) |
+| interfaces não internas desta máquina | duas: a da LAN (`192.168.x`) e **uma com endereço público, fora de RFC 1918** | escutar em todas as interfaces é escutar também nessa. Ver "Segurança" |
+| perfil de rede do Windows e firewall | Wi-Fi em perfil **Público**, entrada bloqueada por padrão, e regra "Node.js JavaScript Runtime" **permitindo** TCP de entrada no perfil Público | o celular deve alcançar a porta do `node` hoje. **Não conferido de outro aparelho**: a sonda da LAN saiu da própria máquina, e não atravessa o firewall |
+| `maxPayload` padrão do `ws` instalado | `104857600` (`websocket-server.js:50` e `:74`) | confirma o que o L-2 deixou "não conferido": 100 MiB |
+| `npx vite --host`, sem `--port` | `Local: http://localhost:5173/`, `Network:` nas duas interfaces | **o Vite serve em 5173, não em 5177.** Nada no repositório fixa 5177 (`vite.config.ts` não tem `server.port`, e `package.json` diz `"dev": "vite"`). O 5177 veio do README (`README.md:18`) e de sondas que passavam `--port 5177` (`docs/evidence/e4-determinismo-engines/README.md:59`). A Bíblia já avisava (`docs/DEVELOPMENT-BIBLE.md:1425`). **Errata:** o `:5177` da tabela da §6.1 e do L-3 acima, e o da nota do AC 12 de `e4.7`, é "a porta que o Vite imprimir, 5173 por padrão" |
+| `curl` no Vite pelo IPv4 da LAN | `200` | o `--host` basta para o celular carregar a página |
+| `curl` no Vite com `Host: meu-tunel.exemplo.com` | `403`, *"This host is not allowed. ... add it to `server.allowedHosts`"* | um túnel com nome próprio na frente do Vite **exige** mudar `vite.config.ts`. Conta para o caminho do Pages e da internet, abaixo |
+| `new URL(u)` → `(https: ? 'wss:' : 'ws:') + '//' + hostname + ':' + PORTA` | `[::1]` sai com colchetes; LAN sai `ws://192.168.x:PORTA`; Pages sai `wss://<usuario>.github.io:PORTA` | a regra monta URL válida em todos os casos, e no Pages ela aponta para um host onde o servidor **não está**: falha alta, na conexão, e nunca conecta no lugar errado |
+| `node_modules/ws/browser.js` | o `ws` resolvido para navegador é `throw new Error('ws does not work in the browser...')` | um `client/` que importasse `server/main.ts` quebraria na carga da página. Ver "As duas cópias" |
+
+A regra do navegador que fecha o Pages (página `https:` não abre `ws:`, conteúdo misto) **não foi medida em
+aparelho**. É documentada por todos os navegadores atuais. A exceção que alguns abrem para `localhost` não
+serve ao celular, que fala com um IP da LAN.
+
+**Decisão: a recomendação do L-3 vira regra, com três precisões.**
+
+1. **O endereço sai de `location`, e só dele.** Esquema `wss:` se `location.protocol === 'https:'`, `ws:`
+   se não. Host `location.hostname` (não `location.host`, que traz a porta do Vite). Porta numa constante
+   nomeada de `client/rede.ts`, com o mesmo valor da constante de escuta de `src/server/main.ts`
+   (`e4.4`/AC 6). Nenhum `ws://localhost` escrito à mão, nenhum `import.meta.env`, nenhum parâmetro no link.
+   O número é o que a `e4.4` escolher. A única restrição é não usar 5173 nem 4173, as portas padrão do
+   Vite dev e do `vite preview`.
+2. **O servidor não passa `host` ao `WebSocketServer`.** Medido acima: o default escuta em `::`, e é isso
+   que faz as duas abas e o celular funcionarem com a mesma regra. Passar `'localhost'` ou `'127.0.0.1'`
+   mata o caminho da LAN de `e4.7` sem erro nenhum na máquina de quem testa.
+3. **A porta de escuta não tem override na Fase 4.** O `snapshotHz` e o deflate têm override de operação
+   (`e4.7`/AC 4) porque chegam ao cliente pelo `{t:'sala'}`. A porta não chega: ela é a condição para o
+   `{t:'sala'}` chegar. Uma variável de ambiente que mudasse a porta do servidor deixaria o cliente na porta
+   antiga, e a falha seria "não conecta", sem pista. Se um dia a porta precisar mudar em operação, o L-3
+   reabre.
+
+**As duas cópias: a afirmação do @po confere, e o motivo é mais largo que `src/net/`.** Existem cinco lugares
+para uma cópia única, e nenhum serve no escopo atual:
+
+| onde | por que não |
+|---|---|
+| `src/net/protocolo.ts` | é o lugar natural, e o AC 13 de `e4.4` e o AC 14 de `e4.5` proíbem `src/net/`. Reabrir dois escopos por um número que não muda não vale o custo. É a afirmação do @po, e confere |
+| `client/` importa de `server/main.ts` | `server/main.ts` sobe o servidor ao ser carregado e importa `ws`. No navegador o `ws` resolve para `browser.js`, que lança na carga (medido acima). Além disso, `client/ → server/` não é seta declarada na §2.2 |
+| `server/` importa de `client/rede.ts` | o AC 12 de `e4.4` diz que `server/` **não** importa `client/`, e `rede.ts` ainda nem existe quando a `e4.4` fecha |
+| arquivo novo fora de `net/` (um `src/porta.ts`, por exemplo) | não está no "Criado" de nenhuma das duas stories, e pede duas setas novas na §2.2 para um número. Mais caro que a cópia |
+| `import.meta.env` no cliente e `process.env` no servidor | continua com dois defaults, um em cada lado, e ainda põe a porta no build do Pages. É a cópia com mais peças |
+
+Então: **duas cópias**, cada uma citando a outra no comentário (arquivo e nome da constante). É a mesma troca
+que a §11.6.1 fez com o `snapshotHz`. A divergência entre as duas não passa calada: o cliente não conecta, e
+o AC 3 de `e4.5` põe o erro na tela. Para o @qa, a conferência é um grep dos dois literais no gate de
+`e4.5`.
+
+**O caminho do Pages (`e4.7`/AC 12): fora do portão P4.4 da Fase 4.** Não é o Pages que decide a evidência do
+portão, e é por isso que ele pode sair sem perda. O Pages muda **de onde vem o HTML** do cliente. O que o
+portão mede (RTT, jitter, sensação, AC 1 a 6 de `e4.7`) é o caminho **entre o aparelho e o servidor**, e esse
+caminho é o mesmo com o cliente vindo do Pages ou do Vite, desde que o servidor esteja no mesmo lugar. Um
+cliente do Pages contra um servidor na LAN não mede nada que o Vite na LAN não meça, e custa mais: `wss:` com
+certificado aceito pelo celular num host que não é o do Pages, e uma forma nova de o cliente saber esse host
+(a regra do item 1 aponta para `github.io`, medido acima). As duas coisas são decisões a mais, e nenhuma é
+pedida pelo PRD (P4.4 é "smoke visual em dois aparelhos, como em P1.2", `docs/prd.md:222`).
+- **O caminho do portão é o Vite na LAN**: servidor e `npm run dev -- --host` na mesma máquina, os dois
+  aparelhos na mesma Wi-Fi, e o link `http://<ip-da-máquina>:<porta-do-vite>/#/sala/{id}`. Cobre o AC 1 de
+  `e4.7` com "Wi-Fi" no tipo de rede.
+- **A permissão do AC 12 de `e4.7` fica, e não é usável na Fase 4.** Ela não faz mal (um cliente do Pages
+  em modo conectado não conecta e mostra o erro, e sem `#/sala/{id}` ele é o modo local de hoje), mas o
+  README não vai ter uma partida "Pages @ `<sha>`". O @po decide se a nota basta ou se o AC diz isso.
+- **Não defino aqui o caminho `wss:`.** Ele só é necessário se o portão exigir um aparelho fora da LAN, e isso
+  é a pergunta de §12/R-08, que é do usuário. O que já está medido, para quem responder: qualquer caminho pela
+  internet (túnel, redirecionamento de porta, servidor hospedado) muda de onde vem o servidor, e não só o
+  cliente. Com um túnel na frente do Vite, o Vite recusa o nome do túnel (`403`, medido acima) até mudar
+  `vite.config.ts`. Com uma porta só no túnel, a regra do item 1 (porta própria do servidor) deixa de valer, e
+  o endereço passa a ser a mesma origem da página com um caminho, por proxy. São mudanças em `rede.ts` e em
+  `vite.config.ts`, e voltam ao @architect **depois** da resposta de R-08, nunca antes.
+
+⚠️ **SEGURANÇA.**
+- **Escutar em todas as interfaces é escutar em todas.** Nesta máquina isso inclui uma interface com endereço
+  público, e o Wi-Fi está em perfil Público com o `node` liberado para entrada. Em qualquer rede que o
+  notebook entrar, o servidor fica alcançável enquanto estiver de pé. O que protege a sala é o id de 128 bits
+  (§6.1, item 5), que só sai no log. Não há conta, nem cookie, nem nada que um estranho ganhe conectando sem o
+  id: ele recebe `{t:'erro'}` (§6.1, item 3). O risco que sobra é de disponibilidade (conexões abertas à toa).
+  A regra de firewall é da máquina do usuário e não é desta story. Fica registrada para ele.
+- **Sem conferência de `Origin` na Fase 4, de propósito.** Qualquer página aberta no navegador de quem joga
+  pode abrir um socket para o servidor (medido: `Origin` estranho aceito). Isso é o *cross-site WebSocket
+  hijacking*, e o que o torna inofensivo aqui é o mesmo motivo de cima: nenhuma credencial ambiente, e o
+  segredo de assento só vai para quem o `{t:'sala'}` endereça. Uma lista de origens teria de conter
+  `localhost`, cada IP de LAN e o Pages, e erraria no primeiro IP novo. Reabre quando houver servidor
+  hospedado (R-07).
+- **Nenhum parâmetro de servidor no link.** Um `?servidor=` deixaria um link apontar o cliente para um servidor
+  de qualquer um. O dano é pequeno (o cliente não tem segredo além do assento daquele servidor), mas é
+  superfície nova sem pedido. Fica fora.
+
+**Deltas para o @po** (este documento não edita story):
+
+- **`e4.5`: a subtarefa da Task 1 que abre o socket destrava. Nenhum AC reabre, e o AC 14 fica como está.**
+  - **"Depende de", bloco L-3:** a recomendação passa a decisão (§6.2, itens 1 a 3). O
+    [AUTO-DECISION] das duas cópias fica, com a tabela acima como fonte.
+  - **AC 3, Testing, acréscimo recomendado:** servidor desligado, ou porta errada, dá erro **na tela**, sem
+    tela preta. É o mesmo teste do id inventado, pelo outro lado: é assim que uma divergência entre as duas
+    cópias aparece.
+  - **Task 1:** a constante da porta cita `src/server/main.ts` e o nome da constante de lá. A URL sai de
+    `location.protocol` e `location.hostname`.
+  - **CodeRabbit Focus:** tirar o "(se a recomendação for confirmada)". Acrescentar `location.host` no lugar
+    de `location.hostname`, `import.meta.env` e parâmetro de servidor no link.
+  - **Testing / gate:** `grep` da constante de porta em `src/client/rede.ts` e em `src/server/main.ts`, com o
+    mesmo literal.
+- **`e4.4` (para o @po levar ao @dev, que está na Task 2): nenhum AC muda.** Nota no AC 6, na porta de
+  escuta: sem override de ambiente (item 3), `WebSocketServer` **sem** `host` (item 2), e o número fora de 5173
+  e 4173. Nota no AC 15: o `maxPayload` padrão da versão instalada é 104857600 (medido acima). O Dev Agent
+  Record ainda confere isso.
+- **`e4.7`: nenhum AC muda de sentido.**
+  - **Nota do AC 12 e Task 1, errata:** `:5177` → "a porta que o Vite imprimir (5173 por padrão)", ou
+    `--port 5177 --strictPort`, se o @po quiser o número estável no link. O caminho da LAN deixa de ser
+    "enquanto o L-3 não decidir o do Pages": é **o** caminho do portão (§6.2).
+  - **AC 12:** o cliente do Pages fica permitido e não é usável na Fase 4. O @po decide se isso vira texto do
+    AC ou fica na nota.
+  - **Task 1:** "servidor escuta em todas as interfaces" já está lá. Acrescentar: conferir **do celular**
+    que a página e o socket abrem, antes de chamar a segunda pessoa. A sonda desta seção saiu da própria
+    máquina e não atravessou o firewall.
+  - **AC 1:** fica como está, e depende de R-08. Se R-08 disser "mesma Wi-Fi basta", nada muda. Se disser
+    "um aparelho pela internet", a Task 1 ganha implantação e o caminho volta ao @architect.
+- **§12/R-08 (nova, usuário/@pm):** a rede do portão.
 
 ---
 
@@ -2047,7 +2183,8 @@ da sala serviria).
 
 ## 12. Ressalvas e o que este documento devolve ao @pm / usuário
 
-Nenhuma delas bloqueia começar a fase; R-01 e R-02 bloqueiam **terminá-la**.
+Nenhuma delas bloqueia começar a fase; R-01 e R-02 bloqueiam **terminá-la**. *(2026-09-22: R-08 tem de
+estar respondida antes de a evidência de `e4.7` ser colhida, porque decide em que rede ela vale.)*
 
 ### R-01 — A latência sentida é maior que a do diagrama do GDD *(decisão de produto)*
 
@@ -2140,6 +2277,27 @@ ninguém cria sala. **Pergunta ao @pm:** fora da Fase 4, um jogador cria a sala 
 *Recomendação: não decidir antes de P4.4.* O portão da fase é "dois celulares jogam fluido", e isso se
 responde com a §6.1 como está.
 
+### R-08 — A rede do portão P4.4: a mesma Wi-Fi basta? *(decisão do usuário, com o @pm; não bloqueia começar a `e4.7`)* *(2026-09-22)*
+
+A §6.2 tirou o Pages do portão, porque ele muda só de onde vem o HTML. O caminho que sobra, o Vite na LAN,
+põe **os dois aparelhos e o servidor na mesma Wi-Fi**. O AC 1 de `e4.7` aceita isso ("rede real, não
+`localhost`", tipo de rede "Wi-Fi/4G"), mas o que a evidência mede muda:
+- **Na mesma Wi-Fi**, o RTT do AC 3 é o do rádio local. O jitter de Wi-Fi é real, e é o que um celular sente
+  entre snapshots. Os dois aparelhos terão pings parecidos por construção, e a assimetria que o AC 5 procura
+  para R-01 dificilmente aparece. O `RTT/2` da §4.4 fica perto do mínimo, e a latência sentida do AC 6 sai
+  otimista frente aos 150-250 ms em 4G de R-01.
+- **Com um aparelho pela internet** (4G, ou outra casa), o número é o que R-01 descreve. Mas o servidor
+  precisa ser alcançável de fora da LAN, e as três formas são implantação com custo que não é de código:
+  redirecionar uma porta no roteador (expõe o notebook à internet, sem TLS), um túnel com certificado (serviço
+  de terceiros, e `vite.config.ts` muda, §6.2), ou um servidor hospedado com certificado (hospedagem e
+  domínio, e perto de R-07). Qualquer uma delas faz o caminho `wss:` voltar ao @architect.
+
+**Pergunta ao usuário:** o portão P4.4 e a evidência de R-01 valem com os dois aparelhos na mesma Wi-Fi, ou um
+deles tem de jogar pela internet? Se pela internet, qual das três formas, e quem paga ou opera?
+*Recomendação: mesma Wi-Fi para o portão, registrada como tal no README da evidência, e R-01 decidido com essa
+ressalva escrita.* Sai sem implantação nenhuma, e "fluido na Wi-Fi" já é uma resposta que reprova o desenho se
+ele estiver errado. A ressalva é o que impede o número otimista de virar o número do GDD.
+
 ---
 
 ## Anexo A — Mapa de arquivos
@@ -2152,7 +2310,7 @@ responde com a §6.1 como está.
 | `src/net/projecao.ts` | **novo** (`e4.2`) | `Snapshot + estático + CHARS → VisaoDoMundo`, a forma que `render.ts` passou a declarar. Puro |
 | `src/net/sala.ts` | **novo** (`e4.3`, `99f4ee3`); **muda** (`e4.10`) | Máquina de estados da sala. Pura, relógio injetado (§3.2). Produz o `{t:'sala'}` por assento, com `versao` e o segredo do destinatário (§11.6.1). Recebe `hash` e roster injetados (§2.2, E43-ARC-001). `e4.10`: envia `{t:'evento'}` por assento, com o filtro da §11.6.2 |
 | `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento. Único arquivo de `server/` que importa `tools/`, e só `hash` de `tools/harness.ts`, injetado na sala (§2.2, E43-ARC-001). Cria as salas sozinho, com ao menos uma livre, e escreve o id de cada uma no log de operação, sem segredo nem seed (§6.1) |
-| `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação |
+| `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação. O endereço sai de `location` (esquema e `hostname`), e a porta é uma constante que cita a de `server/main.ts`, em duas cópias (§6.2) |
 | `src/client/main.ts` | **muda** | Ganha os modos `local` e `conectado` (§9) |
 | `package.json` | **muda** | Dependência `ws`; script `server` |
 | `src/sim/**` | **intacto** | Nem um campo, nem um import (§2.2) |
@@ -2180,7 +2338,7 @@ citam a story nova.*
 | **P4.1** | `INPUT_DELAY_TICKS = 6` ativo | constante única em `net/protocolo.ts`, usada pelos dois modos | §4.1 · hash-neutralidade provada em §4.2 · §10 passo 1 |
 | **P4.2** | O cliente não decide dano | divergir o cliente artificialmente e conferir o placar do outro | §8.1 — passa por subtração: o cliente não simula |
 | **P4.3** | Replay reconstrói a partida com hash idêntico | replay no servidor, **mesma engine** | §7.2 · **ressalva medida** em §1.5 e §11.1 |
-| **P4.4** | Smoke visual em dois aparelhos | manual, dois celulares, partida completa | §10 passo 7 · decide `SNAPSHOT_HZ` (§5.2) e §4.4 |
+| **P4.4** | Smoke visual em dois aparelhos | manual, dois celulares, partida completa | §10 passo 7 · decide `SNAPSHOT_HZ` (§5.2) e §4.4 · *(2026-09-22)* caminho: Vite na LAN, sem Pages (§6.2); rede da evidência em §12/R-08 |
 | — | Julgamento humano: *1v1 entre dois celulares é fluido?* | usuário jogando, com outra pessoa | Nada aqui substitui isso. §11.3 registra o que não foi medido |
 | — | `npm run sim:check` verde, golden hash **idêntico** nos 7 passos | comando | §10 |
 | — | `npm run check` (`tsc --noEmit`) verde | comando | — |
