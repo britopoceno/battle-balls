@@ -1,0 +1,263 @@
+schema: 1
+story: 'e4.4'
+story_title: '`server/main.ts` — WebSocket, assentos, roteamento e o laço de relógio'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 17 ACs (v1.10.0) estão MET. Refiz as verificações do zero, sem confiar no Dev Agent Record. check,
+  sim:check e build saíram com rc=0, e o golden hash não mudou. Os greps do AC 12 e os de pureza de
+  src/net/ batem, e o escopo são os três arquivos do AC 13. Rodei de novo o roteiro de dois clientes do
+  @dev, fora do repositório: 29/29, numa Bo5 com outra seed, [1,3] em 4 rodadas. Escrevi um roteiro meu
+  com 16 conferências e exercitei os dois caminhos que o @dev declarou como não exercitados: o log de
+  atraso do laço e o estouro da pausa de R-02. Rodei também 10 mutações minhas numa cópia descartável.
+  Nenhuma falha de implementação. O veredito é CONCERNS, e não PASS, por quatro achados LOW. Três são de
+  alcance do roteiro do @dev: três mutações nocivas passam com 29/29 e só o meu roteiro as pega. O quarto
+  é um comentário desatualizado.
+  (1) E44-TST-001: a reconexão e a regra L-1 com segredo válido só estão provadas no assento 0.
+  (2) E44-TST-002: o caminho da queda, `{conexao:'caiu'}`, não é exercitado pelo roteiro.
+  (3) E44-TST-003: nenhuma conferência cobre uma conexão recusada que tenta outra sala.
+  (4) E44-DOC-001: o comentário de PORTA_DO_SERVIDOR ainda diz que o L-3 está "em aberto".
+  `@types/ws` continua esperando a manifestação do usuário. Fica registrado e não reprova (AC 13, v1.9.0).
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:6852c8a (implementação). O pai é 5495657 (@architect, só docs). 77113d3 (registro do @dev)
+  toca só a story. Durante o gate, o HEAD andou para 514b25c: 223a5b8 e 514b25c são do @po e mexem só em
+  e4.5 e e4.7. `git diff 6852c8a HEAD -- src package.json package-lock.json tsconfig.json` sai vazio, então
+  o código que rodei é o de 6852c8a. 6852c8a NÃO está em origin/master (merge-base --is-ancestor rc=1): é
+  commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 2, 3)'
+    verdict: PASS
+    evidence: >-
+      Node v24.13.1. `npm run check` deu rc=0, `npm run sim:check` deu rc=0 e `npm run build` deu rc=0
+      (53.27 kB, o mesmo bundle da e4.10, porque client/ não muda). A saída tem "golden hash ✓ ok — 6 seeds
+      batem o baseline". Nenhum arquivo que o sim:check carrega mudou: o diff de 6852c8a só tem
+      src/server/main.ts, package.json e package-lock.json. Por isso a saída é idêntica por construção.
+      `npm run lint` não existe no projeto.
+  - id: 'Escopo e dependências (AC 13, AC 1)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 6852c8a` lista package-lock.json (+35), package.json (+6/-1) e src/server/main.ts
+      (+403, novo), com 444/1 no total. Nenhum arquivo proibido aparece. O lock só ganha
+      `node_modules/ws` 8.21.3 e `node_modules/@types/ws` 8.18.1, e não perde nenhuma linha. No
+      package.json, `ws ^8.21.3` está em dependencies, `@types/ws ^8.18.1` em devDependencies, e o script
+      `server` é `node src/server/main.ts`. `npm ls` mostra ws@8.21.3 e nanoid@3.3.16 só pela cadeia
+      vite → postcss. `npm audit --omit=dev` dá "found 0 vulnerabilities". O `npm audit` completo acusa 1
+      high em nanoid <3.3.18, que é anterior ao commit, só de desenvolvimento e não vem do ws. Não conta
+      contra esta story (ver observações). As pré-condições (R-05, debt.12 em 5766137, debt.14 em
+      17ecf5c/f9b0312) estão citadas no Dev Agent Record.
+  - id: 'Setas e pureza (AC 12)'
+    verdict: PASS
+    evidence: >-
+      `grep -rn "from '\.\./tools/" src/server/` devolve exatamente 1 linha:
+      `src/server/main.ts:7:import { hash } from '../tools/harness.ts'`. Com aspas duplas, `grep -rn 'from
+      "' src/server/` dá rc=1. `grep -nwF "hashDoMundo: hash"` dá rc=0 na `:144`, e `grep -n hashDoMundo`
+      só acha essa linha. Os imports são node:crypto, ws, ../chars/index.ts, ../net/codec.ts,
+      ../net/protocolo.ts (só tipos), ../net/sala.ts e ../tools/harness.ts. Não importa sim/, client/,
+      bot/ nem match/. src/server/ tem um arquivo só. `criarSala` recebe `{ id, seed, pool, chars,
+      hashDoMundo: hash }`, sem `config`, então `tetoDeTicks` e `MAX_ROUND_TICKS` não aparecem. As duas
+      buscas de pureza de src/net/ (`-rnwE "ws|document|window|localStorage|Math\.random"` e `-rnE
+      "Date\.now|performance\.now"`) dão rc=1.
+  - id: 'Sem regra de jogo; o servidor lê só Sala.fase e Sala.assentos (AC 4)'
+    verdict: PASS
+    evidence: >-
+      Listei todo acesso a propriedade de sala e de mensagem em main.ts. `.sala.fase` aparece em :152 e
+      :216, só com 'aguardando' e 'encerrada'. `.sala.assentos` aparece em :152, :213 e :235. `r.sala` e
+      `r.envios` são o retorno de passo(). `msg.t`/`msg.id`/`msg.sala`/`msg.assento` só aparecem depois de
+      parseDoCliente, e `msg.t === 'sala'` no envio devolvido. `\.partida` só casa no comentário do
+      cabeçalho (:22). Nenhum `if` olha ouro, placar, vitória, dano ou fase de partida.
+  - id: 'Entropia e vazamento no log (AC 6, AC 7)'
+    verdict: PASS
+    evidence: >-
+      O id e o segredo vêm de `randomBytes(16).toString('base64url')` (22 caracteres, 128 bits). A seed é
+      `randomBytes(4).readUInt32BE(0)`, num sorteio à parte. `Math.random`, `mulberry32` e
+      `JSON.stringify` não aparecem em src/server/. As 11 chamadas de logOperacao recebem id de sala, `#n`,
+      código, RTT, err.message e contagens. Nenhuma recebe chave nem seed. Os `throw` de sala.ts que podem
+      chegar ao log (`falhou no passo`) só interpolam configuração e `t.erro`. Mecânico: `grep -F -f
+      e44-segredos-e-seeds.txt e44-servidor.log` do roteiro do @dev, com 6 valores, dá rc=1. O mesmo teste
+      no meu roteiro, com 3 segredos e 1 seed, também dá rc=1.
+  - id: 'Roteiro de dois clientes do @dev, reexecutado (AC 8, 10, 11, 15, 16, 17, 9)'
+    verdict: PASS
+    evidence: >-
+      Extraí o script do Dev Agent Record (story:763-1102) para o scratchpad e rodei `node
+      e44-clientes.mjs <repo>`. Deu 29/29 e rc=0. A Bo5 saiu com outra seed: partidaFim
+      `{"rodadas":4,"placar":[1,3]}`, idêntico nos dois lados, com B adulterando 9996 snaps. Os
+      rodadaFim (vencedor, ticks, hash) são idênticos. AC 16: nas 4 rodadas, o último snap vem antes do
+      rodadaFim com `over=true` e `events=[hit,death,roundEnd]`, nos registros de B, A, A2 e A3. O log tem
+      3 linhas `sala criada`. As 11 conexões registram "permessage-deflate negociado: nenhuma extensão", e
+      as assentadas fecham com `rtt 0.2–0.3 ms`. A armadilha do AC 10 está tratada: o script usa
+      `linhasDeSala()[0]` para A e B, e confere que a segunda linha tem outro id.
+  - id: 'Armadilha da última linha (AC 10), reproduzida'
+    verdict: PASS
+    evidence: >-
+      No meu roteiro, A senta no id da primeira linha. C usa a ÚLTIMA linha e recebe `{t:'sala'}` com
+      jogador 0 e estado 'aguardando'. Em 1,5 s não chega nenhuma `visao`, nem a C nem a A. A armadilha é
+      real, e a leitura do @dev a evita.
+  - id: 'Ciclo de vida, id desconhecido e remoção depois dos envios (AC 6 itens 1-3, AC 16)'
+    verdict: PASS
+    evidence: >-
+      Leitura: `entrar` com id fora do mapa só chama `recusar` e retorna. Em rodarPasso, o laço `for (const
+      envio of envios)` (:205) vem antes da remoção da sala `encerrada` (:216-220). Execução, no meu
+      roteiro: `cast` antes de `entrar`, 7 formas hostis, um quadro binário com id inventado e um quadro
+      de exatamente 4096 B dão todos `{t:'erro'}` e nenhuma sala nova. Continua 1 linha de log. Cinco
+      ciclos de senta/sai numa sala livre antiga, mais 20 conexões sem `entrar`, também não criam sala
+      (continuam 3 linhas): a criação só dispara pela mais nova, então quem não tem o log não faz o
+      servidor alocar salas. A sala encerrada por dois ausentes sai do mapa, e o id dela passa a dar
+      `{t:'erro'}`.
+  - id: 'maxPayload e ouvinte de error (AC 15, L-2)'
+    verdict: PASS
+    evidence: >-
+      `TETO_DO_QUADRO_BYTES = 4 * 1024` é passado como `maxPayload` em :392, junto com `perMessageDeflate:
+      PERMESSAGE_DEFLATE` (false) em :391, e sem `host`. Todo socket ganha `ws.on('error', …)` em :381,
+      antes do ouvinte de message. Borda medida: um quadro de 4096 B passa e dá erro de id desconhecido,
+      com a conexão aberta. Um de 4097 B fecha com 1009, e o processo fica de pé. Q16, meu, desliga o
+      ouvinte (`if (proximaConexao < 0) ws.on('error'…)`, tsc 0): o quadro de 4097 B derruba o processo
+      (FALHA "processo de pé" e depois "A: erro"). Isso reproduz a M2 do @dev por outro caminho.
+  - id: 'Laço e log de atraso (AC 5), exercitado'
+    verdict: PASS
+    evidence: >-
+      O @dev não exercitou esse caminho, e eu exercitei sem tocar em src/. Um `--import qa-e44-bloqueio.mjs`
+      bloqueia o laço de eventos por 2500 ms em espera ativa. O log mostra UMA linha "laço atrasado: teto
+      de 60 passos por quadro atingido, 1505 ms ainda no acumulador", e UMA "laço recuperado após 42 ms de
+      atraso". O excedente ficou no acumulador e foi recuperado em cerca de 3 quadros. Não foi descartado
+      e não virou câmera lenta, e o processo ficou de pé. O `agora` da sala é `inicio + passosDados ×
+      PASSO_MS`, o relógio do laço.
+  - id: 'Queda, pausa de R-02 e dois ausentes (AC 14), exercitados'
+    verdict: PASS
+    evidence: >-
+      O @dev não exercitou esse caminho, e eu exercitei. B (assento 1) fecha ao receber a `visao` de
+      builds. A declara pronto. A recebe `rodadaInicio` 20,0 s depois: foi a pausa de 20 s da política
+      provisória que estourou (`buildPadrao` do ausente), e não os 30 s de RF-04. B2 volta com o segredo
+      de B e recebe `sala, visao, rodadaInicio, …`, com jogador 1 e o mesmo segredo. Depois A e B2 fecham,
+      e o log escreve "sala encerrada e descartada" 20,0 s depois (dois ausentes). O id passa a dar
+      `{t:'erro'}`. A política é a da sala, e o servidor só entrega `{conexao:'caiu'}`.
+  - id: 'Mutações próprias (10, cópias descartáveis)'
+    verdict: CONCERNS
+    evidence: >-
+      Script qa-e44-mut.mjs no scratchpad. Cada mutação roda numa cópia própria de src/ (git archive de
+      HEAD), com node_modules por junction e porta própria. O padrão tem de casar exatamente 1 vez, e o EOL
+      foi normalizado. Controles: CTRL deu verde no meu rápido, no meu completo, no rápido do @dev e no
+      completo do @dev (29/29). Pegas: Q1 (sala encerrada tirada do mapa ANTES dos envios): "timeout
+      esperando partidaFim em B", AC 16. Q9 (sem garantirSalaLivre no laço): timeout na segunda linha,
+      pega pelos dois roteiros. Q16 (sem ouvinte de error): o processo morre. Q4 (logar a chave em
+      entrar): pega pela conferência de vazamento. Q6 (ping antes do {t:'sala'}): pega pelo @dev,
+      "primeiro quadro de A é {t:'sala'}". Isso prova que a guarda `recebeuSala` tem dente. Verdes no
+      roteiro do @dev, que são achados: Q2 (29/29, E44-TST-001), Q14b (29/29, E44-TST-002) e Q3
+      (E44-TST-003). As três são pegas pelo meu roteiro. Q15 (não filtrar da fila as entradas da conexão
+      antiga no reassentamento) passa verde nos dois roteiros. Pegá-la exige uma mensagem da conexão
+      antiga na mesma janela de 16 ms do reassentamento. A proteção existe no código (:242), e fica como
+      observação.
+
+top_issues:
+  - id: 'E44-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia; dono natural é quem reusar o roteiro — e4.5 AC 13 / e4.7)'
+    finding: >-
+      O roteiro do @dev reconecta e reassenta só o assento 0 (A → A2 → A3). Q2 restringe a validade do
+      segredo a `pedido === e.sala.assentos[0]`: o jogador 1 nunca mais consegue voltar à própria partida,
+      e o roteiro dá 29/29, rc=0. No meu roteiro, a mesma mutação para em "timeout: B2: snap", e o código
+      de hoje reassenta o assento 1 com `sala, visao, rodadaInicio`, jogador 1 e o mesmo segredo. É a
+      lição de sempre: uma invariante geral (L-1 e reconexão, AC 7/8) só está provada no caso que o teste
+      exercita.
+    suggested_action: >-
+      Não bloqueia. Em qualquer roteiro de protocolo reusado (e4.5/AC 13, e4.7), reconectar os DOIS
+      assentos. Mutação de aceite: Q2 tem de dar FALHA.
+  - id: 'E44-TST-002'
+    severity: low
+    category: tests
+    owner: '@po (roteia)'
+    finding: >-
+      O Dev Agent Record diz que o estouro da pausa de R-02 não foi exercitado. A lacuna é mais larga: o
+      roteiro não exercita nenhum efeito de `{conexao:'caiu'}`. Q14b (`… && e.fila.length < 0` no push de
+      `caiu` em aoFechar, tsc 0) dá 29/29, rc=0, porque as reconexões voltam com segredo válido e isso não
+      depende da queda. No meu roteiro, a mesma mutação para em "timeout: D1: sala": sem `caiu`, o assento
+      de quem sai de uma sala `aguardando` nunca é liberado, e a sala fica ocupada por um fantasma. O
+      comportamento de hoje está certo e foi medido: pausa de 20,0 s, dois ausentes encerram em 20,0 s e a
+      sala sai do mapa.
+    suggested_action: >-
+      Não bloqueia. No próximo roteiro de protocolo: uma saída em `aguardando` seguida de outra entrada no
+      mesmo assento, e uma queda de mais de 20 s. Mutação de aceite: Q14b tem de dar FALHA.
+  - id: 'E44-TST-003'
+    severity: low
+    category: tests
+    owner: '@po (roteia)'
+    finding: >-
+      Uma conexão recusada pela sala (cheia ou jogando) é desligada do mapa em rodarPasso (:212-214), para
+      poder tentar outro `{t:'entrar'}` (Completion Notes). Nenhuma conferência do roteiro do @dev cobre
+      isso. Q3 (sem esse laço) passa verde, porque C recebe `{t:'erro'}` de qualquer jeito: da sala, "entrar
+      é tratado pela fronteira", em vez de "sala cheia". No meu roteiro, a mesma conexão R é recusada em
+      idA e depois senta numa sala livre, e com Q3 ela recebe só "erro,erro".
+    suggested_action: >-
+      Não bloqueia. Ao reusar o roteiro, conferir o MOTIVO do `{t:'erro'}` ou a entrada seguinte, e não só
+      a contagem de erros.
+  - id: 'E44-DOC-001'
+    severity: low
+    category: docs
+    owner: '@dev (na próxima story que abrir src/server/main.ts — e4.7 AC 11)'
+    finding: >-
+      O comentário de `PORTA_DO_SERVIDOR` (src/server/main.ts:33-37) diz "a forma de dizer isso a ele é
+      L-3, em aberto na e4.5" e "se o desenho confirmar duas cópias…". O L-3 foi decidido na §6.2
+      (5495657), que é o pai do commit de implementação: duas cópias, e a do cliente se chama
+      `PORTA_DO_SERVIDOR` em src/client/rede.ts. O AC 6 pede que o comentário cite a cópia do cliente
+      quando as duas cópias forem confirmadas. O @po já registrou isso em e4.5 (v1.10.0) como nota para
+      depois do gate. O valor está certo: 5179, fora de 5173/4173, sem `host` e sem process.env/argv.
+    suggested_action: >-
+      Trocar o comentário para citar `src/client/rede.ts` / `PORTA_DO_SERVIDOR` na próxima story que
+      tocar src/server/main.ts. Até lá vale o grep dos dois literais do gate de e4.5.
+
+avaliacoes_pedidas:
+  cadencia_do_laco_constante_local: >-
+    ACEITO. A §2.2 declara `server/ → net/, match/, chars/, bot/ + tools/harness.ts SÓ hash`, e o AC 12
+    também não lista sim/. Importar TICK_MS criaria uma seta não declarada. O 60 é a cadência do laço, e
+    não uma segunda definição do tick: a sala calcula os ticks devidos a partir do `agora`
+    (`devidos = floor((agora - r.inicioMs) * TICK_HZ / 1000)`, sala.ts:650), e por isso um laço fora de
+    fase com TICK_HZ só muda a granularidade. Se o @architect preferir a seta server → sim/world.ts só
+    para TICK_MS, a troca é de uma linha. É opcional e não é achado.
+  log_de_atraso_nao_exercitado: >-
+    Fechado por mim. Um bloqueio externo de 2500 ms gera uma linha de entrada e uma de saída, com o
+    excedente recuperado. Ver "Laço e log de atraso".
+  pausa_de_r02_nao_exercitada: >-
+    Fechado por mim: 20,0 s até o W.O. por passo, e 20,0 s para dois ausentes encerrarem a sala. A lacuna
+    que sobra é do roteiro reusável (E44-TST-002), e não da implementação.
+  npm_audit_nanoid: >-
+    Não conta contra esta story. É anterior ao commit (o lock de 6852c8a só acrescenta ws e @types/ws),
+    fica só na cadeia de desenvolvimento vite → postcss → nanoid 3.3.16, e o runtime (`--omit=dev`) tem 0
+    vulnerabilidades. Sugestão ao @devops, como débito: `npm audit fix` numa story própria de manutenção
+    de dependências.
+  types_ws: >-
+    Registrado, não reprova. `@types/ws` 8.18.1 em devDependencies é correção de spec do @po (AC 13,
+    v1.9.0). Sem ele, o check cai por TS7016. O usuário ainda não se manifestou. Se vetar, a alternativa
+    seria um .d.ts à mão, que o próprio AC 13 chama de tipo inventado, e a questão volta ao @po.
+
+observacoes:
+  - >-
+    `recebeuSala` não é zerado em desligar(). Uma conexão que continua aberta depois de a sala dela
+    encerrar, e que entra noutra sala, pode receber um `{t:'ping'}` antes do `{t:'sala'}` novo. É inócuo:
+    o ping não é envio da sala, e a versão já foi conferida no primeiro `{t:'sala'}`. O e4.5 abre um
+    socket por link. Fica registrado para quem reusar conexões.
+  - >-
+    Com sobrecarga persistente, o acumulador cresce sem limite e o atraso vai ao log uma vez só, sem
+    "recuperado". Isso cumpre a §3.2 ("telemetria de operação, não degradação silenciosa"). O limiar de
+    alarme, se houver, é da e4.7.
+  - >-
+    Não há limite de conexões nem de mensagens por conexão. A §6.2 já aceita o risco de disponibilidade
+    (servidor em todas as interfaces, sem Origin), e o maxPayload limita o tamanho de cada mensagem. Fica
+    registrado para R-07 (servidor hospedado).
+  - >-
+    O parser descarta campos extras (`{"t":"entrar","sala":"x","extra":1}` vira `{t:'entrar',sala:'x'}`), e
+    daí o servidor responde "sala desconhecida". É o comportamento do E40-SEC-001, e está certo.
+  - >-
+    CodeRabbit não roda nesta máquina (sem WSL/CLI). A cobertura veio de check, sim:check e build, da
+    leitura linha a linha de main.ts, do roteiro do @dev reexecutado, do meu roteiro de 16 conferências
+    (modos bloqueio, rápido e completo) e de 10 mutações. As cópias e junctions foram removidas (as
+    junctions com `.Delete()`, o node_modules do repositório está intacto), nenhum processo node do gate
+    ficou de pé e nenhuma porta de 5179 a 5188 ficou escutando. A árvore compartilhada nunca foi mutada.
+  - >-
+    Para rodar o roteiro do @dev em paralelo nas mutações, tornei a porta parametrizável
+    (`E44_PORTA`, com 5179 como padrão) e encurtei a espera do partidaFim para 300 s na cópia do
+    scratchpad. O CTRL com essa versão deu 29/29.
+
+waiver: { active: false }
+updated: '2026-09-22T04:35:00Z'
