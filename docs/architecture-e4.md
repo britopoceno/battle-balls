@@ -1301,6 +1301,7 @@ fosse.
 `ws` entra num projeto que hoje não tem dependência de runtime nenhuma. É a escolha óbvia e madura,
 e ainda assim é superfície nova (segurança, atualização, tamanho). Registrado para ser decisão
 consciente, não consequência.
+*(2026-09-21: decidida. O usuário ratificou `ws`; ver §12/R-05, Resolução.)*
 
 ### 11.6 Formato posicional e descompasso de versão *(2026-09-21, `e4.2`)*
 
@@ -1942,6 +1943,12 @@ novo é uma fonte a mais.
 > precisava carregar. O orçamento de banda **não depende** da biblioteca escolhida nem da configuração
 > de compressão dela: sem deflate, o fio já cabe (78 kbit/s a 30 Hz). Ratificar, vetar ou trocar de
 > biblioteca muda o lever de deflate de `e4.4`/`e4.7`, não o formato.
+
+> **Resolução (2026-09-21): RATIFICADA pelo usuário.** `ws` entra como a primeira dependência de
+> runtime do projeto, para o servidor WebSocket de `e4.4` (`docs/stories/e4.4.servidor-ws.story.md`).
+> Sem veto e sem troca de biblioteca, então nada volta ao @architect: o lever de deflate da §5.5 é o
+> `permessage-deflate` do `ws`, como `e4.4`/AC 17 já descreve. A decisão é só esta. R-01, R-02 e R-03
+> seguem abertas. Registrado pelo @po a pedido do coordenador.
 
 ### R-06 — A morte súbita virou caminho comum, e ninguém decidiu isso *(informativa, herda R-05 de E3)*
 
