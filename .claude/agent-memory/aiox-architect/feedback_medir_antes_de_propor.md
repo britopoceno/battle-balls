@@ -36,3 +36,8 @@ amostra tiver valores **distintos dois a dois** em cada tupla. A amostra que o g
 (`snapshotSintetico`) tinha 3 colisões medidas (0/0, 1/1, 200/200) — congelá-la deixaria passar 3
 mutações da mesma forma da M9 que motivou a fixture. Ao especificar fixture, medir colisões e pôr um
 canário da propriedade na própria guarda.
+
+**E45-REQ-001 (2026-09-22):** antes de desenhar um protocolo novo para o cliente, rodar o servidor real e testar
+o que ele já faz. A tentativa de novo na mesma conexão já era aceita (`server/main.ts:240-243`), e com isso a
+opção sem fio venceu opções com trava entre abas. Descartar uma API de navegador exige conferir se ela existe no
+contexto do portão, que é `http://` na LAN e portanto sem contexto seguro.

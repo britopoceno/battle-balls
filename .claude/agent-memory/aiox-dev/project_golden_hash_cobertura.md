@@ -45,3 +45,13 @@ quatro magnitudes de `architecture-e3.md` §1.6 (0.07/0.11/0.13/0.17) no mesmo c
 duas saídas e a canônica uma. Regra: quando o dado de produção é placeholder uniforme, o teste que
 depende da variedade do dado precisa injetar a variedade; senão ele mede o placeholder, não o
 código. Vale para `e3.6`/`e3.7`, que vão trocar exatamente esses números.
+
+**Two more corollaries, measured in `e4.6` (2026-09-22).**
+- **`hash()` quantizes, so a replay verifier proves hash-equality, not bit-equality.** On a real match replay, nudging an
+  EFFECTIVE command by `dx + 1e-12` still passed `replay:check`. Never call "same hash" "bit a bit" in output or in
+  the record. Most commands from spamming test clients are also no-ops (2/40 effective), so a mutation that edits
+  "the first command" may be invisible. Pick one that is known to matter, such as a sign flip that the guard itself
+  confirms reprovar.
+- **The `sim:check` guards inject their own `hash` and never load `server/main.ts`.** Server-side mutations (hash
+  stub, gravador unhooked) stay GREEN there by construction. Only a real match against the server catches them, so
+  any story that touches `server/` needs the real-match step in its mutation battery, not only `sim:check`.

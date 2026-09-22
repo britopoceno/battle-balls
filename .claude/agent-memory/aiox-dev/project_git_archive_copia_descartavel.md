@@ -21,5 +21,10 @@ give the copy `node_modules` via junction: `MSYS_NO_PATHCONV=1 cmd /c mklink /J 
 Without `MSYS_NO_PATHCONV`, Git Bash rewrites `/J` and mklink fails with "Opção inválida". To clean up, run
 `cmd /c rmdir` on the junction, never `rm -rf`, which can follow it into the real `node_modules`. A mutation script
 that restores `src/` from a pristine copy each run, and asserts each pattern matches exactly once, avoids surprises.
-Two identical call sites (for example `enviarVisao` + `sincronizar`) need a longer anchor. Also see [[project_autocrlf_checkout_crlf]] and
+Two identical call sites (for example `enviarVisao` + `sincronizar`) need a longer anchor.
+**More reliable (e4.4, 2026-09-22):** `cmd //c mklink` with `MSYS_NO_PATHCONV=1` opened an INTERACTIVE cmd, which hung
+the Bash call until I killed it. Use PowerShell instead:
+`powershell -NoProfile -Command "New-Item -ItemType Junction -Path '<copy>\node_modules' -Target '<repo>\node_modules'"`.
+To remove it, use `(Get-Item '<copy>\node_modules').Delete()`, which deletes only the link. Do not use a stray `cat`
+with no input in a Bash chain: it waits on stdin forever. Also see [[project_autocrlf_checkout_crlf]] and
 [[project_bateria_negativa_toolchain]].
