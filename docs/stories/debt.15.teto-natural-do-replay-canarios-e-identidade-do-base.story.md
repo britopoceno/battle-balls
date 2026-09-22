@@ -2,7 +2,7 @@
 
 ## Status
 
-Ready
+InReview
 
 ## Executor Assignment
 
@@ -175,41 +175,41 @@ quality_gate_tools: ["npm run check", "npm run sim:check (golden hash idêntico 
 
 ## Tasks / Subtasks
 
-- [ ] Task 0 — Pré-condição de início
-  - [ ] Confirmar que `e4.12` (`a9ad204`) e `e4.11` (`eccff6a`) estão Done
-  - [ ] Confirmar que `git status --short src/tools/partida.ts src/tools/determinism.ts src/tools/replay-check.ts src/server/main.ts src/net/replay.ts` sai vazio *(v1.1: + `server/main.ts` e `net/replay.ts`, AC 9)*
+- [x] Task 0 — Pré-condição de início
+  - [x] Confirmar que `e4.12` (`a9ad204`) e `e4.11` (`eccff6a`) estão Done
+  - [x] Confirmar que `git status --short src/tools/partida.ts src/tools/determinism.ts src/tools/replay-check.ts src/server/main.ts src/net/replay.ts` sai vazio *(v1.1: + `server/main.ts` e `net/replay.ts`, AC 9)*
 
-- [ ] Task 1 — `E412-REL-001`, teto natural (AC: 3, 8)
-  - [ ] Trocar `if (passo > MAX_PASSOS)` por `if (passo > g.decisoes.length + g.rodadas.length + 1)` só na linha `:371` de `reproduzirPartida`, sem tocar `:323-324` nem `:512-513`
-  - [ ] Construir, dentro de `guardaReplayV2` (ou função-irmã no mesmo arquivo), uma gravação com builds redundantes que ultrapassa 64 passos mas fica dentro do limite natural; confirmar que `reproduzirPartida`/o replay dela passa sem lançar
-  - [ ] Aplicar MUT-REL-001 (restaurar `MAX_PASSOS`) numa cópia descartável; confirmar `sim:check` código != 0 com a mensagem "não terminou (fase builds)"; reverter
-  - [ ] Verificação adicional: reproduzir os 30 cliques por jogador contra um servidor local descartável (portas livres); confirmar `npm run replay:check` dá `rc=0`; registrar porta, comandos e saída no Dev Agent Record
+- [x] Task 1 — `E412-REL-001`, teto natural (AC: 3, 8)
+  - [x] Trocar `if (passo > MAX_PASSOS)` por `if (passo > g.decisoes.length + g.rodadas.length + 1)` só na linha `:371` de `reproduzirPartida`, sem tocar `:323-324` nem `:512-513`
+  - [x] Construir, dentro de `guardaReplayV2` (ou função-irmã no mesmo arquivo), uma gravação com builds redundantes que ultrapassa 64 passos mas fica dentro do limite natural; confirmar que `reproduzirPartida`/o replay dela passa sem lançar
+  - [x] Aplicar MUT-REL-001 (restaurar `MAX_PASSOS`) numa cópia descartável; confirmar `sim:check` código != 0 com a mensagem "não terminou (fase builds)"; reverter
+  - [x] Verificação adicional: reproduzir os 30 cliques por jogador contra um servidor local descartável (portas livres); confirmar `npm run replay:check` dá `rc=0`; registrar porta, comandos e saída no Dev Agent Record
 
-- [ ] Task 2 — `E412-TST-001`, os 8 canários (AC: 4, 7, 8)
-  - [ ] (a) `R1` — estender o cenário de teto pequeno de `salaVariantesEBordas` (`:2371`, *v1.1: não `salaNegativos`*; AC 5(i) de `debt.14`, `:2439-2459`) com a asserção `rodadas[0].encerramento === 'natural'` sobre o replay montado da gravação
-  - [ ] (b) `R4` — reaproveitar um replay `'fim'` já existente em `guardaReplayV2`; numa cópia, relabelar `'interrompida'`; confirmar que `verificarReplay` reprova
-  - [ ] (c) `R3` — reaproveitar `ra.lido` (cenário `'anular'`); numa cópia, empurrar uma decisão extra ao fim de `decisoes`; confirmar que `verificarReplay` reprova por `decisoesConsumidas`
-  - [ ] (d) `R6`/`R6b`/`R6c`/`R6d` — 4 casos negativos de `lerReplay`, um por campo (encerramento de rodada, encerramento de partida, pool vazio, codigo malformado); confirmar que cada um lança
-  - [ ] (e) `R13` — condutor com carimbo sentinela não nulo; montar, serializar, reler; confirmar que o carimbo sobrevive
-  - [ ] Aplicar MUT-R1, MUT-R3, MUT-R4, MUT-R6, MUT-R6b, MUT-R6c, MUT-R6d e MUT-R13 (todas mutações de código, AC 8 v1.1), cada uma numa cópia descartável; confirmar `sim:check` código != 0 em todas; reverter
-  - [ ] Registrar, para os 6 canários de fixture (b, c, d×4), o controle positivo (passa no código de hoje, com a mensagem esperada) e a mutação correspondente (rc e mensagem) no Dev Agent Record
+- [x] Task 2 — `E412-TST-001`, os 8 canários (AC: 4, 7, 8)
+  - [x] (a) `R1` — estender o cenário de teto pequeno de `salaVariantesEBordas` (`:2371`, *v1.1: não `salaNegativos`*; AC 5(i) de `debt.14`, `:2439-2459`) com a asserção `rodadas[0].encerramento === 'natural'` sobre o replay montado da gravação
+  - [x] (b) `R4` — reaproveitar um replay `'fim'` já existente em `guardaReplayV2`; numa cópia, relabelar `'interrompida'`; confirmar que `verificarReplay` reprova
+  - [x] (c) `R3` — reaproveitar `ra.lido` (cenário `'anular'`); numa cópia, empurrar uma decisão extra ao fim de `decisoes`; confirmar que `verificarReplay` reprova por `decisoesConsumidas`
+  - [x] (d) `R6`/`R6b`/`R6c`/`R6d` — 4 casos negativos de `lerReplay`, um por campo (encerramento de rodada, encerramento de partida, pool vazio, codigo malformado); confirmar que cada um lança
+  - [x] (e) `R13` — condutor com carimbo sentinela não nulo; montar, serializar, reler; confirmar que o carimbo sobrevive
+  - [x] Aplicar MUT-R1, MUT-R3, MUT-R4, MUT-R6, MUT-R6b, MUT-R6c, MUT-R6d e MUT-R13 (todas mutações de código, AC 8 v1.1), cada uma numa cópia descartável; confirmar `sim:check` código != 0 em todas; reverter
+  - [x] Registrar, para os 6 canários de fixture (b, c, d×4), o controle positivo (passa no código de hoje, com a mensagem esperada) e a mutação correspondente (rc e mensagem) no Dev Agent Record
 
-- [ ] Task 3 — `E411-TST-001`, identidade do base (AC: 5, 8)
-  - [ ] Escolher o ponto de inserção em `determinism.ts` (checagem existente com `CHARS` à mão, ou nova checagem pequena e autocontida)
-  - [ ] Acrescentar as duas linhas de identidade (`baseDoPersonagem(def) !== baseDoPersonagem(def)`; dois `.base` de bolas do mesmo `charId` distintos por referência)
-  - [ ] Aplicar QM-B2 (cache por `def`) numa cópia descartável; confirmar `sim:check` código != 0; reverter
+- [x] Task 3 — `E411-TST-001`, identidade do base (AC: 5, 8)
+  - [x] Escolher o ponto de inserção em `determinism.ts` (checagem existente com `CHARS` à mão, ou nova checagem pequena e autocontida)
+  - [x] Acrescentar as duas linhas de identidade (`baseDoPersonagem(def) !== baseDoPersonagem(def)`; dois `.base` de bolas do mesmo `charId` distintos por referência)
+  - [x] Aplicar QM-B2 (cache por `def`) numa cópia descartável; confirmar `sim:check` código != 0; reverter
 
-- [ ] Task 4 — Verificação (AC: 1, 2, 6, 7)
-  - [ ] `npm run check` — 0 erros
-  - [ ] `npm run sim:check` antes e depois — golden hash idêntico; diff só dentro do bloco `bb.replay.v2` e da(s) linha(s) de identidade
-  - [ ] `npm run build` — rc=0
-  - [ ] `git show --stat` do(s) commit(s) desta story, restrito aos arquivos do AC 7 (e, em `net/replay.ts`, só linhas do comentário de `CodigoDoReplay`)
+- [x] Task 4 — Verificação (AC: 1, 2, 6, 7)
+  - [x] `npm run check` — 0 erros
+  - [x] `npm run sim:check` antes e depois — golden hash idêntico; diff só dentro do bloco `bb.replay.v2` e da(s) linha(s) de identidade
+  - [x] `npm run build` — rc=0
+  - [x] `git show --stat` do(s) commit(s) desta story, restrito aos arquivos do AC 7 (e, em `net/replay.ts`, só linhas do comentário de `CodigoDoReplay`)
 
-- [ ] Task 5 — `E412-ARC-001`, `sujo` ancorado na raiz (AC: 6, 7, 9) *(v1.1)*
-  - [ ] `src/server/main.ts:121`: o pathspec `-- ':(top)src/' ':(top)package.json' ':(top)package-lock.json'`, com o `cwd` de hoje
-  - [ ] Comentários: `src/server/main.ts:106-114` e `src/net/replay.ts:82-87` com o significado novo e o porquê do `:(top)`; nenhuma linha de código em `net/replay.ts`
-  - [ ] Cópia descartável com git, sonda e variante COMMITADAS; cenários (0)-(iv) na variante certa; as quatro mutações do AC 9 reprovando no cenário indicado; tabela no Dev Agent Record
-  - [ ] Remover a cópia ao fim; nenhum processo fica escutando (a sonda sai antes de o servidor escutar)
+- [x] Task 5 — `E412-ARC-001`, `sujo` ancorado na raiz (AC: 6, 7, 9) *(v1.1)*
+  - [x] `src/server/main.ts:121`: o pathspec `-- ':(top)src/' ':(top)package.json' ':(top)package-lock.json'`, com o `cwd` de hoje
+  - [x] Comentários: `src/server/main.ts:106-114` e `src/net/replay.ts:82-87` com o significado novo e o porquê do `:(top)`; nenhuma linha de código em `net/replay.ts`
+  - [x] Cópia descartável com git, sonda e variante COMMITADAS; cenários (0)-(iv) na variante certa; as quatro mutações do AC 9 reprovando no cenário indicado; tabela no Dev Agent Record
+  - [x] Remover a cópia ao fim; nenhum processo fica escutando (a sonda sai antes de o servidor escutar)
 
 ## Dev Notes
 
@@ -380,3 +380,110 @@ O comentário já promete "objeto novo a cada chamada"; o AC 5 só acrescenta a 
 | 2026-09-22 | 1.0 | Story criada a partir de `E412-REL-001` (medium) e `E412-TST-001` (low) do gate de `e4.12` (`docs/qa/gates/e4.12-replay-v2-causa-do-fim-pool-e-carimbo.yml`, revisão `a9ad204`) e de `E411-TST-001` (low) do gate de `e4.11` (`docs/qa/gates/e4.11-segredo-de-assento-e-loja-no-modo-conectado.yml`, revisão `eccff6a`). Escopo: `src/tools/partida.ts` (teto natural em `reproduzirPartida`, linha 371 só), `src/tools/determinism.ts` (8 canários na guarda de `bb.replay.v2` + 2 linhas de identidade do base do personagem), e `src/tools/replay-check.ts` só se necessário para o AC 4(d). `E412-DOC-001` fica registrado como nota em "Depende de", fora das Acceptance Criteria — é edição de texto de `e4.12` (story Done), exclusiva do @po. Status: Draft. | River (@sm) |
 | 2026-09-22 | 1.1 | **Delta do @architect dobrado na story (`E412-ARC-001`, `docs/architecture-e4.md` §7.3 "Emenda ao item 4", commit `3b6891c`). Status permanece Draft até a validação.** **(1) AC 9 novo:** `lerCodigo()` usa `git status --porcelain -- ':(top)src/' ':(top)package.json' ':(top)package-lock.json'` em `src/server/main.ts:121`, com o `cwd` de hoje (`src/server/`); comentários de `main.ts:106-114` e `net/replay.ts:82-87` com o significado novo. Verificação numa cópia descartável com git, no Dev Agent Record (não no `sim:check`): (0) limpa → false; (i) não rastreado fora de `src/` → false; (ii) `src/` modificado → true; (iii) arquivo novo em `src/` → true; mutações relativo / `--untracked-files=no` / árvore inteira reprovando em (ii)(iii) / (iii) / (i). **[AUTO-DECISION]** Cenário (iv) `package-lock.json` modificado → true, e a mutação "só `:(top)src/`" reprovando nele → acrescentados (razão: a emenda justifica os três caminhos, e sem (iv) tirar os dois `package*.json` do pathspec passaria verde). **Armadilha que o delta não trazia, medida pelo @po:** a sonda e cada variante têm de ser COMMITADAS na cópia antes dos cenários; a própria edição de `main.ts` suja `src/` e dá `sujo: true` no cenário (i) com a variante certa. **(2) Escopo:** AC 6/AC 7 passam de 3 para 5 arquivos (`server/main.ts` linha `:121` + comentário; `net/replay.ts` só comentário, nenhuma linha de código); o bullet de Dev Notes "não abre `server/main.ts`" fica superado pelo AC 7 (Dev Notes são do @dev; não editado). **(3) "Depende de":** fonte da emenda; pré-condição de início com `server/main.ts` e `net/replay.ts`; ordem em `server/main.ts` (esta story antes da `e4.7`); esta story é pré-condição de COLETA da `e4.7` (Status Done). `E412-DOC-001` passa de "roteado ao @architect" a "fechado pelo @po na `e4.12` v1.4.0". **(4) Título, Story, Executor Assignment, Tasks (Task 0, nova Task 5, Task 4) e CodeRabbit Focus** acompanham. Fatos conferidos em `2e7dd25`: `main.ts:121` traz `git(['status', '--porcelain'])`; `main.ts:112-114` é o parágrafo ⚠️; `main.ts:117-118` define `pasta` e o `cwd`; `net/replay.ts:82-87` é o doc de `CodigoDoReplay` e `:94` é `CODIGO_DESCONHECIDO`; `package.json:5` `"type": "module"`, `:12` `node src/server/main.ts`, `:22` `ws`. | Pax (@po) |
 | 2026-09-22 | 1.2 | **Validação @po (`*validate-story-draft`, 10 pontos): GO 9/10. Status: Draft → Ready.** Ponto perdido: item 3 (ACs testáveis), por dois defeitos da v1.0, os dois corrigidos aqui. **(a) AC 8 sem dente em 6 das 10 mutações:** MUT-R3, MUT-R4 e MUT-R6/R6b/R6c/R6d eram "verificação de fixture" (confirmar que o canário dispara no código de hoje), que é só o controle positivo. No gate de `e4.12` elas são mutações de código de `replay-check.ts` (tirar a conferência de `:183`, de `:184-186`, e cada validação de `:74-76`, `:85`, `:87`, `:90`). Agora são 10 mutações de código, e o controle positivo continua registrado. O AC 4(d) ganhou a regra "uma amostra, um campo, um termo" (`pool: []`, `codigo.commit: 5`). **(b) AC 4(a) citava a função errada:** o cenário do teto (`v = nova('variantes', { tetoDeTicks: TETO })`, `:2429`) está em `salaVariantesEBordas` (`:2371`), e não em `salaNegativos` (`:2236`). Corrigidos o AC 4 (intro e (a)) e a Task 2(a); o AC 2 passa a admitir a linha de `bordas` (`:2557`) se o canário acrescentar texto ao `tetoTxt`. **Itens:** 1 título ✓ · 2 descrição ✓ · 3 ACs testáveis ✗→corrigido · 4 escopo ✓ (5 arquivos, `net/replay.ts` só comentário) · 5 dependências ✓ (`e4.12`/`e4.11` Done, emenda `3b6891c`, ordem em `server/main.ts`) · 6 complexidade ✓ (Medium) · 7 valor ✓ (falso negativo antes da coleta da `e4.7`; `sujo` passa a informar) · 8 riscos ✓ (escala ao @po se o código de hoje divergir; armadilhas do pathspec e da sonda não commitada) · 9 DoD ✓ (Tasks 4-5, AC 1/2/8/9) · 10 alinhamento ✓ (gate de `e4.12`/`e4.11` e §7.3). **Fatos conferidos em `2e7dd25`:** `partida.ts:130` `MAX_PASSOS = 64`, `:360` `reproduzirPartida`, `:371` o teto do replay, `:323-324` e `:512-513` os outros dois usos; `redutor.ts:262-277` `aplicarBuild` aceita build repetido até o `pronto`; `net/replay.ts:209` `classificarEncerramento`, `:217` o termo do teto, `:257` `montarReplay` (monta a qualquer momento, `:252-256`), `:266` o carimbo; `replay-check.ts:50` `lerReplay`, `:74`, `:85`, `:87`, `:90` as quatro validações, `:166` a regra do W.O. com vencedor −1, `:174` `pararDepoisDeRodadas`, `:183`/`:184` as duas conferências da interrompida; `determinism.ts:1672-1677` `novoCondutor` com `CODIGO_DESCONHECIDO`, `:2451` `!snapFinal.s.over`, `:2937` `replayDoCondutor`, `:2965` `guardaReplayV2`, `:2999`/`:3040` `rw`/`ra` (`{lido, texto} | null`), `:3146-3147` a saída; `stats.ts:166` `baseDoPersonagem`; `world.ts:137` `base: baseDoPersonagem(def)`. **AC 9 medido pelo @po numa cópia descartável** (`git archive` de `2e7dd25` + `git init` + junção de `node_modules` + sonda commitada): a matriz de variantes × cenários do AC 9 bate com a emenda do @architect, e a sonda não commitada dá `sujo: true` no cenário (i). A cópia foi apagada; nenhum processo ficou escutando. **Decisões do @po:** ordem em `server/main.ts` (esta antes da `e4.7`), pré-condição de COLETA da `e4.7` (Status Done), e o `codigo.sujo === false` aceito como equivalente à conferência manual do AC 8 da `e4.7` (registrado na `e4.7` v1.14.0). | Pax (@po) |
+| 2026-09-22 | 1.2.1 | Development started (YOLO mode) — Status: Ready → InProgress. Pré-condição de início conferida: `git status --short` dos 5 arquivos vazio em `2ce07e8`. | Dex (@dev) |
+| 2026-09-22 | 1.3.0 | Development complete — Status: InProgress → InReview. Implementação em `fc21c3b` (4 arquivos; `replay-check.ts` não foi tocado). ACs 1-9 com evidência no Dev Agent Record. | Dex (@dev) |
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Claude Opus 5 (1M context), como Dex (@dev), modo YOLO.
+
+### Commit de implementação
+
+`fc21c3b` (pai `2ce07e8`). `git show --stat fc21c3b`:
+
+```
+ src/net/replay.ts        |  8 ++--
+ src/server/main.ts       | 18 +++++----
+ src/tools/determinism.ts | 96 +++++++++++++++++++++++++++++++++++++++++++++++-
+ src/tools/partida.ts     |  2 +-
+ 4 files changed, 109 insertions(+), 15 deletions(-)
+```
+
+`src/tools/replay-check.ts` não precisou de ajuste (AC 7): os canários do AC 4(d) montam o JSON malformado com `JSON.parse(rw.texto)` + `JSON.stringify` e chamam `lerReplay` direto. `src/net/replay.ts`: só as 4 linhas do comentário de `CodigoDoReplay`. `src/server/main.ts`: a linha de `sujo` em `lerCodigo()` e o comentário acima da função; nada mais.
+
+### O que foi feito
+
+- **AC 3 (`E412-REL-001`).** `partida.ts:371`: `if (passo > g.decisoes.length + g.rodadas.length + 1)`. `MAX_PASSOS` continua em `jogarPartida` (`:323-324`) e na partida por política (`:512-513`). Guarda nova em `guardaReplayV2`, linha `replay teto`: sala da seed 12345, draft `DRAFT_E412`, o jogador 0 manda o mesmo `{t:'build', slot 0, 1/1}` 60 vezes num passo (todas aceitas e gravadas, a guarda confere), e `partidaAteEncerrar` leva a partida ao fim. O replay tem 72 decisões + 4 rodadas = 76 passos (> 64), e a guarda também exige `passos > 65` para o caso não perder dente. `verificarReplay` sem problema.
+- **AC 4 (`E412-TST-001`).** (a) `R1` em `salaVariantesEBordas`, no caso do teto de 30 ticks (`over:false`): `montarReplay(v.gravacao, v.sala).rodadas[0].encerramento === 'natural'`. O texto de sucesso vai no `tetoTxt` (linha `bordas`). (b) `R4`: `rw.texto` relido, rotulado `'interrompida'`, tem de dar o problema exato de `replay-check.ts:183`. (c) `R3`: `ra.texto` relido, com a última decisão repetida no fim, tem de dar `partida interrompida: a reprodução consumiu 8 de 9 decisão(ões) gravada(s)`. (d) `R6` rodada `'empate'`, `R6b` partida `'abandonada'`, `R6c` `pool: []`, `R6d` `codigo: { commit: 5, sujo: null }`. Cada amostra muda um campo só e reprova um termo só, e o `lerReplay` tem de lançar com a mensagem daquela validação. (e) `R13`: a sala do AC 3 nasce com `criarGravacao({ commit: 'sentinela-e412', sujo: true })`, e o carimbo relido tem de ser o mesmo. As saídas ficam em duas linhas novas do bloco (`replay teto`, `replay canár`). Uma tripwire exige 6/6 canários de fixture exercitados.
+- **AC 5 (`E411-TST-001`).** Duas linhas em `guardaBot001`, que já tem `createWorld(CHARS, setup(SEED_GUARDA))`: `baseDoPersonagem(CHARS.golem) === baseDoPersonagem(CHARS.golem)` reprova, e as duas bolas `golem` de `createWorld(CHARS, setup(SEED_GUARDA))` têm de ter `.base` distintos (`new Set(...).size !== 2` reprova, o que também pega um roster sem as duas bolas). Import: `baseDoPersonagem` somado ao import de `SIGMA_MAX`.
+- **AC 9 (`E412-ARC-001`).** `lerCodigo()`: `git(['status', '--porcelain', '--', ':(top)src/', ':(top)package.json', ':(top)package-lock.json'])`, com o mesmo `cwd`. Os comentários de `main.ts` e de `CodigoDoReplay` dizem o significado novo, por que esses três caminhos, e por que o `:(top)` é obrigatório.
+
+### Gates
+
+| Gate | Resultado |
+|---|---|
+| `npm run check` | rc=0, 0 erros |
+| `npm run sim:check` | rc=0. `diff` antes (`2ce07e8`) × depois: **golden hash idêntico** (`golden hash ✓ ok — 6 seeds batem o baseline`, sem diff). Mudam só 3 linhas: `+ replay teto`, `+ replay canár` (bloco `bb.replay.v2` de `sala pura`) e `bordas` (+ `; replay da rodada 0 'natural' (R1)` no `tetoTxt`, permitido pelo AC 2). A linha `guarda BOT-001` não muda de texto no caso verde. `cobertura` e `eventos` não mudam: os condutores novos estão em `guardaReplayV2`, fora da soma. |
+| `npm run build` | rc=0 |
+| `npm run lint` | não existe script `lint` no `package.json` (e o AC 7 proíbe criar um); `check` é o `tsc --noEmit` |
+| CodeRabbit | indisponível nesta máquina (WSL). Coberto por `check` + `sim:check` + as 10 mutações abaixo |
+
+### AC 3 — verificação adicional contra o servidor real
+
+Driver: o roteiro `spam` do @qa (`qa-e412-real.mjs`, reutilizado sem mudança). Na fase builds, cada cliente manda 30 `{t:'build'}` antes das 2 builds da política e do pronto. Cada run usa uma cópia descartável da árvore de trabalho (a mesma de `fc21c3b`), com `node_modules` por junção, `PORTA_DO_SERVIDOR` trocada na cópia e `BB_REPLAYS` próprio. O `replay:check` roda na cópia. Portas 5371 e 5372; nenhuma de 5341-5345 nem 5179.
+
+| Cópia | Porta | Replay gravado | `replay:check` |
+|---|---|---|---|
+| **antes** (`MAX_PASSOS` restaurado na `:371`) | 5371 | 4 rodadas, 80 decisões `{draft:4, build:64, pronto:8, compra:4}`, 84 passos | **rc=1**, "a reprodução não chegou ao fim da partida: replay de 2456873035 não terminou (fase builds)", o mesmo sintoma que o gate mediu |
+| **depois** (limite natural) | 5372 | 5 rodadas, 84 decisões `{draft:4, build:64, pronto:10, compra:6}`, 89 passos | **rc=0**, "✓ … reproduzido com hashes, ticks e vencedores idênticos" |
+| o arquivo do **antes**, verificado pela árvore com o fix (`npm run replay:check -- <pasta>`) | — | o mesmo de 84 passos | **rc=0**, 1/1 |
+
+O driver mata o servidor no `finally`. Depois dos runs, `netstat` não mostrou nada em 5371/5372, e nenhum `node.exe` tinha `main.ts`/`qa-e412`/`d15` na linha de comando. As cópias foram apagadas: primeiro a junção, com `.Delete()`, e depois a pasta.
+
+### AC 8 — contrafactual (10 mutações de código)
+
+Cada mutação roda numa cópia descartável de `src/` + `package.json` no scratchpad. O script aborta se o padrão não casar exatamente 1 vez, e a cópia é apagada no fim. O controle limpo na mesma bateria deu rc=0 e 0 linhas ✗.
+
+| Mutação | rc | Mensagem da guarda nova |
+|---|---|---|
+| MUT-REL-001 (`MAX_PASSOS` na `:371`) | 1 | `✗ replay teto: verificador: a reprodução não chegou ao fim da partida: replay de 12345 não terminou (fase builds)` |
+| MUT-R1 (`w.over ? 'natural' : 'wo'`) | 1 | `✗ sala debt.14: a rodada 0, fechada no teto de 30 ticks com over:false, saiu 'wo' no replay; esperado 'natural' (debt.15 AC 4 a, R1)` |
+| MUT-R4 (sem `if (rep.chegouAoFim) problemas.push(...)`) | 1 | `✗ replay canários: a Bo5 completa rotulada 'interrompida' deu []; esperado "o arquivo diz partida interrompida, e a reprodução chegou à fase fim" (R4)` |
+| MUT-R3 (sem a conferência de `decisoesConsumidas`) | 1 | `✗ replay canários: a interrompida com uma decisão a mais no fim deu []; esperado "partida interrompida: a reprodução consumiu 8 de 9 decisão(ões) gravada(s)" (R3)` |
+| MUT-R6 (sem a checagem do `encerramento` por rodada) | 1 | `✗ replay canários: lerReplay com o campo de R6 fora de forma: (não lançou); esperado lançar com "fora de 'natural' \| 'wo'" (R6)` |
+| MUT-R6b (sem a do `encerramento` da partida) | 1 | `… R6b fora de forma: (não lançou); esperado lançar com "fora de 'fim' \| 'interrompida'" (R6b)` |
+| MUT-R6c (sem o termo `r.pool.length === 0`) | 1 | `… R6c fora de forma: (não lançou); esperado lançar com "pool não é uma lista de strings não vazia" (R6c)` |
+| MUT-R6d (sem o termo do `commit`) | 1 | `… R6d fora de forma: (não lançou); esperado lançar com "codigo não é { commit: string \| null; sujo: boolean \| null }" (R6d)` |
+| MUT-R13 (`codigo: { ...CODIGO_DESCONHECIDO }` em `montarReplay`) | 1 | `✗ replay teto: o carimbo {"commit":"sentinela-e412","sujo":true} da gravação voltou {"commit":null,"sujo":null} de montar, serializar e reler (debt.15 AC 4 e, R13)` |
+| QM-B2 (`Map<CharDef, StatBlock>` em `baseDoPersonagem`) | 1 | `✗ E411-TST-001: baseDoPersonagem(golem) devolveu o MESMO objeto em duas chamadas …` e `✗ E411-TST-001: as 2 bolas golem de createWorld não têm .base distintos por referência …` |
+
+**Controle positivo dos 6 canários de fixture** (código de hoje, `sim:check` real): `replay canár ✓ R4 'fim' rotulada 'interrompida' → chegou à fase fim · R3 interrompida + 1 decisão no fim → consumiu 8 de 9 · R6 lança · R6b lança · R6c lança · R6d lança`. As asserções exigem a mensagem exata da validação, e não só "reprovou".
+
+### AC 9 — matriz do `sujo` (cópia descartável com git)
+
+Cópia fora do projeto, no scratchpad: `src`, `package.json`, `package-lock.json`, `tsconfig.json` e `.gitignore` da árvore de `fc21c3b` (`git status --short src package.json package-lock.json` vazio). Depois `git init`, `core.autocrlf=false`, commit, e `node_modules` por junção. A sonda entra logo depois de `const CODIGO_DO_SERVIDOR: CodigoDoReplay = lerCodigo()`: `console.log(JSON.stringify(CODIGO_DO_SERVIDOR)); process.exit(0)`. Roda com `node src/server/main.ts` na raiz da cópia e sai antes de escutar. **A sonda e cada variante foram commitadas na cópia antes dos cenários.** O script confere que (0) tem `git status --porcelain` vazio, e que cada cenário é desfeito (porcelain vazio) antes do próximo. Rodado duas vezes, antes e depois do commit, com o mesmo resultado:
+
+| Variante | (0) limpa | (i) não rastreado na raiz | (ii) `src/` rastreado modificado | (iii) arquivo novo em `src/` | (iv) `package-lock.json` modificado |
+|---|---|---|---|---|---|
+| **`:(top)` (a do commit)** | false | false | true | true | true |
+| relativo (`-- src/ package.json package-lock.json`) | false | false | **false** ✗ | **false** ✗ | **false** ✗ |
+| `--untracked-files=no` + `:(top)` | false | false | true | **false** ✗ | true |
+| árvore inteira (a linha de antes) | false | **true** ✗ | true | true | true |
+| só `':(top)src/'` | false | false | true | true | **false** ✗ |
+
+Cada mutação reprova no cenário que o AC 9 indica. A cópia foi apagada (a junção por `.Delete()`), e nenhum processo ficou escutando.
+
+### Decisões e desvios
+
+- [AUTO-DECISION] Onde entram as duas linhas do AC 5 → em `guardaBot001`, que já faz `createWorld(CHARS, setup(SEED_GUARDA))`, o ponto que o AC sugere (motivo: `setup()` monta `[TIME, TIME]`, então há duas bolas `golem` à mão, sem fixture novo). **Efeito colateral a registrar:** numa falha, as linhas `✗ E411-TST-001` aparecem, mas o `throw` final continua dizendo "guarda de BOT-001 falhou em N ponto(s)". Mudar essa mensagem seria uma terceira linha, fora do limite do AC 6.
+- [AUTO-DECISION] O R13 usa a mesma sala do AC 3, e não uma Bo5 a mais (motivo: o AC 4 pede canários baratos, e a sala do AC 3 já é um condutor novo jogado até o fim). As falhas continuam separadas por mensagem: MUT-R13 reprova só pelo carimbo, e MUT-REL-001 só pelo "não terminou".
+- [AUTO-DECISION] O AC 3 usa 60 builds redundantes, e não o limiar mínimo (motivo: com 60 builds o teto fixo estoura ainda na fase builds, na volta 65, e reproduz a mensagem "não terminou (fase builds)" do gate. A guarda exige `passos > 65` para não perder o dente se o roteiro mudar).
+- O bullet de Dev Notes "esta story não abre `server/main.ts`" está superado pelo AC 7/AC 9, como a v1.1 registra. Não editei o bullet.
+- Contradição de spec: nenhuma encontrada.
+
+### Completion Notes
+
+- Os drivers ficaram no scratchpad da sessão, fora do repositório: `mutar.mjs` (AC 8), `sujo.mjs` (AC 9) e `d15-real.mjs` (AC 3 no servidor real, que reusa `qa-e412/qa-e412-real.mjs` e `qa-e412/copia.mjs`).
+- Nada foi pushado.
+
+### File List
+
+| Arquivo | Mudança |
+|---|---|
+| `src/tools/partida.ts` | `:371`, o limite natural em `reproduzirPartida` |
+| `src/tools/determinism.ts` | import de `baseDoPersonagem`; 2 linhas do AC 5 em `guardaBot001`; canário R1 em `salaVariantesEBordas`; `replay teto` (AC 3 + R13) e `replay canár` (R3, R4, R6-R6d) em `guardaReplayV2` |
+| `src/server/main.ts` | `lerCodigo()`: o pathspec `:(top)` e o comentário acima da função |
+| `src/net/replay.ts` | só o comentário de `CodigoDoReplay` |
+| `docs/stories/debt.15.teto-natural-do-replay-canarios-e-identidade-do-base.story.md` | Status, checkboxes, Change Log e Dev Agent Record |
