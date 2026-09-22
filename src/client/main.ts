@@ -5,7 +5,8 @@ import { createWorld, step, TICK_MS } from '../sim/world.ts'
 import type { Ball, Command, World } from '../sim/types.ts'
 import type { StatBlock } from '../sim/stats.ts'
 import { hash } from '../tools/harness.ts'
-import { ATRASO_ALVO_TICKS } from '../net/protocolo.ts'
+import { ATRASO_ALVO_TICKS, type EstaticoDaRodada } from '../net/protocolo.ts'
+import { projetar, type BolaVisivel, type VisaoDoMundo } from '../net/projecao.ts'
 import {
   aplicar,
   criarPartida,
@@ -19,12 +20,14 @@ import {
   type EstadoPartida,
   type Jogador,
   type ResultadoRodada,
+  type VisaoPartida,
 } from '../match/index.ts'
 import { criarEntrada, TECLADO, type Disparo } from './input.ts'
 import { ARENA_H, ARENA_W } from './layout.ts'
 import { desenhar, type Flutuante } from './render.ts'
 import { desenharTela, type AcoesDaTela, type ContextoDaTela } from './telas.ts'
 import { anguloErroGraus, criarTelemetria } from './telemetria.ts'
+import { conectar, type Aviso, type Rede } from './rede.ts'
 
 /**
  * Fase 3 — a partida completa, local, contra o bot real (`docs/architecture-e3.md` §11, story
@@ -49,6 +52,13 @@ import { anguloErroGraus, criarTelemetria } from './telemetria.ts'
  *
  * As duas puxam em direções opostas de propósito, e o motivo está em `bot/partida.ts`: o bot de
  * COMBATE tem relógio, a política de PARTIDA não tem.
+ *
+ * **Fase 4 — dois modos (`docs/architecture-e4.md` §9, story `e4.5`).** O modo sai da URL, na carga
+ * (`lerModo`): sem `#/sala/{id}`, este arquivo é o modo `local` descrito acima, sem mudança nenhuma — é
+ * o treino (RF-43) e o único jogável sem servidor. Com o link, é o modo `conectado`, que mora inteiro na
+ * seção MODO CONECTADO, no fim do arquivo: lá o estado é do servidor, e o cliente não monta mundo, não
+ * simula, não aplica decisão e não tem bot (P4.2 por subtração, §8.1). Os dois modos dividem render,
+ * input, telas e telemetria; divergem em quem tem o estado.
  */
 
 /** RF-04 — 30 segundos para escolher a build. O relógio de parede mora no CLIENTE (§2.6). */
@@ -298,6 +308,11 @@ function segundosRestantes(agora: number): number {
 const minhasBolas = (): Ball[] => (world ? world.balls.filter((b) => b.team === meuLado) : [])
 
 function disparar(d: Disparo): void {
+  // `e4.5` — no modo conectado o cast vai ao servidor, sem tick (AC 6); o resto desta função é o local
+  if (modo.t === 'conectado') {
+    dispararConectado(d)
+    return
+  }
   if (!world) return
   const bola = minhasBolas()[d.ballIndex]
   if (!bola || !bola.alive || world.over) return
@@ -335,6 +350,8 @@ function disparar(d: Disparo): void {
 
 const entrada = criarEntrada(canvas, disparar, (k) => {
   if (k === ' ') {
+    // `e4.5` — pausar é parar a simulação local; no modo conectado quem simula é o servidor
+    if (modo.t === 'conectado') return
     pausado = !pausado
     return
   }
@@ -344,7 +361,7 @@ const entrada = criarEntrada(canvas, disparar, (k) => {
     telemetria.exportar()
     return
   }
-  if (!world) return
+  if (modo.t === 'local' && !world) return
   const mapa: Record<string, [0 | 1, 'ability' | 'ult']> = {
     q: [0, 'ability'],
     w: [0, 'ult'],
@@ -353,7 +370,8 @@ const entrada = criarEntrada(canvas, disparar, (k) => {
   }
   const alvo = mapa[k]
   if (!alvo) return
-  const bola = minhasBolas()[alvo[0]]
+  // `e4.5` — no modo conectado as bolas saem da projeção interpolada (AC 12, nota do @po)
+  const bola = (modo.t === 'conectado' ? minhasBolasConectado() : minhasBolas())[alvo[0]]
   if (!bola || !bola.alive) return
   // no teclado a mira é o cursor
   const [cx, cy] = entrada.cursorArena
@@ -446,5 +464,329 @@ function redimensionar(): void {
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
 }
 
-novaPartida()
-requestAnimationFrame(frame)
+// ================================================================ INÍCIO DO MODO CONECTADO (e4.5)
+//
+// Tudo o que o modo conectado executa está entre este marcador e o do fim, mais `rede.ts`. A verificação
+// de P4.2 (AC 5) é um grep neste trecho: nenhuma chamada às três funções do motor e do redutor que dariam
+// autoridade ao cliente. Das funções de cima, este trecho chama só `redimensionar` (que não decide nada);
+// `disparar` e o atalho de teclado desviam para cá na primeira linha.
+
+type Modo = { t: 'local' } | { t: 'conectado'; sala: string }
+
+/**
+ * AC 4 — o modo sai da URL, na carga da página, e só dela. `#/sala/{id}` com `id` não vazio (§6) abre
+ * o modo conectado; qualquer outra coisa é o modo local de hoje, sem conexão nenhuma. O cliente não cria
+ * sala e não tem tela de criação: o id vem do log de operação do servidor (§6.1), pelo link.
+ */
+function lerModo(hash: string): Modo {
+  const m = /^#\/sala\/([^/?#]+)$/.exec(hash)
+  return m ? { t: 'conectado', sala: m[1] } : { t: 'local' }
+}
+
+const modo = lerModo(location.hash)
+
+let rede: Rede | null = null
+/**
+ * O JOGADOR desta conexão, do `{t:'sala'}` — pode ser o 1. Nada deste trecho assume o 0 (Dev Notes,
+ * v1.7.0): as decisões, o lado, as bolas e a telemetria saem daqui.
+ */
+let eu: Jogador | null = null
+/** a última `{t:'visao'}`: a projeção com segredo que o servidor manda, nunca `EstadoPartida` */
+let visao: VisaoPartida | null = null
+let estadoDaSala: 'aguardando' | 'jogando' | 'encerrada' | null = null
+/** o estático da rodada em curso; `null` fora dela */
+let estatico: EstaticoDaRodada | null = null
+/** a última projeção desenhada — a fonte das bolas do jogador e do erro de mira (AC 10, AC 12) */
+let vista: VisaoDoMundo | null = null
+/** o lado que este jogador ocupa na rodada em curso, e o placar do HUD, fixados no `rodadaInicio` */
+let ladoConectado: 0 | 1 = 0
+let placarDaRodada: [number, number] = [0, 0]
+let vitoriasParaVencerDaRodada = 0
+/**
+ * O `rodadaFim` chegou, mas o instante desenhado ainda não alcançou o snapshot final. A tela da fase
+ * seguinte espera: é a metade cliente da §5.6 — os eventos do snap final (o golpe que mata) aparecem
+ * antes da tela de fim de rodada (AC 8).
+ */
+let rodadaTerminando = false
+/** fim do prazo de RF-04 em `performance.now()`, a partir do restante que o servidor mandou (§3.4) */
+let prazoFim: number | null = null
+/** um aviso que encerra a conexão está na tela, e nada o cobre */
+let avisoNaTela = false
+
+/**
+ * `meuLado` no modo conectado: a MESMA `ladosDaRodada` de `match/`, alimentada com os dois campos que ela
+ * lê (`regras.alternarLadoPorRodada` e `rodada`, `match/regras.ts`), que a visão traz. Reescrever a regra
+ * aqui seria a segunda fonte de verdade de lado; o cast é o preço de a assinatura pedir o estado inteiro.
+ */
+function ladosDaVisao(v: VisaoPartida): [0 | 1, 0 | 1] {
+  return ladosDaRodada({ regras: v.regras, rodada: v.rodada } as EstadoPartida)
+}
+
+/**
+ * `telas.ts` desenha o DRAFT como se o humano fosse o jogador 0 (a vez e os botões habilitados comparam
+ * com `0`), e o AC 12 o mantém intacto. No assento do jogador 1 a tela daria a vez ao oponente e travaria
+ * o draft. A visão entregue à TELA (só a ela, e só no draft) põe este jogador no 0 e o oponente no 1; o
+ * que vai ao servidor continua com o jogador verdadeiro. No assento 0 a visão passa sem cópia.
+ */
+function visaoParaATela(v: VisaoPartida, j: Jogador): VisaoPartida {
+  if (j === 0 || v.fase !== 'draft') return v
+  const rel = (x: Jogador): Jogador => (x === j ? 0 : 1)
+  return {
+    ...v,
+    draft: {
+      ...v.draft,
+      ordem: v.draft.ordem.map(rel),
+      escolhas: v.draft.escolhas.map((e) => ({ ...e, jogador: rel(e.jogador) })),
+    },
+  }
+}
+
+/** Uma decisão deste jogador, pelo fio. Quem a aplica, ou recusa, é a sala. */
+function decidirConectado(montar: (j: Jogador) => Decisao): void {
+  if (eu === null || rede === null) return
+  rede.enviar({ t: 'decisao', d: montar(eu) })
+}
+
+const acoesConectado: AcoesDaTela = {
+  draft: (charId) => decidirConectado((jogador) => ({ t: 'draft', jogador, charId })),
+  build: (slot, abilityIndex, passiveIndex) =>
+    decidirConectado((jogador) => ({ t: 'build', jogador, slot, abilityIndex, passiveIndex })),
+  prontoBuilds: () => decidirConectado((jogador) => ({ t: 'pronto', jogador })),
+  compra: (slot, itemId) => decidirConectado((jogador) => ({ t: 'compra', jogador, slot, itemId })),
+  trocaDeBuild: (slot, abilityIndex, passiveIndex) =>
+    decidirConectado((jogador) => ({ t: 'trocaDeBuild', jogador, slot, abilityIndex, passiveIndex })),
+  prontoLoja: () => decidirConectado((jogador) => ({ t: 'pronto', jogador })),
+  // A sala desta partida acabou e saiu do servidor. Recarregar apresenta o link de novo, e o servidor
+  // responde que a sala não existe: é o aviso do caso v, que diz para pedir um link novo.
+  reiniciar: () => location.reload(),
+}
+
+/** Um texto de status no overlay, com os estilos que as telas já usam. Não é aviso: a próxima tela o troca. */
+function escreverNoOverlay(titulo: string, texto: string): void {
+  overlay.innerHTML = ''
+  const h = document.createElement('h1')
+  h.textContent = titulo
+  const p = document.createElement('p')
+  p.className = 'sub'
+  p.textContent = texto
+  overlay.append(h, p)
+  overlay.classList.add('show')
+}
+
+/**
+ * AC 3, casos iv, v e vi — a mensagem na tela quando a conexão acabou. Texto FIXO do cliente, escrito a
+ * partir dos campos do aviso: nem o `message` de um erro nem o `motivo` do servidor chegam aqui. O
+ * primeiro aviso fica; nada o cobre depois.
+ */
+function mostrarAviso(a: Aviso): void {
+  if (avisoNaTela) return
+  avisoNaTela = true
+  switch (a.t) {
+    case 'versao': {
+      const servidor = a.servidor === null ? 'sem versão' : `na versão ${a.servidor}`
+      const versoes = `Esta página fala a versão ${a.cliente} do protocolo, e o servidor está ${servidor}.`
+      if (a.remedio === 'recarregue') escreverNoOverlay('Página desatualizada', `${versoes} Recarregue a página.`)
+      else escreverNoOverlay('Servidor desatualizado', `${versoes} Recarregar não resolve: espere o servidor ser atualizado.`)
+      return
+    }
+    case 'linkInvalido':
+      escreverNoOverlay(
+        'Este link não abre uma sala',
+        'A sala não existe, já acabou ou está cheia. Peça um link novo a quem subiu o servidor.',
+      )
+      return
+    case 'semServidor':
+      escreverNoOverlay(
+        'Servidor não alcançado',
+        `Não foi possível conectar a ${a.endereco}. Confira se o servidor está de pé e acessível desta rede, e recarregue a página.`,
+      )
+      return
+    case 'assentoEmOutraAba':
+      escreverNoOverlay(
+        'Partida aberta em outro lugar',
+        'Este assento foi retomado em outra aba ou aparelho. A partida continua por lá.',
+      )
+      return
+    default: {
+      const nenhum: never = a
+      return nenhum
+    }
+  }
+}
+
+/**
+ * A tela do modo conectado: a de `desenharTela`, pela fase da ÚLTIMA visão. Não decide nada — cada
+ * clique vira uma decisão pelo fio (`acoesConectado`).
+ */
+function telaConectada(): void {
+  if (avisoNaTela || rodadaTerminando) return
+  if (visao === null || eu === null) {
+    escreverNoOverlay(
+      estadoDaSala === null ? 'Conectando…' : 'Aguardando o oponente…',
+      estadoDaSala === null ? 'Abrindo a sala do link.' : 'A partida começa quando a segunda pessoa abrir o mesmo link.',
+    )
+    return
+  }
+  if (visao.fase === 'rodada') {
+    overlay.classList.remove('show')
+    return
+  }
+  overlay.classList.add('show')
+  const segundos = segundosDoPrazo(performance.now())
+  segundoDesenhado = segundos ?? -1
+  const ctx: ContextoDaTela = { segundosRestantes: segundos, basePorChar, humano: eu }
+  desenharTela(overlay, visaoParaATela(visao, eu), ctx, acoesConectado)
+}
+
+/**
+ * Os segundos que a tela de builds mostra, ou `null` quando ela não conta. O relógio de RF-04 é do
+ * servidor (§3.4): aqui só se exibe o restante recebido, e o estouro, com a build padrão, é da sala.
+ */
+function segundosDoPrazo(agora: number): number | null {
+  if (visao === null || eu === null || prazoFim === null) return null
+  if (visao.fase !== 'builds' || visao.prontos[eu]) return null
+  return Math.max(0, Math.ceil((prazoFim - agora) / 1000))
+}
+
+/** As bolas deste jogador, da projeção interpolada, pelo lado DESTA rodada (AC 12, nota do @po). */
+function minhasBolasConectado(): BolaVisivel[] {
+  return vista ? vista.balls.filter((b) => b.team === ladoConectado) : []
+}
+
+/**
+ * AC 6 — `{t:'cast'}` sem tick: quem carimba é o servidor (§4.1). A mira continua imediata porque é de
+ * `input.ts` e não passa por aqui. O evento `cast` de RF-36 mede o erro contra as posições que o jogador
+ * VIA, as da projeção interpolada (AC 10).
+ */
+function dispararConectado(d: Disparo): void {
+  const v = vista
+  const p = visao
+  // `rodadaTerminando`: o servidor já fechou a rodada, e a tela só termina de mostrar o fim dela — o
+  // equivalente do `world.over` do modo local. Um cast aqui seria recusado e viraria telemetria falsa.
+  if (v === null || p === null || rede === null || v.over || rodadaTerminando) return
+  const bola = minhasBolasConectado()[d.ballIndex]
+  if (!bola || !bola.alive) return
+  if (!rede.enviar({ t: 'cast', ballIndex: d.ballIndex, slot: d.slot, dx: d.dx, dy: d.dy, mag: d.mag })) return
+  telemetria.registrar(p.seed, [
+    {
+      t: 'cast',
+      rodada: p.rodada,
+      ballIndex: d.ballIndex,
+      ponteiro: d.ponteiro,
+      ladoDaTela: d.ladoDaTela,
+      mag: d.mag,
+      anguloErro: anguloErroGraus(
+        bola,
+        { dx: d.dx, dy: d.dy },
+        v.balls.filter((b) => b.team !== ladoConectado && b.alive),
+      ),
+    },
+  ])
+}
+
+function iniciarConectado(sala: string): void {
+  telaConectada()
+  rede = conectar(sala, {
+    sala(m) {
+      eu = m.jogador
+      estadoDaSala = m.estado
+      // de volta a `aguardando` (o oponente caiu no draft, §6): a partida recomeça para quem sentar
+      if (m.estado === 'aguardando') {
+        visao = null
+        estatico = null
+        vista = null
+      }
+      telaConectada()
+    },
+    visao(v) {
+      visao = v
+      // o prazo vale só para a fase builds em que chegou; a próxima traz o seu
+      if (v.fase !== 'builds') prazoFim = null
+      telaConectada()
+    },
+    prazo(terminaEmMs) {
+      prazoFim = performance.now() + terminaEmMs
+      telaConectada()
+    },
+    rodadaInicio(e) {
+      estatico = e
+      vista = null
+      flutuantes = []
+      rodadaTerminando = false
+      // a visão da rodada chegou antes (a sala manda a visão e só depois abre a rodada)
+      if (visao !== null && eu !== null) {
+        ladoConectado = ladosDaVisao(visao)[eu]
+        placarDaRodada = [visao.eu.vitorias, visao.oponente.vitorias]
+        vitoriasParaVencerDaRodada = visao.regras.vitoriasParaVencer
+      }
+      telaConectada()
+    },
+    snap(s) {
+      // AC 8 — eventos NA CHEGADA, inclusive os do snap final, antes da tela de fim de rodada
+      const agora = performance.now()
+      for (const ev of s.events) {
+        if (ev.t === 'hit') flutuantes.push({ x: ev.x, y: ev.y, valor: ev.amount, nascidoEm: agora, crit: ev.crit })
+      }
+      if (flutuantes.length > 60) flutuantes = flutuantes.slice(-60)
+    },
+    rodadaFim() {
+      rodadaTerminando = true
+    },
+    evento(e) {
+      // AC 10 — o evento do fio vai ao coletor como veio: o `controle` do `rodadaFim` é do servidor
+      if (visao === null) {
+        console.warn(`[telemetria] evento ${e.t} antes da primeira visão — sem seed para registrá-lo`)
+        return
+      }
+      telemetria.registrar(visao.seed, [e])
+    },
+    aviso(a) {
+      mostrarAviso(a)
+    },
+  })
+}
+
+function frameConectado(agora: number): void {
+  requestAnimationFrame(frameConectado)
+  redimensionar()
+  const cw = canvas.clientWidth
+  const ch = canvas.clientHeight
+  const snap = rede !== null && estatico !== null ? rede.amostrar(agora) : null
+  if (snap !== null && estatico !== null) {
+    // AC 9 — a prova de tipo é esta chamada: a projeção vai a `desenhar` sem cast
+    vista = projetar(snap, estatico, CHARS)
+    desenhar(g, cw, ch, vista, {
+      entrada,
+      flutuantes,
+      minhasBolas: minhasBolasConectado(),
+      agora,
+      pausado: false,
+      placar: placarDaRodada,
+      meuLado: ladoConectado,
+      vitoriasParaVencer: vitoriasParaVencerDaRodada,
+    })
+  } else {
+    g.clearRect(0, 0, cw, ch)
+  }
+
+  if (rodadaTerminando && (rede === null || rede.exibiuOUltimo())) {
+    // o snapshot final já está na tela: agora sim a tela da fase seguinte
+    rodadaTerminando = false
+    estatico = null
+    vista = null
+    telaConectada()
+  } else if (!rodadaTerminando && (segundosDoPrazo(agora) ?? -1) !== segundoDesenhado) {
+    // mesma regra do modo local: a contagem só redesenha quando o SEGUNDO muda
+    telaConectada()
+  }
+}
+
+// ================================================================ FIM DO MODO CONECTADO (e4.5)
+
+if (modo.t === 'conectado') {
+  iniciarConectado(modo.sala)
+  requestAnimationFrame(frameConectado)
+} else {
+  novaPartida()
+  requestAnimationFrame(frame)
+}
