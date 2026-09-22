@@ -1,0 +1,269 @@
+schema: 1
+story: 'e4.12'
+story_title: 'bb.replay.v2 — causa do fim da rodada e da partida, pool e carimbo de código'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 15 ACs estão MET. Refiz as verificações do zero, em cópias descartáveis de a9ad204 (git archive,
+  node_modules por junção), sem confiar no Dev Agent Record. check, sim:check e build deram rc=0. O
+  golden hash é o mesmo da base 47d6517 e do pai 57b154b, e o diff da saída do sim:check contra os dois
+  é só a linha de replay mais três linhas novas. O escopo são os 5 arquivos do AC 14. sala.ts e
+  protocolo.ts não foram tocados, e a linha de criarSala não mudou. Os greps do AC 15 e o de pureza de
+  net/replay.ts dão o esperado. Contra o servidor real, com roteiro e portas meus (5341-5345), rodei
+  duas Bo5 simultâneas (rc=0 nos dois arquivos), um W.O. na rodada 1 (rc=0, com a linha de W.O. no
+  tick 93; ticks−1 dá rc=1 pelo hash, e lido como v1 também dá rc=1), uma partida interrompida (rc=0
+  com a linha "interrompida"; dizendo 'fim', rc=1) e o Q8 (FALHA: os dois arquivos reprovam). As três
+  v1 honestas da e4.6 continuam verificando. As 7 mutações da story (M1-M4, Q5, Q15, Q12) reprovam, e o
+  Q8 FALHA no servidor real. Das minhas 15 mutações, 6 foram pegas, 1 é equivalente, e as 8 sobreviventes caem em lacunas
+  LOW. O veredito é CONCERNS, e não PASS, por 1 MEDIUM que não foi
+  introduzido por esta story e 3 LOW.
+  (1) E412-REL-001 (medium): o teto MAX_PASSOS = 64 de reproduzirPartida (decisões + rodadas) é
+  controlado pela entrada do jogador. Medi no servidor real: um replay honesto dá rc=1 com "não
+  terminou (fase builds)", e o mesmo arquivo com o teto alto dá rc=0. Isso é um falso negativo
+  possível na prova de P4.3 da e4.7.
+  (2) E412-TST-001: a guarda não enxerga o termo de teto da classificação, as duas conferências de
+  coerência da partida interrompida, a validação por campo da v2 no lerReplay nem a propagação do
+  carimbo.
+  (3) E412-DOC-001: o 9aa1b500 do AC 6 não é reproduzível a partir do driver descrito na §7.3.
+  (4) E412-ARC-001: `sujo` sai true por arquivo não rastreado fora de src/. É a nota do AC 4,
+  medida de novo, e o dono é o @architect.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:a9ad204 (implementação). Pai: 57b154b (registro da e4.11), cujo código é eccff6a. 31a627f é o
+  registro do @dev e toca só a story. Durante o gate, o HEAD andou para d96dbc6 (gate da e4.11, só
+  docs/qa/gates/e4.11-* e a story da e4.11). `git diff a9ad204 HEAD -- src package.json tsconfig.json`
+  sai vazio. a9ad204 NÃO está em origin/master (merge-base --is-ancestor rc=1): é commit local.
+
+verificacao_independente:
+  - id: 'check + sim:check + build, golden hash contra a base (ACs 8, 10)'
+    verdict: PASS
+    evidence: >-
+      Três cópias por git archive: a9ad204, 57b154b (pai) e 47d6517 (a base que a missão nomeia, antes
+      da e4.11). Node v24.13.1. `npm run check` deu rc=0 nas três, e `npm run sim:check` também. As três
+      imprimem "golden hash ✓ ok — 6 seeds batem o baseline". `diff sim-pai sim-impl` e `diff sim-base
+      sim-impl` dão só a linha 68 (replay v1 → v2) e as três linhas novas (`replay W.O.`, `replay
+      anul.`, `replay queda`). Nenhuma outra linha muda, nem `replay ✓ ok — 6 seeds reproduzidas sem
+      bot` (a Regra 3 de compararPartida). `npm run build` na cópia deu rc=0 (index 66,08 kB). O cliente
+      não importa nenhum dos 5 arquivos. `npm run lint` não existe no projeto.
+  - id: 'Escopo (AC 14), carimbo sem OpcoesDaSala (AC 4), comentários (AC 15), pureza (Task 1)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat a9ad204`: net/replay.ts 122, server/main.ts 52, tools/determinism.ts 411,
+      tools/partida.ts 90 e tools/replay-check.ts 134, somando 749/60. `git diff --stat 57b154b a9ad204 --
+      src/net/sala.ts src/net/protocolo.ts src/sim src/match src/shop src/chars src/bot src/client` sai
+      vazio. `git diff -U0 57b154b a9ad204 -- src/server/main.ts | grep '^[-+].*criarSala('` dá rc=1. O
+      carimbo entra por `criarGravacao(CODIGO_DO_SERVIDOR)`. Sobre `git show a9ad204:src/server/main.ts`:
+      `grep -F "o cliente depende disso para voltar ao assento"` rc=0; `grep -F "em aberto na"` rc=1; `grep
+      -n client/rede.ts` acha a linha 51, no doc de PORTA_DO_SERVIDOR. As duas correções são só
+      comentário. Pureza: `grep -nE "from 'fs'|node:|from 'ws'|document|window|localStorage|Math\.random|
+      Date\.now|performance\.now|child_process|process\.|execFile|spawn|require\("` sobre net/replay.ts dá
+      rc=1. Os imports são só o tipo Command de sim/, match/ e os tipos de ./sala.ts.
+  - id: 'Servidor real: duas Bo5 simultâneas (AC 9, E46-TST-003), carimbo e aviso de commit (AC 4)'
+    verdict: PASS
+    evidence: >-
+      qa-e412-real.mjs (roteiro meu, porta 5341, cópia com `git init` + commit para o carimbo ter o que
+      ler). A e B jogam na sala 1 e C e D na sala 2, ao mesmo tempo, com casts dos quatro. B cai e volta
+      pelo segredo 1,5 s depois, na rodada 0. Deu 8/8. Sala 1: 4 rodadas, placar 1-3, 2 779 comandos,
+      replay:check rc=0. Sala 2: 5 rodadas, placar 2-3, 3 137 comandos, rc=0. Nos dois arquivos, aoVivo é
+      igual aos rodadaFim recebidos, o matchSeed é igual à seed da visao e as seeds são distintas. O
+      carimbo saiu `{"commit":"fd5cc366…","sujo":true}` nos dois, igual ao `git rev-parse HEAD` da cópia,
+      e `sujo` vem só de `?? node_modules/` (a junção). Verificado dentro da cópia (mesmo commit), não
+      houve aviso. Verificado a partir da árvore do projeto (HEAD d96dbc6), rc=0 com a linha "· replay
+      gravado em fd5cc366…, verificado em d96dbc6…". O commit diferente só avisa. Nas cópias sem git, o
+      carimbo sai `{"commit":null,"sujo":null}`.
+  - id: 'Servidor real: W.O. numa rodada que não é a 0 e contrafactuais (ACs 1, 6)'
+    verdict: PASS
+    evidence: >-
+      Porta 5342. B cai 1,5 s depois do 2º rodadaInicio e volta 23 s depois (a pausa de R-02 é de 20 s).
+      Deu 8/8. Rodadas [natural,wo,natural,natural] e placar 1-3. replay:check rc=0 com "· rodada 1: W.O.
+      no tick 93, hash ✓ (vencedor 0, dado gravado)". O mesmo arquivo com aoVivo.ticks 92 dá rc=1 com
+      "rodada 1 (W.O.): hash reproduzido efc5193b != 8afb1be3". O mesmo arquivo reescrito como
+      bb.replay.v1 dá rc=1 ("rodada 1: hash … / ticks reproduzido 3907 != 93"), que é o sintoma de
+      E46-ARC-001 que a v2 fecha.
+  - id: 'Servidor real: partida interrompida (ACs 2, 6)'
+    verdict: PASS
+    evidence: >-
+      Porta 5343. A e B caem 1,5 s depois do 2º rodadaInicio e não voltam, e a sala encerra. Deu 6/6.
+      encerramento 'interrompida', 1 rodada natural, 12 decisões e 639 comandos. replay:check rc=0 com "·
+      partida interrompida antes do fim: 1 rodada(s) verificada(s)". O mesmo arquivo dizendo 'fim' dá rc=1
+      ("pediu a rodada 2 sem gravação").
+  - id: 'Q8 contra o servidor real (AC 9)'
+    verdict: PASS
+    evidence: >-
+      Porta 5344. É o mesmo roteiro das duas Bo5, com `const GRAVACAO_UNICA = criarGravacao(CODIGO_DO_SERVIDOR)`
+      compartilhada, e tsc 0. Deu FALHA, 6/8: os DOIS arquivos reprovam. Os dois saem com 3 332 comandos, a
+      soma das salas. Na sala 2 a reprodução recusou 8 decisões (drafts e builds da outra sala na fase
+      loja), e hash, ticks e vencedor divergem nas 5 rodadas.
+  - id: 'v1 da e4.6 e versão desconhecida (ACs 5, 6)'
+    verdict: PASS
+    evidence: >-
+      O verificador de a9ad204 sobre os três bb.replay.v1 honestos que gravei no gate da e4.6
+      (qa-e46/run-CTRL e conc-CTRLC) dá 3/3 ✓, rc=0. O v1 com W.O. do mesmo gate (conc-WO) continua rc=1
+      ("rodada 0: ticks reproduzido 4214 != 92"), como o AC 5 manda: a v1 é lida com toda rodada natural.
+      Um arquivo com formato 'bb.replay.v3' dá rc=1 com "não é 'bb.replay.v2' nem 'bb.replay.v1'".
+  - id: 'Mutações da story (AC 7 e AC 9), uma cópia por mutação'
+    verdict: PASS
+    evidence: >-
+      qa-e412-mut.mjs: padrão casando exatamente 1 vez, com EOL normalizado, e tsc e sim:check em cada
+      cópia. CTRL deu tsc 0 e sim 0. Todas reprovam com sim rc=1. M1 (toda rodada 'natural'; na minha
+      formulação o tsc dá TS6133, e o sim reprova pela linha `replay W.O.`, "rodadas
+      [natural,natural,…]"). M2, na minha formulação (o corte do W.O. em MAX_SAFE_INTEGER): `replay W.O.`
+      sem a linha. M3, na minha formulação (cortesDe dá corte também para 'natural'): o canário do
+      vencedor adulterado. M4, na minha formulação (`pool: undefined` no verificador): o canário do pool.
+      Q5, Q15 e Q12, com as minhas substituições do gate da e4.6, reprovam pelo canário da última
+      rodada, pela rodada a mais e por `replay queda`. Q8: ver acima.
+  - id: 'Mutações próprias (15)'
+    verdict: CONCERNS
+    evidence: >-
+      PEGAS: R1b (sem o termo w.over), R11 (corte em `<=`), R12 (sempre 'fim'), R15 (aviso de código
+      sempre) e R16 (recusas não coletadas), e R17 (v1 lida como 'wo'), pelo canário da v1.
+      SOBREVIVENTES (sim rc=0): R1 (classificação sem o termo `w.tick >= tetoDeTicks`); R3
+      (interrompida sem a conferência de decisões consumidas); R4 (interrompida sem `chegouAoFim`); R6,
+      R6b, R6c e R6d (lerReplay v2 sem validar encerramento por rodada, encerramento da partida, pool
+      não vazio e forma do codigo); R13 (montarReplay perde o carimbo). Ver E412-TST-001. R14 (W.O. com
+      vencedor −1 vira aviso) é EQUIVALENTE: sem corte, a rodada é reproduzida até o fim natural e
+      reprova pelos ticks.
+  - id: 'W-2 da fonte reproduzida de forma independente (desvio 1 do @dev)'
+    verdict: PASS
+    evidence: >-
+      qa-w2.ts é um driver puro meu, com o que a §7.3 descreve: seed 12345, pool Object.keys(CHARS),
+      pool[0] no draft, pronto direto, cast fixo dx 1 / dy 0,5 por passo, e o jogador 1 caindo na rodada
+      1. Varri o passo do relógio (100, 250, 500 e 1000 ms), a condição da queda (tick ≥ 60 / > 60) e mag
+      (0, 0,25, 0,5, 0,75 e 1). Nas 24 combinações, a v2 dá a rodada 1 'wo', 0 problemas e a linha de
+      W.O.; o contrafactual ticks−1 reprova pelo hash; e o arquivo lido como v1 reprova. O corte no tick
+      90 aparece com passo de 500 ms e a queda "> 60", mas com hash 7aec17ab, e não 9aa1b500. O hash da
+      rodada 1 desse driver é o MESMO em 3e46e3d (o commit da medição do @architect), 47d6517 e a9ad204.
+      Então a diferença vem de detalhe não escrito do driver da fonte, e não de mudança de código. A W-1
+      da fonte tem 7 rodadas, e o meu driver faz 5.
+
+top_issues:
+  - id: 'E412-REL-001'
+    severity: medium
+    category: code
+    owner: '@po (roteia) → @dev (src/tools/partida.ts); a e4.7 precisa saber antes da coleta'
+    finding: >-
+      reproduzirPartida para com "replay de S não terminou" quando decisões + rodadas passam de 65
+      (MAX_PASSOS = 64, que vem da Regra 3, com roteiro fixo). No replay, esse número é controlado pela
+      entrada do jogador. `{t:'build'}` é aceito quantas vezes chegar antes do pronto (redutor.ts,
+      aplicarBuild). Todo clique num dos 8 botões da tela de build manda um, mesmo no botão já marcado
+      (telas.ts:162, main.ts:558). A sala grava todos. MEDIDO: nos replays reais honestos, uma Bo5 de 3
+      rodadas dá 19 passos, de 4 rodadas 24 e de 5 rodadas 29. Repetindo o primeiro build K vezes, a
+      falha começa em exatamente 66 passos (K = 47 com 3 rodadas, K = 37 com 5). No SERVIDOR REAL (porta
+      5345), 30 cliques por jogador na fase builds deram 64 builds aceitos e 79 passos, e replay:check deu
+      rc=1 com "a reprodução não chegou ao fim da partida: … não terminou (fase builds)". O MESMO arquivo,
+      numa cópia com MAX_PASSOS = 640, dá rc=0. É falso negativo puro. Sem cliques redundantes o teto
+      não é atingido. O pior caso de 7 rodadas é: 4 draft + 4 build + 2 pronto + 7 rodadas + 12 prontos
+      de loja + no máximo 22 compras ou trocas (a renda soma 38, e os juros dão no máximo 3 por loja, o
+      que dá cerca de 56 de ouro por jogador, ao preço mínimo de 5), ou seja, ≤ 51. A folga no pior caso
+      é de cerca de 15 cliques redundantes (os dois jogadores somados). Não foi introduzido por esta story
+      (é da e4.6), e o @dev o registrou. É MEDIUM porque é um falso rc=1 controlado pela entrada, num
+      instrumento de prova de portão: a regra da e4.7 (AC 8) trata como "achado de determinismo" toda
+      partida sem W.O. que reprove.
+    suggested_action: >-
+      @dev: no caminho do replay (quando `como` é passado, ou sempre em reproduzirPartida), trocar o teto
+      fixo pelo limite natural `g.decisoes.length + g.rodadas.length + 1`, já que cada volta consome uma
+      decisão ou uma rodada gravada. MAX_PASSOS fica para jogarPartida e para o roteiro por política. Pede
+      uma guarda com um replay de muitos builds redundantes que verifica. Antes da coleta da e4.7, @po:
+      ou a correção entra, ou o README da coleta classifica "não terminou (fase …)" como excluída, e não
+      como achado de determinismo.
+  - id: 'E412-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia; próxima story que abrir determinism.ts ou replay-check.ts)'
+    finding: >-
+      Mutações que passam verde no sim:check. (a) R1: a classificação sem o termo `w.tick >=
+      tetoDeTicks`. Nenhuma rodada da guarda chega ao teto, e uma rodada de teto com empate viraria 'wo'
+      com vencedor −1 e reprovaria. Na prática o teto é inalcançável hoje (morte súbita aos 60 s, máximo
+      medido de 76,8 s contra um teto de 180 s). (b) R3 e R4: as duas conferências de coerência da
+      'interrompida' (todas as decisões consumidas; a reprodução não chegou a 'fim') não têm canário. Um
+      arquivo de partida completa rotulado 'interrompida' passaria sem conferência de placar. (c) R6, R6b,
+      R6c e R6d: a validação por campo da v2 em lerReplay (encerramento por rodada e da partida, pool não
+      vazio, forma do codigo) não tem caso negativo. Só o `formato` é testado (v0/v3/ausente). Hoje, um
+      campo inválido acaba reprovando alto ou só muda um aviso. (d) R13: montarReplay perdendo o carimbo
+      passa verde, porque a guarda grava com CODIGO_DESCONHECIDO e confere null. Só o servidor real mostra
+      o commit. É a lição de e4.8 (guarda por caso ≠ por campo) e de e4.9 (mutar cada termo).
+    suggested_action: >-
+      Canários baratos: a Bo5 da guarda gravada com um carimbo sentinela não nulo, conferido depois de
+      lerReplay; a Bo5 completa rotulada 'interrompida', que tem de reprovar; a 'anular' com uma decisão
+      extra no fim, que tem de reprovar; um caso negativo por campo da v2. (a) pode ficar como está
+      enquanto o teto for inalcançável, com uma tripwire que registre isso, se o @architect quiser.
+  - id: 'E412-DOC-001'
+    severity: low
+    category: docs
+    owner: '@po (texto do AC 6) / @architect (opcional: publicar o driver da W-2)'
+    finding: >-
+      O AC 6 cita "9aa1b500 no tick 90, na medição da fonte". Esse valor não se reproduz a partir do
+      driver que a §7.3 descreve. Com os atalhos escritos, o meu driver corta no tick 90 com 7aec17ab, e
+      esse valor é idêntico em 3e46e3d, 47d6517 e a9ad204. Ele depende de detalhe não escrito do driver.
+      O que o AC mede (W.O. numa rodada ≠ 0, rc=0 com a linha, hash no tick do corte, ticks−1 reprovando)
+      vale em todas as 24 variações que rodei, no servidor real (tick 93) e na guarda (tick 60, 452f7c25).
+    suggested_action: >-
+      @po: marcar 9aa1b500 como ilustrativo da medição da fonte, e não como valor a reproduzir. Opcional,
+      @architect: anexar o driver da W-2 à §7.3.
+  - id: 'E412-ARC-001'
+    severity: low
+    category: architecture
+    owner: '@architect (§7.3 item 4)'
+    finding: >-
+      `sujo` é `git status --porcelain` não vazio na árvore inteira. Medido: na cópia com git, deu true só
+      por `?? node_modules/` (a junção). Na árvore do projeto, dá true pelos `.claude/agent-memory/**`
+      modificados e não rastreados. Nos dois casos src/ é idêntico ao commit. É a nota do AC 4, que o @po
+      já tinha registrado, agora medida por mim. Não bloqueia: o carimbo só avisa, e a e4.7 não usa
+      `sujo` (AC 8 de lá).
+    suggested_action: >-
+      @architect: decidir se o campo passa a ser `git status --porcelain -- src/ package.json
+      package-lock.json tsconfig.json` (ou `--untracked-files=no`). A mudança vai numa story que abra
+      server/main.ts, e não é bump de formato (o tipo do campo não muda).
+
+avaliacoes_pedidas:
+  hash_452f7c25_vs_9aa1b500: >-
+    O AC 6 CONTINUA MET. O valor 9aa1b500 é da medição da fonte, com um driver cujos atalhos a §7.3
+    descreve só em parte. O meu driver independente, com os atalhos escritos, dá 7aec17ab no tick 90, e
+    o mesmo valor nos três commits (3e46e3d, 47d6517 e a9ad204). Então o hash depende do estímulo, e não
+    do código. O que o AC exige vale na guarda (tick 60, 452f7c25), no meu driver (24 variações) e no
+    servidor real (tick 93): W.O. numa rodada ≠ 0, rc=0 com a linha de W.O., hash conferido no tick do
+    corte e ticks−1 reprovando PELO HASH. Desvio aceito. O texto vai em E412-DOC-001.
+  recusadas_no_verificador: >-
+    DENTRO DO ESCOPO. O AC 3 e o canário de pool do AC 7 pedem que "a reprodução recuse a escolha e
+    reprove". Devolver as recusas é o mecanismo que torna isso explícito. Está em tools/partida.ts e
+    tools/replay-check.ts, os dois no AC 14. A mudança é aditiva: campos novos em PartidaReproduzida, e
+    compararPartida (a Regra 3) não os lê. A linha "replay ✓ ok — 6 seeds reproduzidas sem bot" do
+    sim:check é idêntica. A sala grava só decisões aceitas (conferido no gate da e4.6), e as 3 v1 honestas
+    e os 4 v2 honestos que gravei (as duas Bo5 simultâneas, o W.O. e a interrompida) têm 0 recusas. Tem dente: R16 (recusas não coletadas) dá sim rc=1. No
+    Q8 real, é o que dá a causa legível ("decisão 10 (draft/j0, fase loja)").
+  sujo_true: >-
+    ROTEADO ao @architect como E412-ARC-001 (LOW). Não é defeito da story: o AC 4 manda `git status
+    --porcelain` e já registrava o efeito. Medi as duas causas (a junção node_modules na cópia e
+    .claude/agent-memory na árvore).
+  max_passos_64: >-
+    DEFEITO LATENTE CONFIRMADO no servidor real, MEDIUM, E412-REL-001. O dono é o @po, que roteia ao
+    @dev. É anterior a esta story. Os passos realistas de uma Bo5 com a política de bot são 19 (3
+    rodadas), 24 (4) e 29 (5). O pior caso de 7 rodadas sem clique redundante fica em ≤ 51, e o teto
+    reprova a partir de 66. Então só builds redundantes estouram: 15 a 47 cliques extras, somando os
+    dois jogadores, conforme a duração da partida e o ouro gasto. Um humano apressado ou curioso na tela
+    de build chega lá, e um mal-intencionado chega com certeza. A e4.7 PODE bater nisso, e a regra dela
+    classificaria o caso como achado de determinismo. A correção é de uma linha, e deve entrar antes da
+    coleta, ou o README da coleta precisa da exclusão.
+
+observacoes:
+  - >-
+    A observação do gate da e4.6 continua de pé para a partida 'fim': o verificador não exige que todas
+    as decisões sejam consumidas. Com uma decisão extra depois do fim, aprova. Isso é inócuo num arquivo
+    do servidor. A v2 passou a conferir o consumo só na 'interrompida'.
+  - >-
+    A M1 escrita como a da story (`e.encerramento = 'natural'`) deixa `w` sem uso, e o tsc reprova
+    (TS6133). O sim:check reprova pelo W.O. de qualquer forma. A bateria do @dev registrou só o sim:check.
+  - >-
+    O verificador acrescenta "pode ser mudança de código" em QUALQUER problema com commit diferente, e não
+    só em divergência de hash. É um superconjunto do AC 4, e aceito.
+  - >-
+    CodeRabbit não roda nesta máquina (não há WSL/CLI). A cobertura veio de check, sim:check e build em
+    três commits, da leitura linha a linha do diff dos 5 arquivos, de 5 partidas contra o servidor real
+    com roteiro meu, do driver W-2 independente, da sonda de MAX_PASSOS sobre replays reais e de 22
+    mutações (7 da story e 14 minhas). As cópias e as junções foram removidas (junções com `.Delete()`),
+    e o node_modules do repositório está intacto. Nenhum processo do gate ficou de pé, e nenhuma porta
+    de 5341 a 5345 ficou escutando. A árvore compartilhada nunca foi mutada. Rodei nela só o
+    `replay-check.ts`, que só lê, para ver o aviso de commit. Não usei 5179, 5231, 5232 nem 5281-5284.
+
+waiver: { active: false }
+updated: '2026-09-22T08:35:00Z'
