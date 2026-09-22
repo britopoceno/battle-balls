@@ -25,7 +25,11 @@
 > o servidor cria a sala sozinho e o id sai no log, sem mudar o fio; achados L-1 a L-3; §0, §6, §12/R-07,
 > Anexo A). · 2026-09-22 (L-3, pedido do @po em `e4.5` v1.9.0 — **§6.2: endereço do servidor no cliente
 > decidido**, de `location` com a porta em duas cópias; Pages fora do portão P4.4; errata do `:5177`; §0,
-> §12/R-08, Anexos A e B).
+> §12/R-08, Anexos A e B). · 2026-09-22 (gates de `e4.5` e `e4.6` — **§6.3: segredo de assento com volta
+> pelo navegador** (E45-REQ-001); **§9.1: `StatBlock` base da loja por função pura em `sim/`, sem fio**
+> (E45-ARC-001); **§7.3: `bb.replay.v2` com a causa do fim da rodada e da partida** (E46-ARC-001/002);
+> errata do custo de armazenamento do replay (§1.3, §7.1); §9.2 com os donos dos itens menores; §0,
+> §12/R-02, Anexos A e B).
 
 ---
 
@@ -37,10 +41,11 @@
 | RF-38 / P4.1 — input delay de 6 ticks | §4 | Fechado. O atraso é agendado **no servidor**, e o cliente perde o direito de escolher o tick |
 | RF-39 — interpolação entre snapshots | §5 | Fechado em forma. **Taxa é lever medido no aparelho** (P4.4), não número decidido aqui |
 | RF-40 — sala por link | §6 | Fechado. Reconexão sai **de graça** do modelo autoritativo. *(2026-09-22, §6.1: **quem cria a sala é o servidor**, sem pedido de cliente; o id sai no log de operação; o fio não muda. O-2 do @po)* *(2026-09-22, §6.2: o cliente acha o servidor por `location`, com a porta numa constante nos dois lados; o Pages fica fora do portão P4.4. L-3)* |
-| RF-41 / P4.3 / D-08 — replay = seed + linha do tempo | §7 | Fechado, **com uma ressalva medida**: bit-exato só vale dentro da mesma engine (§1.5) |
+| RF-41 / P4.3 / D-08 — replay = seed + linha do tempo | §7 | Fechado, **com uma ressalva medida**: bit-exato só vale dentro da mesma engine (§1.5) *(2026-09-22, §7.3: rodada de W.O. e partida interrompida entram no formato, `bb.replay.v2`, sem esperar R-02; até lá, ficam fora da prova de P4.3)* |
 | RF-42 / P4.2 — anti-cheat | §8 | Fechado pela via mais barata: em rede o cliente **não simula**. Não há o que validar |
 | Segredo da build (§13.6 de E3 — "convenção reforçada por tipo") | §8.2 | **Fecha aqui.** `visaoPara` deixa de ser convenção e vira fato de fio |
-| Onde a rede mora, sem tocar em `sim/` | §2 | Camada `net/` + entrada `server/`. `sim/`, `match/` e `shop/` **intactos**; `render.ts` muda **só em anotações de tipo** (emenda de 2026-09-21, §5.1) |
+| Onde a rede mora, sem tocar em `sim/` | §2 | Camada `net/` + entrada `server/`. `sim/`, `match/` e `shop/` **intactos**; `render.ts` muda **só em anotações de tipo** (emenda de 2026-09-21, §5.1) *(emenda de 2026-09-22, §9.1: `sim/` ganha **uma função pura exportada**, `baseDoPersonagem`, extraída de `makeBall`, com o golden hash idêntico; nem campo nem import novo. Não é rede: conserta a loja da Fase 3 no modo conectado)* |
+| Segredo de assento no cliente; a loja no modo conectado | §6.3, §9.1 | **Decididos em 2026-09-22** (gate de `e4.5`): tenta sem segredo, e só depois de uma recusa usa o segredo do `localStorage`, na mesma conexão; `basePorChar` sai de `CHARS` pela função pura. Nenhum dos dois muda o fio. Story nova, pré-condição de coleta da `e4.7` |
 | Versão do fio e fixture congelada | §11.6.1 | **Decididas em 2026-09-21** (E48-ARC-003): `VERSAO_DO_FIO` no `{t:'sala'}`, conferida pelo decodificador, em story nova antes da `e4.3`; texto de um `snap` congelado no `sim:check` (`debt.12`) |
 | Hash da rodada no servidor; `EventoPartida` no fio | §2.2, §11.6.2 | **Decididos em 2026-09-21** (gate de `e4.3`): `server/main.ts` importa só `hash` de `tools/harness.ts`, por seta declarada com lista fechada; `{t:'evento'}` nova, por assento (privado se tem `jogador`), com `VERSAO_DO_FIO` 2, em story nova depois de `debt.12` |
 | Codificação do fio | §5.5 | **Decidida em 2026-09-21** (`e4.2`): o `{t:'snap'}` vai como tupla posicional em JSON, com quantização que preserva prontidão; o resto do protocolo fica JSON com nomes; deflate é lever, não premissa |
@@ -156,6 +161,10 @@ qualquer 3G. A escolha de taxa (§5.2) é sobre *latência de interpolação* e 
 | por lado, por segundo | **0,35 cmd/s** |
 | bytes por comando (tupla quantizada) | **26,3 B** |
 | upstream de um jogador | **0,07 kbit/s** |
+
+*Forma medida (nota de 2026-09-22):* o 26,3 B é o comando em tupla quantizada, que é a forma de fio.
+**Não** é o tamanho do comando num replay. O replay grava o double inteiro, e o medido lá é 115,5 B por
+comando (errata da §7.1, E46-ARC-002).
 
 **Leitura:** o upstream é ~2 300× menor que o downstream comprimido a 30 Hz. Isto é o Pilar *"você
 não pilota a bola"* aparecendo como número: o jogador emite **um terço de comando por segundo**.
@@ -1423,6 +1432,154 @@ pedida pelo PRD (P4.4 é "smoke visual em dois aparelhos, como em P1.2", `docs/p
     "um aparelho pela internet", a Task 1 ganha implantação e o caminho volta ao @architect.
 - **§12/R-08 (nova, usuário/@pm):** a rede do portão.
 
+### 6.3 Onde o cliente guarda o segredo de assento *(decisão, 2026-09-22, E45-REQ-001, gate de `e4.5`, `197047e`)*
+
+**O problema, na forma medida pelo @qa.** `client/rede.ts` guarda o segredo em `sessionStorage`, com a chave
+`battle-balls:assento:{sala}` (`src/client/rede.ts:170-174`, `:194-209`). Isso sobrevive a recarregar, a
+navegar para fora e voltar, e ao Ctrl+Shift+T, que restaura o `sessionStorage` da aba. **Não sobrevive a
+fechar a aba e tocar o link de novo**, que é o gesto natural num celular. A aba nova manda `{t:'entrar'}` sem
+segredo, e a sala responde `{t:'erro'}`. O cliente mostra então o caso (v): "Este link não abre uma sala… Peça
+um link novo a quem subiu o servidor" (`src/client/main.ts:592-597`). Enquanto isso, o assento continua
+reservado.
+
+**Por que "só trocar o texto" não basta.** O custo de perder o segredo sai da política provisória de R-02,
+por leitura (`src/net/sala.ts:78-88`, `POLITICA_DE_DESCONEXAO_PROVISORIA`, `:100-103`). Cada estouro da pausa de 20 s
+dá ao ausente o W.O. **do passo em curso**, e depois começa outro prazo. Então um jogador que não consegue
+voltar perde uma rodada, e depois outra, até perder a Bo5. Só a mensagem certa não devolve a partida. Quem
+fechou a aba precisa de um jeito de voltar sem o Ctrl+Shift+T.
+
+#### Medições feitas para esta decisão
+
+Fiz as medições numa cópia descartável de `HEAD` (`197047e`), com `git archive` no scratchpad e o
+`node_modules` por junction. A única mudança na cópia foi a porta do servidor, trocada para 5221 para não
+colidir com o gate de `e4.6`. Subi o servidor real e usei clientes `ws` em Node. **Forma medida:** cada
+cliente manda exatamente o `{t:'entrar'}` que `rede.ts` mandaria, e "fechar a aba" é `terminate()` no
+socket. **Atalho que NÃO é spec:** o draft foi jogado por um roteiro que escolhe `pool[0]`.
+
+| # | Cenário | Resultado |
+|---|---|---|
+| M-1 | Duas conexões sem segredo na mesma sala, uma depois da outra: o fluxo de duas abas do AC 13 de `e4.5` | A = jogador 0 e B = jogador 1. A não é derrubada |
+| M-2 | B fecha na fase `builds`. Chega uma conexão nova, **sem** segredo | `{t:'erro'}` "sala jogando — sem assento livre", em 30 ms. **O socket continua aberto** |
+| M-3 | A mesma conexão de M-2 manda um **segundo** `{t:'entrar'}`, agora **com** o segredo de B | `sala, visao, prazo`: jogador 1, estado `jogando`, fase `builds`. Ninguém é derrubado |
+| M-4 | Terceira conexão, sem segredo, com os dois assentos vivos | `{t:'erro'}`, igual a M-2 |
+| M-5 | A terceira conexão tenta de novo com o segredo de B, com o dono do assento vivo | Reassenta como jogador 1, e o dono é derrubado com **4000**, pelo AC 7 de `e4.4` |
+| M-6 | Segredo inventado, com 22 caracteres | `{t:'erro'}`. O L-1 trata o segredo como ausente, e não há laço |
+| M-7 | B fecha **no draft**. Chega uma conexão nova, sem segredo | Senta como jogador 1 com **segredo novo**. O draft pela metade é liberado (`sala.ts:418-428`) |
+| M-8 | A, sozinha em `aguardando`, fecha e reabre sem segredo | Senta como jogador 0 com segredo novo, porque o assento foi liberado (`sala.ts:413-416`) |
+| M-9 | Log do servidor | O segredo de B não aparece em nenhuma linha |
+
+M-2 e M-3 mostram um comportamento que já existe no servidor. A conexão recusada **não é fechada**: ela sai do
+mapa "para poder tentar outro `{t:'entrar'}`" (`src/server/main.ts:240-243`). Então a volta ao assento não
+precisa de mensagem nova, de socket novo nem de mudança no servidor.
+
+M-7 e M-8 provam a propriedade que torna a decisão segura. **Um assento reservado e desconectado só existe
+com a sala em `jogando` e a partida fora do draft.** Fora disso, `cair` libera o assento (`sala.ts:409-431`).
+Nesse estado, `assentar` recusa **toda** entrada sem segredo conhecido (`sala.ts:391-394`). Por isso tentar
+primeiro sem segredo nunca faz alguém ocupar o assento de outro. O resultado é um de dois: a tentativa senta
+num assento livre, e então não havia assento nosso reservado, ou ela é recusada. O segredo guardado só entra
+depois da recusa.
+
+#### As opções
+
+| | Mecanismo | Duas abas no mesmo navegador (AC 13 de `e4.5`) | Fechar a aba e tocar o link | Custo |
+|---|---|---|---|---|
+| **A** | `localStorage` por sala, lido primeiro | **Quebra.** A aba B apresenta o segredo de A e a derruba com 4000, como em M-5 | Volta | Uma linha |
+| **B** | Mantém o `sessionStorage` e só troca o texto do caso (v) | Intacto | **Perde a Bo5**, pela política provisória de R-02 | Texto |
+| **C** | `localStorage` com trava entre abas (Web Locks) | Intacto | Volta | **Não funciona no portão.** `navigator.locks` só existe em contexto seguro (MDN: *"available only in secure contexts (HTTPS)"*), e o caminho de `e4.7` é `http://<ip da LAN>` (§6.2). Na LAN, a trava seria `undefined` |
+| **D** | `localStorage` com batimento ou `BroadcastChannel` entre abas | Intacto | Volta, com uma janela de corrida | Um protocolo entre abas, com prazo, que o celular estrangula em segundo plano. É complexidade que só serve ao teste de duas abas |
+| **E** | **Tentar sem segredo primeiro; o segredo do navegador só entra depois de uma recusa, na mesma conexão** | **Intacto** (M-1) | **Volta** (M-2, M-3) | Só `rede.ts`, e o texto em `main.ts`. Fio, servidor e sala não mudam |
+
+#### Decisão: E
+
+1. **Duas cópias do segredo, com papéis diferentes.** Ao receber `{t:'sala'}`, o cliente guarda o segredo no
+   `sessionStorage`, como hoje, e **também** no `localStorage`, com a mesma chave `battle-balls:assento:{sala}`.
+   A cópia do `sessionStorage` é *o assento desta aba*. A do `localStorage` é *o último assento deste
+   navegador nesta sala*.
+2. **Ordem na abertura.** Se o `sessionStorage` tem segredo, o primeiro `{t:'entrar'}` já vai com ele. Isso
+   cobre recarregar, navegar e Ctrl+Shift+T, que são os caminhos do AC 11 de `e4.5`, **sem ida e volta a
+   mais**. Se o `sessionStorage` não tem segredo, o primeiro `{t:'entrar'}` vai **sem** segredo, mesmo que o
+   `localStorage` tenha um.
+3. **Volta pelo segredo do navegador.** A condição é esta: o primeiro `{t:'entrar'}` foi sem segredo, o
+   servidor respondeu `{t:'erro'}` antes de qualquer `{t:'sala'}` e o `localStorage` tem segredo para esta
+   sala. Então o cliente manda **um** segundo `{t:'entrar'}` com esse segredo, **na mesma conexão**, sem
+   fechar e sem mostrar aviso. Isso acontece no máximo uma vez por carga de página. Se o segundo também for
+   recusado, vale o caso (v), com o texto do item 5.
+4. **Limpeza.** Um `{t:'sala'}` com `estado: 'encerrada'` apaga a entrada do `localStorage` daquela sala.
+   Isso não é segurança, porque o segredo morre com a sala, que só existe na memória do servidor. É higiene,
+   para não acumular uma chave por partida.
+5. **O texto do caso (v) muda, e a mudança vale mesmo com E.** A recusa ainda pode chegar a quem tem assento
+   reservado: em outro navegador do mesmo aparelho, no navegador embutido de um app de chat, que guarda as
+   coisas à parte, ou depois de apagar os dados do site. O servidor não diz ao cliente *por que* recusou, e o
+   `motivo` é texto de desenvolvedor que não vai à tela (`e4.5`/AC 3 v). Por isso o texto fixo tem de cobrir
+   os dois casos. **Conteúdo exigido:** (a) a sala não existe, já acabou ou a partida dela já começou com dois
+   jogadores; (b) **se você estava nesta partida, abra o link no mesmo navegador em que jogou**; (c) se não
+   estava, peça um link novo. A redação é do @po, com o @ux-design-expert se ele quiser. Tirar o (b) reprova.
+
+**Consequências aceitas, ditas às claras:**
+
+- **Uma terceira aba no mesmo navegador retoma o último assento que esse navegador ocupou.** Pelo item 3,
+  ela é recusada e depois volta com o segredo do `localStorage`, e a aba dona recebe "Partida aberta em outro
+  lugar" (4000, M-5). A semântica é a do AC 7 de `e4.4`: a conexão mais nova que tem o segredo vence, e a
+  que perde recebe uma tela clara. Num celular, é exatamente isso que se quer. Muda um resultado do gate de
+  `e4.5`: "uma 3ª aba recebe *Este link não abre uma sala*" continua valendo entre navegadores ou perfis
+  diferentes, mas **não** no mesmo navegador.
+- **Com duas abas no mesmo navegador, fechar uma delas e abrir outra retoma o assento que gravou por
+  último.** Se A reconectou depois de B, a aba nova de B volta como A e derruba A. Isso só existe no teste
+  de duas abas. Não corrijo, pela mesma razão do E45-TEL-001: duas abas no mesmo navegador já contaminam a
+  telemetria. **A coleta de `e4.7` usa um aparelho ou perfil por assento**, e com isso o caso não existe.
+- **O segredo passa a sobreviver a fechar o navegador.** Isso é superfície nova, e é pequena. XSS lê as
+  duas memórias igualmente, então nada muda para esse atacante. Quem ganha alguma coisa é quem usa depois o
+  mesmo navegador, no mesmo aparelho, com o link no histórico, **enquanto a partida ainda corre**. O item 4
+  encurta essa janela para a duração da partida. Não há conta, nem nada além daquele assento daquela sala.
+- **Uma ida e volta a mais**, só no caminho de fechar e reabrir: 30 ms no loopback em M-2. Em Wi-Fi é um
+  RTT, não medido. É desprezível frente aos 20 s da pausa.
+- **O comportamento de `server/main.ts:240-243` vira contrato.** Hoje a conexão recusada fica aberta para
+  um segundo `{t:'entrar'}`. Se alguém passar a fechá-la, a volta ao assento quebra em silêncio: o cliente
+  veria o `close` antes de um `{t:'sala'}` e mostraria o caso (vi), "Servidor não alcançado", que é falso. O
+  comentário daquela linha tem de dizer isso. Ver os deltas.
+
+**O que esta decisão NÃO resolve, e fica registrado:**
+
+- **O navegador embutido dos apps de chat.** Se o link abre num navegador embutido que guarda os dados à
+  parte, não há segredo para reapresentar, e só o texto do item 5 ajuda. **Não medi** quais apps fazem isso
+  nos aparelhos da `e4.7`. O roteiro de coleta diz: "abra o link sempre no mesmo navegador".
+- **A duração da pausa.** Os 20 s são o *lever* provisório de R-02 (`sala.ts:100-103`). Fechar a aba, voltar
+  ao chat e tocar o link pode levar mais que isso. Aí o jogador perde o passo em curso e volta ao passo
+  seguinte, e o assento não se perde. Quanto esperar é de R-02, com o usuário e o @pm. Esta decisão não
+  mexe nisso.
+
+**Quem implementa, e quando.** O item cai fora da `e4.7`: o AC 11 de lá abre só `server/main.ts` e a
+constante de `net/protocolo.ts`, e esta mudança é `client/rede.ts` + `client/main.ts`. Vai para uma **story
+nova** (sugestão `e4.11`, a criar pelo @sm), junto com a §9.1. **É pré-condição de COLETA da `e4.7`, não de
+início**, no mesmo padrão de `debt.11` e de R-08. A razão é a própria `e4.7`: ela exclui de P3.1/P3.2 as
+rodadas de W.O. (AC 8, v1.8.0), então cada aba fechada no celular custa rodada de evidência. E um "peça um
+link novo" falso no meio da sessão de duas pessoas corrói o julgamento de "fluido?", que é o próprio portão.
+
+**Deltas para o @po** (este documento não edita story):
+
+- **Story nova (sugestão `e4.11`), parte A. Escopo:** `src/client/rede.ts` e `src/client/main.ts`, este só no
+  texto do caso (v). Proibidos: `src/net/`, `src/server/`, `src/match/`.
+  - AC: itens 1 a 4 acima, e o texto do item 5 com (a), (b) e (c).
+  - **AC de verificação, com o cenário discriminante:** num servidor real, com o assento reservado na fase
+    `builds` ou `rodada`, (i) uma aba **nova** (sem `sessionStorage`, com o `localStorage` do mesmo perfil)
+    volta ao mesmo jogador, com `sala, visao, …` na ordem. O teste tem de fechar de verdade
+    (`Target.closeTarget` ou equivalente), e não navegar para fora, que é a lição do F-7 do gate de `e4.5`.
+    (ii) O fluxo de duas abas do AC 13 de `e4.5` continua dando jogador 0 e jogador 1, sem nenhum 4000. (iii)
+    Com o `localStorage` vazio, a aba nova mostra o texto novo do caso (v).
+  - **Mutações de aceite, que têm de FALHAR:** ler o `localStorage` antes do `sessionStorage`, que quebra
+    (ii); mandar o segredo do `localStorage` no primeiro `{t:'entrar'}`, que também quebra (ii); tentar de
+    novo sem limite depois da recusa, que dá laço com segredo inventado (M-6); e fechar a conexão antes do
+    segundo `{t:'entrar'}`, que dá o caso (vi) falso.
+- **`e4.7`:**
+  - **"Depende de":** a story nova entra como pré-condição de coleta.
+  - **AC 1 ou Task 1, nota:** cada assento usa um aparelho, ou perfil de navegador, próprio (E45-TEL-001
+    reforçado pela consequência 2 acima). E o link abre sempre no mesmo navegador daquele aparelho.
+  - **AC 11, nota, comentário só:** junto com o E44-DOC-001, o comentário de `server/main.ts:240-243`
+    ganha a frase de contrato: "a conexão recusada fica aberta; o cliente depende disso para voltar ao
+    assento (§6.3)".
+- **`e4.5`: nada reabre.** Está Done. O resultado "3ª aba no mesmo navegador recebe o caso (v)" do gate
+  deixa de valer quando a story nova entrar. É o registro, não um defeito da `e4.5`.
+
 ---
 
 ## 7. Replay (RF-41, P4.3)
@@ -1439,8 +1596,23 @@ nível da partida inteira: `matchSeed + Decisao[] + Command[]` reproduz placar, 
 tudo o que o replay precisa: ele é quem recebe as decisões e quem carimba os comandos. Gravar é
 anexar duas listas que já passam pelas mãos dele.
 
-Custo de armazenamento, pela §1.3: **54,6 comandos × 26,3 B ≈ 1,4 kB por rodada**, mais as decisões.
-Uma partida Bo5 inteira cabe em poucos kB. Um replay não é um vídeo; é uma receita.
+Custo de armazenamento, pela §1.3: ~~**54,6 comandos × 26,3 B ≈ 1,4 kB por rodada**, mais as decisões.
+Uma partida Bo5 inteira cabe em poucos kB.~~ Um replay não é um vídeo; é uma receita.
+
+> **Errata (2026-09-22, E46-ARC-002, gate de `e4.6`, `7a7b548`).** A conta acima multiplicou por 26,3 B,
+> que é o tamanho do comando **na tupla quantizada do fio** (§1.3). Essa não é a forma de um replay. O
+> replay não pode quantizar o comando que grava: um `dx` arredondado reproduz **outro** comando, e o hash
+> diverge. Por isso `serializarReplay` grava o `Command` em JSON com o double inteiro (`src/net/replay.ts`,
+> comentário de `serializarReplay`). **Medido pelo @dev e pelo @qa:** 115,5 B por comando, 16 570 B para 3
+> rodadas na Bo5 da guarda, 5,5 kB por rodada, e 99,5% do arquivo são comandos. Com os 54,6 comandos por
+> rodada da §1.3, isso dá **~6,3 kB por rodada e ~32 kB por Bo5 de 5 rodadas: 4,4× a conta de cima**. A
+> diferença é de codificação, e não de conteúdo: não há `World` nem snapshot no arquivo. Confirmei isso numa
+> sessão minha, com a mesma montagem e comandos de `dx`/`dy` curtos (`1` e `0.5`): deu ~41 B por comando.
+> **Forma medida:** `JSON.stringify` do `Replay` v1, sem espaço. **Atalho que NÃO é spec:** o comando com
+> `dx`/`dy` curtos existe só para isolar o efeito dos dígitos. O comando real carrega o double do cliente.
+> O número continua sendo o de uma receita, dentro de uma ordem de grandeza. Mil partidas ocupam ~32 MB, e
+> não há retenção automática (`e4.6`/AC 10). Não vira limiar de AC: é a lição da §1.2,
+> em que um número de script virou contrato.
 
 ### 7.2 P4.3, com a ressalva que a §1.5 obriga
 
@@ -1455,6 +1627,125 @@ P4.3 pede *"hash idêntico ao da execução ao vivo"*. Medido:
 replay no navegador é possível e desejável, mas ele não é o instrumento do portão — e se um dia
 for, a comparação tem que deixar de ser `hash(a) === hash(b)` e virar `|a − b| < ε` com ε declarado
 (§11.1 explica por que a diferença entre as duas coisas não é cosmética).
+
+### 7.3 A rodada de W.O. e a partida interrompida no replay *(decisão, 2026-09-22, E46-ARC-001 e E46-ARC-002, gate de `e4.6`, `7a7b548`)*
+
+**O problema, como o @qa mediu.** A pausa de R-02 estoura e `estourarPausa` chama `encerrarRodada(presente)`
+(`src/net/sala.ts:655-682`). A rodada fecha com o hash e os ticks do mundo **naquele instante**. Esse instante
+vem do relógio de parede, e ele não está na receita (seed + decisões + comandos). O `bb.replay.v1` não tem
+como dizer que a rodada acabou por W.O., e a reprodução roda a rodada até o fim natural. Resultado: um
+`replay:check` rc=1 com "hash reproduzido … != … / ticks 4214 != 92", **igual a uma quebra de determinismo**.
+A sala encerrada antes de `fim` dá "não chegou ao fim da partida". Isso vale para `'anular'` e para dois
+ausentes (`sala.ts:661-663`). A falha é alta, e não silenciosa. Mas P4.3 ganha um asterisco, e o sintoma
+manda quem investiga para o lugar errado.
+
+**O que já está certo, e não muda.** O W.O. das fases `builds` e `loja` **já se reproduz**. A sala o produz
+como **decisão** (`buildPadrao`, `pronto`, `sala.ts:671-676`), e as decisões produzidas pela sala entram no
+log gravado (`e4.6`, desvio 6, conferido no gate). O fato de relógio vira dado da receita, como o `buildPadrao`
+de RF-04. Só a rodada cortada não tem esse caminho.
+
+#### Medições feitas para esta decisão
+
+Usei um driver puro na mesma cópia descartável de `HEAD`: `criarSala` + `passo()` com relógio injetado, e a
+gravação de `net/replay.ts` em volta de cada passo, como o servidor faz. **Forma medida:** seed 12345, pool
+`Object.keys(CHARS)`, política provisória de R-02, e o jogador 1 cai no tick 60 da rodada 1. **Atalhos que
+NÃO são spec:** o roteiro escolhe `pool[0]`, declara `pronto` direto e manda um cast fixo (`dx 1, dy 0.5`)
+por passo.
+
+| # | Cenário | `replay:check` v1 | Regra candidata: "rodada fechada com o mundo sem `over` e abaixo de `tetoDeTicks` é W.O." | Reprodução até `aoVivo.ticks`, com hash nesse tick |
+|---|---|---|---|---|
+| W-1 | Partida limpa, 7 rodadas | ok | 7/7 `natural` | — |
+| W-2 | W.O. na rodada 1: cai, a pausa estoura, volta na rodada 2 | **5 problemas**, entre eles "rodada 1: ticks reproduzido 5057 != 90" e o placar invertido | a rodada 1 é `wo`; as outras 6 são `natural` | **hash igual no tick 90** (`9aa1b500`). O contrafactual no tick 89 dá **diferente**, então o teste tem dente |
+| W-3 | `'anular'` no estouro | "a reprodução não chegou ao fim da partida" | a rodada fechada é `natural` | — (a partida para na fase `rodada`, e a rodada em curso não entra no histórico) |
+
+W-2 prova o que importa. **A rodada de W.O. é reprodutível até o tick em que foi cortada, com hash
+idêntico.** A simulação não tem defeito nenhum. O que falta ao formato é o dado de *onde* a rodada parou e
+*por quê*. Os dois já estão, ou são deriváveis, no que a gravação vê. `aoVivo.ticks` e `aoVivo.vencedor`
+estão no arquivo. A causa sai da condição de fim natural de `avancarUmTick`
+(`w.over || w.tick >= tetoDeTicks`, `sala.ts:600`): uma rodada que fecha sem ela só pode ter fechado por
+`estourarPausa`. A gravação classifica sozinha, **sem mudar `sala.ts`**.
+
+#### Decisão: `bb.replay.v2`, que registra os fatos e não a política
+
+1. **Por rodada, `encerramento: 'natural' | 'wo'`**, classificado em `gravarPasso` pela regra de W-2, com o
+   mundo da `RodadaEmCurso` que fechou naquele passo. Para `'wo'`, o verificador reproduz **até
+   `aoVivo.ticks`**, compara `hash` e `ticks` nesse tick, e registra a rodada com o `aoVivo.vencedor`. O
+   vencedor de um W.O. é um fato de relógio, gravado como dado, igual a uma decisão produzida pela sala. O
+   verificador confere que ele não é `-1` e imprime a linha como W.O. (por exemplo, "rodada 1: W.O. no tick
+   90, hash ✓"), **nunca** como divergência.
+2. **Por partida, `encerramento: 'fim' | 'interrompida'`**, lido da `partida.fase` da sala na montagem. Para
+   `'interrompida'`, o verificador confere as rodadas fechadas e as decisões até a última delas, e sai com
+   rc=0 e a linha "partida interrompida antes do fim: N rodada(s) verificada(s)". Ele não compara placar
+   final nem vencedor da partida, que não existem.
+3. **`pool`**, o `injetado.pool` da sala. A reprodução passa a usar o pool do arquivo, e não o `POOL` fixo de
+   `tools/partida.ts:58` (E46-ARC-002 a).
+4. **`codigo: { commit: string | null; sujo: boolean | null }`**, **injetado** por `server/main.ts`, que lê o
+   git uma vez na subida (`git rev-parse HEAD` e `git status --porcelain`), com `null` se o git não estiver
+   lá. `net/replay.ts` continua puro: recebe o carimbo como recebe o `hash`. Quando o commit difere do
+   commit de quem verifica, o verificador **avisa**, e não reprova: "replay gravado em X, verificado em Y".
+   Numa divergência, acrescenta "pode ser mudança de código, não de determinismo". É o espírito do carimbo
+   de `debt.10`: o arquivo diz de que código veio. O commit não é segredo.
+5. **O leitor aceita v1 e v2.** Um v1 é lido como "todas as rodadas `natural`, partida `fim`, pool
+   `['golem','vex']`, código desconhecido", que é exatamente o que ele supunha. Qualquer outro formato
+   continua recusado alto (`e4.6`/AC 8). O motivo é a `e4.7`: se ela coletar antes da v2, os replays dela
+   continuam verificáveis depois.
+
+**Por que isto não espera R-02.** A v2 grava o que aconteceu, e não qual política estava em vigor. Ela
+cobre toda opção da lista de R-02 que não muda as regras de `match/`:
+
+- **W.O. com pausa**, de qualquer duração: item 1.
+- **`'anular'` e dois ausentes**: item 2.
+- **"bot assume"**: nada novo, **desde que** os comandos do bot entrem pela mesma porta dos humanos, o
+  `pendentes` da rodada, carimbados pela sala. Assim a gravação os vê como vê os outros. Um bot que mexa no
+  `World` por fora quebraria o replay de novo. Isso vira restrição de desenho para quem implementar essa
+  opção.
+- **Uma opção que mude regra de `match/`** (por exemplo, "quem cai perde a partida inteira") muda o que
+  `registrarRodada` e o placar significam, e **reabre o formato comigo**. Não existe na lista de hoje.
+
+Então **a pergunta "o que o replay faz com a rodada de W.O." não é do usuário**: está respondida aqui. Ela
+entra na lista de R-02 como **item respondido**, com a restrição do "bot assume", para quem ler a lista não
+achar que falta decidir.
+
+**Quem implementa, e quando.** Numa **story nova** (sugestão `e4.12`, a criar pelo @sm). Escopo:
+`src/net/replay.ts`, `src/tools/replay-check.ts`, `src/tools/partida.ts` (a reprodução ganha "parar no
+tick T com vencedor dado" e "parar depois da rodada N", e usa o pool recebido), `src/server/main.ts` (o
+carimbo do item 4) e `src/tools/determinism.ts` (a guarda).
+
+- **Não é pré-condição da coleta da `e4.7`.** A regra de exclusão abaixo cobre a evidência, e a `e4.7` já
+  identifica as quedas (AC 8, v1.8.0).
+- **É pré-condição de fechar a fase**, pela linha P4.3 do Anexo B. Sem ela, P4.3 fecha com o asterisco
+  "exceto partidas com W.O. ou interrompidas", numa política que está em produção no servidor.
+- **Pode correr em paralelo com a `e4.7`.** Mas as duas abrem `server/main.ts` (a `e4.7` pelo AC 11), e
+  isso pede ordem: quem vier depois começa com `git status --short src/server/main.ts` vazio, como a
+  sequência de `determinism.ts`.
+- **Os LOW de teste do mesmo gate** (E46-TST-001, canários fora da rodada 0; E46-TST-002, o recomeço na
+  queda no draft; E46-TST-003, duas salas concorrentes) são da "próxima story que abrir `determinism.ts`
+  ou `replay-check.ts`", e esta abre as duas. **Recomendo absorvê-los.** A guarda da v2 já tem de exercitar
+  uma rodada de W.O. que **não** é a 0 (W-2 é a rodada 1), e é o mesmo trabalho.
+
+**Deltas para o @po:**
+
+- **Story nova (sugestão `e4.12`):**
+  - AC: os itens 1 a 5.
+  - **AC de verificação, com o cenário discriminante de W-2:** uma Bo5 com W.O. numa rodada **que não é a
+    0** dá rc=0, com a linha de W.O. e o hash conferido no tick do corte. **Contrafactual obrigatório:** o
+    mesmo arquivo com `aoVivo.ticks − 1` reprova, porque é o tick 89 de W-2. Uma partida com `'anular'`
+    dá rc=0 com "interrompida". Uma v1 gravada pela `e4.6` continua verificando.
+  - **Mutações de aceite, que têm de FALHAR:** classificar toda rodada como `natural` (volta o sintoma de
+    E46-ARC-001); para `'wo'`, reproduzir até o fim natural; aceitar o `aoVivo.vencedor` também para
+    rodadas `natural`, o que deixaria de verificar o vencedor; e ignorar o `pool` do arquivo.
+  - O `sim:check` mantém o golden hash **idêntico**: a reprodução de rodada `natural` não muda.
+- **`e4.7`, AC 8 ou Testing, regra de evidência de P4.3:** *"Enquanto `bb.replay.v2` não estiver no commit do
+  servidor, a partida com rodada de W.O. ou encerrada antes do fim fica **fora da prova de replay**. Ela não
+  conta como falha nem como acerto de P4.3. É identificada pelo mesmo registro de quedas do AC 8, e o
+  README registra o `replay:check` dela como 'excluída: W.O. na rodada k' ou 'interrompida'. A prova de
+  P4.3 exige ao menos uma Bo5 completa sem W.O. com `replay:check` rc=0. **Toda** partida sem W.O. tem de
+  dar rc=0, e uma que reprove é achado de determinismo."* Com a v2 no servidor, a exclusão cai, e a
+  partida com W.O. entra na prova pela linha de W.O.
+- **`e4.4`/AC 14 (lista de R-02):** item novo, **já respondido**: "o que o replay faz com a rodada de W.O.
+  → §7.3 da arquitetura: `bb.replay.v2` grava a causa e verifica até o tick do corte. Nada a decidir. Se a
+  escolha for 'bot assume', os comandos do bot entram pelo `pendentes` da rodada".
+- **`.gitignore`:** ver a §9.2.
 
 ---
 
@@ -1516,6 +1807,116 @@ Na mesma forma da §11.2 de E3:
   corpo — §5.1. Os outros três seguem intactos.)*
 - *(2026-09-21)* `client/rede.ts` recebe texto e o entrega a `decodificarDoServidor` (`net/codec.ts`,
   §5.5); o resto do cliente só vê o `Snapshot` com nomes.
+
+### 9.1 A loja no modo conectado: de onde vem o `StatBlock` base *(decisão, 2026-09-22, E45-ARC-001, gate de `e4.5`, `197047e`)*
+
+**O problema.** A tela da loja mostra o valor **efetivo** de cada item (`architecture-e3.md` §7.3), que é o
+que o jogador realmente compra depois dos tetos. Esse valor sai de `previewStat(base, bônus)`
+(`src/shop/preview.ts`), e o `base` vem de `ContextoDaTela.basePorChar` (`src/client/telas.ts:54-63`). Hoje
+`main.ts` enche esse mapa com o `ball.base` de cada `World` local (`src/client/main.ts:111-112`, `:215`). No
+modo conectado não existe `World` (§8.1, `e4.5`/AC 5), o mapa fica vazio, e `efeitoEfetivo` devolve
+"efeito indisponível" para todos os itens (`telas.ts:258-259`). O @qa confirmou isso nas duas Bo5 do gate. É
+a regressão de um requisito da Fase 3 no modo em que a Fase 4 é jogada.
+
+#### Medições feitas para esta decisão
+
+Rodei um script em Node no scratchpad, lendo `src/` de `HEAD` sem modificá-lo. **Forma medida:** a função
+candidata é o literal de `makeBall` (`src/sim/world.ts:141-151`) copiado para fora dele, sem mudar nada. O
+delta de cada compra é `previewStat(depois) − previewStat(antes)`, exatamente como `efeitoEfetivo` calcula,
+impresso com 3 casas. **Atalho que NÃO é spec:** a tela imprime com 2 casas (`toFixed(2)`), então os números
+abaixo aparecem arredondados na tela.
+
+| # | O que foi medido | Resultado |
+|---|---|---|
+| B-1 | O `base` depende de algo além do `CharDef`? Foram 800 mundos (`createWorld` com seeds 1-200 × 4 pares de personagens), com build, lado e `itemBonus` variando, e o `ball.base` de cada bola foi comparado com o literal aplicado a `CHARS[charId]` | **3200 bolas, 0 campos divergentes** (`Object.is`), e 0 bolas com a ordem de chaves fora de `STAT_KEYS`. O `base` é função só do `CharDef`. O `itemBonus` vai para `bonusItem` (`world.ts:166`), nunca para o `base` |
+| B-2 | O cliente já tem esse `CharDef`? | Tem. `CHARS` está no bundle (`src/client/main.ts:1`, e `ROSTER` em `src/client/telas.ts:1`). É **o mesmo** registro que o servidor injeta na sala (`src/server/main.ts:5`, `:164`). A escala de D-05 é aplicada dentro dele (`src/chars/index.ts:14-27`) |
+| B-3 | Contrafactual: o `base` montado do `CharDef` **cru** (`golem.ts`/`vex.ts`, sem `aplicarEscala`) | O `maxHp` diverge (golem 190 → 1140, vex 100 → 600). A Couraça mostra **+38 em vez de +228** no golem, e **+20 em vez de +120** no vex. Os outros itens coincidem. Então só um teste com a Couraça separa as duas fontes |
+| B-4 | Onde o teto morde, com 1 a 4 compras do mesmo item | **Borracha:** `restBall/restWall` dá +0,13/+0,144, depois +0,13/+0,056, depois +0,01/**0**, depois 0/0. Ela morde **já na 2ª compra**. **Turbina** (+21 no golem, +50 no vex), **Luneta** (+0,2): morde na 4ª compra. Chumbo, Lixa, Lâmina, Couraça e Relicário: não mordem até a 4ª |
+| B-5 | Um jogador que reconecta **na loja** recebe `{t:'rodadaInicio'}`? | Não recebe. `n.rodada` volta a `null` no `rodadaFim` (`src/net/sala.ts:624`), e o reassentamento só manda `rodadaInicio` se `n.rodada !== null` (`sala.ts:384-386`). O gate de `e4.5` também viu isso: B recarregou na loja e recebeu `sala, visao` |
+
+B-5 derruba uma das opções. B-1 e B-2 mostram que existe uma saída sem fio.
+
+#### As opções
+
+| | Canal | Reconexão na loja (B-5) | Custo | Verdade |
+|---|---|---|---|---|
+| **A** | `base` por `charId` no `EstaticoDaRodada` | **Falha.** O cliente que recarrega na loja perde o `base` e volta a "efeito indisponível" | `VERSAO_DO_FIO` 2 → 3, uma entrada nova em `FIO_CONGELADO` com amostra, `codec.ts`, `snapshot.ts`, guardas no `sim:check`: uma story de `net/` | Do servidor |
+| **B** | `base` por `charId` no `{t:'sala'}` | Funciona | O mesmo de A. E há mais: o `{t:'sala'}` sai também em `aguardando`, **antes de existir `World`**, então o servidor precisa derivar o `base` de um `CharDef` sem bola, que é justamente a extração de C. B **contém** C e ainda soma o custo do fio | Do servidor |
+| **C** | **Extrair o literal de `makeBall` para uma função pura em `sim/`, que `makeBall` passa a chamar. O cliente a aplica a `CHARS`** | Funciona. Não depende de mensagem nenhuma | `sim/stats.ts` (+1 função), `sim/world.ts` (o literal vira uma chamada), `client/main.ts`. **Fio, `net/`, servidor e fixture não mudam** | Do bundle, a mesma fonte dos nomes, habilidades e cores que a tela já mostra (`telas.ts:200`) |
+| **D** | `createWorld` no cliente só para colher o `base` | Funciona | **Proibida.** Reabre P4.2 e o grep do AC 5 de `e4.5` | — |
+| **E** | Duplicar o literal no cliente ou em `shop/` | Funciona | **Proibida.** É a segunda fonte de verdade que `shop/preview.ts` registra ter sido paga para não existir | — |
+
+#### Decisão: C
+
+- **Uma função pura nova, `baseDoPersonagem(def: CharDef): StatBlock`, em `src/sim/stats.ts`**, ao lado de
+  `DEFAULT_STATS` e `makeStatBlock`. O corpo é o literal de hoje, **na ordem de `STAT_KEYS`**, que é a
+  restrição de forma fixa que o comentário de `world.ts:136-140` explica (medido em B-1: a ordem bate).
+  Ela devolve **um objeto novo a cada chamada**. Nada de cache por `def`: cada bola tem o próprio `base`, e
+  hoje só `preview.ts:63` escreve num `base`, e esse é o da bola sintética. `sim/stats.ts` passa a importar
+  o **tipo** `CharDef` de `./types.ts`, que já é de `sim/`. Nenhuma seta nova na §2.2.
+- **`makeBall` chama a função** no lugar do literal. Existe uma cópia só, e o golden hash prova que nada
+  mudou. É um refactor puro: `recomputeStats` segue lendo o mesmo `base`.
+- **`client/main.ts` monta `basePorChar` de `CHARS` com essa função, uma vez, nos dois modos**, e a coleta
+  por `World` de `main.ts:215` sai. No modo local, o resultado é idêntico (B-1). No conectado, o mapa deixa
+  de ficar vazio. O cliente **não** simula: é aritmética sobre o registro que ele já carrega. O grep do AC 5
+  de `e4.5` (`step`, `createWorld`, `aplicar`, …) continua dando rc=1.
+- **Comentários que ficam falsos e mudam junto, sem mudar corpo:** o de `ContextoDaTela.basePorChar`
+  (`telas.ts:54-62`, "colhido do último `World` montado… uma bola sempre existiu") e o bloco "DE ONDE VEM
+  `base`" de `shop/preview.ts`, que registra a extração como limite conhecido.
+
+**Emenda ao que este documento dizia de `sim/`.** A §0 e o Anexo A diziam "`sim/` intacto: nem um campo, nem
+um import". Com esta decisão, `sim/` ganha **uma função exportada**. Não ganha campo em `World` nem em `Ball`,
+nem import de fora de `sim/`, e o golden hash continua **idêntico**. O que a regra protegia continua
+protegido: "o jogo mudaria se ninguém estivesse conectado?" (§2.2). Esta função não é transporte. Ela conserta
+um requisito da Fase 3, e é a mesma extração que `shop/preview.ts` deixou anotada desde `e3.1`.
+
+**O risco que C aceita, e o de A/B que ela não tem.** Com C, o preview usa os números do bundle. Um cliente
+de um commit e um servidor de outro, com tuning diferente, mostrariam um valor efetivo que o servidor não
+aplica, e o `VERSAO_DO_FIO` não pega isso, porque é descompasso de **dados**, não de layout. Isso já vale
+hoje para tudo o que a tela lê de `ROSTER`. A regra da `e4.7` de registrar, por partida, o commit do cliente e
+o do servidor (AC 12) é o que cobre isso na evidência. Com A e B, a verdade viria do servidor, ao preço de uma
+versão de fio, e A ainda falha na reconexão. **Se um dia houver cliente e servidor em commits diferentes de
+propósito** (R-07, servidor hospedado), isto reabre comigo.
+
+**Quem implementa, e quando.** Na mesma story nova da §6.3 (sugestão `e4.11`), como parte B. As duas partes
+se encontram só em `client/main.ts`. **É pré-condição de COLETA da `e4.7`**, pelo mesmo motivo de P3.3: a
+`e4.7` soma as compras dos dois aparelhos (AC 8, v1.8.0), e P3.3 mede *o que o humano compra*
+(`architecture-e3.md` §3). Uma compra feita sem ver o teto é de outra loja, e não da loja que a Fase 3
+projetou. Se o @po preferir não bloquear, a alternativa é marcar as compras da `e4.7` como "loja sem preview"
+e deixá-las fora de qualquer leitura de P3.3. Eu recomendo bloquear, porque a correção é pequena e vai na
+mesma story.
+
+**Deltas para o @po:**
+
+- **Story nova (sugestão `e4.11`), parte B. Escopo:** `src/sim/stats.ts`, `src/sim/world.ts`,
+  `src/client/main.ts` e, **só em comentário**, `src/client/telas.ts` e `src/shop/preview.ts`. Proibidos:
+  `src/net/`, `src/server/`, `src/match/` e `src/chars/`.
+  - AC: `npm run sim:check` com o golden hash **idêntico**, e `check` e `build` verdes.
+  - AC: `baseDoPersonagem` é a única fonte. `grep` por `maxHp: def.maxHp` em `src/` dá **uma** linha, em
+    `sim/stats.ts`.
+  - **AC de verificação, com os cenários discriminantes de B-3 e B-4, no modo conectado, contra o servidor
+    real:** (i) nenhum item mostra "efeito indisponível"; (ii) a Couraça no golem mostra `maxHp +228.00`,
+    e não +38, o que reprova uma fonte sem a escala de D-05; (iii) com uma Borracha comprada, a segunda
+    mostra `restWall +0.06`, e não +0.14 nem o texto da `desc`; com duas, a terceira mostra `restWall +0.00
+    (teto)`; (iv) **recarregar a página na loja** mantém (i) a (iii), o que reprova qualquer variante que
+    guarde o `base` do `rodadaInicio`.
+  - **Mutações de aceite, que têm de FALHAR:** `basePorChar` vindo de `golem`/`vex` crus, que (ii) pega;
+    `basePorChar` enchido no `rodadaInicio`, que (iv) pega; e trocar a ordem de duas chaves do literal, que
+    o golden hash pode não pegar. Para essa, a forma de pegar é conferir `Object.keys(baseDoPersonagem(d))`
+    contra `STAT_KEYS`, como em B-1.
+  - **E45-DEBT-001 (troca do literal `0` por `ctx.humano` em `telaDraft`):** o gate o manda para "a
+    próxima story que abrir `telas.ts`", e esta abre, mas só em comentário. **Minha recomendação é não
+    absorvê-lo:** muda comportamento do draft às vésperas da coleta, e o adaptador de hoje está correto e
+    tem teste (M1 do gate). A escolha é do @po. Se absorver, o M1 do gate vira o teste de aceite.
+- **`e4.7`: "Depende de"**: a story nova é pré-condição de coleta, como na §6.3.
+
+### 9.2 Itens menores dos gates de `e4.5` e `e4.6`: quem é o dono *(2026-09-22)*
+
+| Item | O que é | Dono | Quando |
+|---|---|---|---|
+| **E45-TEL-001** (LOW) | Duas abas no mesmo navegador dividem o `localStorage` da telemetria. O export de B levou 106 casts de A, e o `cast` não tem `jogador`, então o filtro do AC 10 fica cego a isso | **@po, no roteiro de coleta da `e4.7`** (AC 1 ou Task 1): um aparelho, ou perfil de navegador, por assento. A contaminação é conferida cruzando os casts do export com o fio, que é o método do gate. A correção no coletor (dar dono ao `cast`) é de uma story que abra `client/telemetria.ts`, sob a guarda de `debt.11`/`debt.13`. **Não** entra na `e4.11` | Antes da coleta. A §6.3 reforça: com a decisão E, a terceira aba no mesmo navegador retoma um assento |
+| **E44-DOC-001** (LOW) | `src/server/main.ts:39-41` ainda diz que o L-3 está "em aberto na `e4.5`". Ele foi decidido na §6.2, com as duas cópias | **`e4.7`**, que abre `server/main.ts` pelo AC 11. Só comentário: a constante cita a cópia de `client/rede.ts:36`, como a de lá cita esta. Na mesma passada entra a frase de contrato de `main.ts:240-243` da §6.3 | Com a `e4.7`. Se a `e4.12` abrir `server/main.ts` antes, vai nela |
+| **`replays/` fora do `.gitignore`** (E46-ARC-002 b) | `npm run server` sem `BB_REPLAYS` cria `replays/` na raiz, e `git check-ignore` dá rc=1. Os arquivos carregam `matchSeed`, que só é escrita com a sala encerrada, e nenhum segredo de assento (conferido em `src/net/replay.ts`). O risco é commitar por engano, com `git add -A`, a pasta que a sessão da `e4.7` vai encher | **`e4.11`**, uma linha `replays/` no `.gitignore`. É a última story antes da coleta e a primeira que pode tocar a raiz. Se o @po preferir, vira um chore do @dev. **Não** é do @devops: `.gitignore` não é push nem CI | Antes da sessão da `e4.7`. O replay que for **evidência** de P4.3 é copiado para `docs/evidence/`, ou gravado lá por `BB_REPLAYS`, de propósito, e não por acidente |
 
 ---
 
@@ -2226,6 +2627,14 @@ arquitetura, e a quarta linha mostra que a escolha errada cria incentivo pervers
 > telemetria de P3.1/P3.2** (M-7); e a janela de **M-6** (pausa de 20 s menor que o prazo de builds de
 > 30 s). Esta seção dá as opções. O AC 14 dá o que a decisão precisa responder.
 
+> **Nota (2026-09-22, gates de `e4.5` e `e4.6`).** Dois fatos novos pesam na escolha, e nenhum deles é
+> pergunta nova para o usuário. (1) **O replay com W.O. está respondido na §7.3:** `bb.replay.v2` grava a
+> causa e verifica até o tick do corte, qualquer que seja a política. A única restrição é que, se a escolha
+> for "bot assume", os comandos do bot entram pelo `pendentes` da rodada. Uma política que mude regra de
+> `match/` reabre o formato. (2) **O `prazoMs` de 20 s agora tem um caso de uso concreto:** fechar a aba no
+> celular, voltar ao chat e tocar o link (§6.3). Com o W.O. por passo, quem volta depois do prazo perde o
+> passo em curso e não o assento. A `e4.7` pode medir quanto esse gesto leva.
+
 ### R-03 — `SNAPSHOT_HZ` sai de medição em aparelho, não daqui *(informativa)*
 
 §5.2 recomenda 30 Hz como ponto de partida e explica por quê. O valor final é evidência de P4.4.
@@ -2311,9 +2720,13 @@ ele estiver errado. A ressalva é o que impede o número otimista de virar o nú
 | `src/net/sala.ts` | **novo** (`e4.3`, `99f4ee3`); **muda** (`e4.10`) | Máquina de estados da sala. Pura, relógio injetado (§3.2). Produz o `{t:'sala'}` por assento, com `versao` e o segredo do destinatário (§11.6.1). Recebe `hash` e roster injetados (§2.2, E43-ARC-001). `e4.10`: envia `{t:'evento'}` por assento, com o filtro da §11.6.2 |
 | `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento. Único arquivo de `server/` que importa `tools/`, e só `hash` de `tools/harness.ts`, injetado na sala (§2.2, E43-ARC-001). Cria as salas sozinho, com ao menos uma livre, e escreve o id de cada uma no log de operação, sem segredo nem seed (§6.1) |
 | `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação. O endereço sai de `location` (esquema e `hostname`), e a porta é uma constante que cita a de `server/main.ts`, em duas cópias (§6.2) |
-| `src/client/main.ts` | **muda** | Ganha os modos `local` e `conectado` (§9) |
+| `src/client/main.ts` | **muda** | Ganha os modos `local` e `conectado` (§9). *(2026-09-22, `e4.11` sugerida)* texto do caso (v) (§6.3) e `basePorChar` de `CHARS` nos dois modos (§9.1) |
+| `src/client/rede.ts` *(2026-09-22)* | **muda** (`e4.11` sugerida) | Segredo em `sessionStorage` e `localStorage`; volta pelo segredo do navegador depois de uma recusa, na mesma conexão (§6.3) |
+| `src/sim/stats.ts`, `src/sim/world.ts` *(2026-09-22)* | **muda** (`e4.11` sugerida) | `baseDoPersonagem(def)`, pura, e `makeBall` passa a chamá-la. Golden hash idêntico (§9.1) |
+| `src/net/replay.ts`, `src/tools/replay-check.ts`, `src/tools/partida.ts` *(2026-09-22)* | **muda** (`e4.12` sugerida) | `bb.replay.v2`: causa do fim da rodada e da partida, pool e carimbo de código; leitor aceita v1 e v2 (§7.3) |
+| `.gitignore` *(2026-09-22)* | **muda** (`e4.11` sugerida) | `replays/` (§9.2) |
 | `package.json` | **muda** | Dependência `ws`; script `server` |
-| `src/sim/**` | **intacto** | Nem um campo, nem um import (§2.2) |
+| `src/sim/**` (resto) | **intacto** | Nem um campo, nem um import (§2.2). *(2026-09-22: a exceção é a função da §9.1, acima)* |
 | `src/match/**` | **intacto** | Muda quem chama, não o que é (§3.3) |
 | `src/shop/**`, `src/chars/**` | **intactos** | — |
 | `src/client/render.ts` | **muda só em anotações de tipo** (`e4.2`) | 10 linhas, nenhuma de corpo: `World`/`Ball` → `VisaoDoMundo`/`BolaVisivel` (§5.1, emenda) |
@@ -2337,7 +2750,7 @@ citam a story nova.*
 |---|---|---|---|
 | **P4.1** | `INPUT_DELAY_TICKS = 6` ativo | constante única em `net/protocolo.ts`, usada pelos dois modos | §4.1 · hash-neutralidade provada em §4.2 · §10 passo 1 |
 | **P4.2** | O cliente não decide dano | divergir o cliente artificialmente e conferir o placar do outro | §8.1 — passa por subtração: o cliente não simula |
-| **P4.3** | Replay reconstrói a partida com hash idêntico | replay no servidor, **mesma engine** | §7.2 · **ressalva medida** em §1.5 e §11.1 |
+| **P4.3** | Replay reconstrói a partida com hash idêntico | replay no servidor, **mesma engine** | §7.2 · **ressalva medida** em §1.5 e §11.1 · *(2026-09-22)* partida com W.O. ou interrompida: fora da prova até `bb.replay.v2`, que fecha antes do portão (§7.3) |
 | **P4.4** | Smoke visual em dois aparelhos | manual, dois celulares, partida completa | §10 passo 7 · decide `SNAPSHOT_HZ` (§5.2) e §4.4 · *(2026-09-22)* caminho: Vite na LAN, sem Pages (§6.2); rede da evidência em §12/R-08 |
 | — | Julgamento humano: *1v1 entre dois celulares é fluido?* | usuário jogando, com outra pessoa | Nada aqui substitui isso. §11.3 registra o que não foi medido |
 | — | `npm run sim:check` verde, golden hash **idêntico** nos 7 passos | comando | §10 |
@@ -2351,6 +2764,8 @@ citam a story nova.*
 | — | Só `tools/telemetria.ts` e `tools/guarda-telemetria.ts` importam `client/`; nenhum arquivo de `client/` importa um dos dois *(2026-09-21)* | `grep -rn "from '\.\./client/" src/tools/` + revisão | §2.2 |
 | — | O servidor importa de `tools/` só `hash`, de `harness.ts`, e o injeta na sala pela referência; o hash gravado ao vivo é o do arnês *(2026-09-21)* | `grep -rn "from '\.\./tools/" src/server/` (uma linha) na `e4.4` + replay bit a bit da `e4.6`/AC 5 | §2.2 (E43-ARC-001) |
 | — | `EventoPartida` chega ao cliente por `{t:'evento'}`, e cada assento recebe só os eventos sem `jogador` e os próprios; a lista de variantes de `DoServidor` fica congelada por versão *(2026-09-21)* | guardas do `sim:check` (`e4.10`, `debt.12` item 5) + export de telemetria da `e4.5` | §11.6.2 |
+| — | Fechar a aba no celular e tocar o link de novo devolve o mesmo assento; duas abas do mesmo navegador continuam sendo dois jogadores *(2026-09-22)* | fechamento real (não navegação) contra o servidor real, na story da §6.3 | §6.3 |
+| — | A loja no modo conectado mostra o valor efetivo, também depois de recarregar na loja *(2026-09-22)* | Couraça no golem +228, Borracha na 2ª e na 3ª compra (§9.1, B-3/B-4) | §9.1 |
 
 ---
 
