@@ -73,13 +73,12 @@ export function bolaSintetica(base: Readonly<StatBlock>, bonus: Readonly<Partial
  *
  * Não simula partida, não cria mundo, não consome RNG: é aritmética de stats e nada mais.
  *
- * DE ONDE VEM `base` (limite conhecido, deixado explícito para `e3.4`): o único lugar do projeto
- * que deriva um `StatBlock` de um `CharDef` é o literal dentro de `makeBall` (`sim/world.ts:141`),
- * inline. Extraí-lo daria a este arquivo um `baseDeChar(def)` de uma linha — mas é mudança em
- * `sim/`, que o AC 12 desta story proíbe (`src/sim/` não ganha linha em `e3.1`), e duplicar o
- * literal aqui criaria a segunda fonte de verdade que o projeto acabou de pagar para não ter.
- * Enquanto isso não for extraído, o chamador passa `ball.base` de uma bola existente. Registrado
- * como entrada de `e3.4`/`e3.2`, não como pendência silenciosa.
+ * DE ONDE VEM `base`: de `baseDoPersonagem(def)` (`sim/stats.ts`), a função pura que deriva o
+ * `StatBlock` base de um `CharDef`. O literal que morava dentro de `makeBall` foi extraído para ela
+ * em `e4.11` (`architecture-e4.md` §9.1, decisão C), e `makeBall` a chama: continua existindo uma
+ * fonte só. O chamador de produção (`client/main.ts`) a aplica a `CHARS`, nos dois modos, sem
+ * precisar de uma bola existente — o limite que este bloco registrava desde `e3.1` está fechado.
+ * Duplicar o literal aqui continua proibido: seria a segunda fonte de verdade.
  */
 export function previewStat(
   base: Readonly<StatBlock>,

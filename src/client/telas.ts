@@ -52,13 +52,14 @@ export interface ContextoDaTela {
    */
   segundosRestantes: number | null
   /**
-   * `StatBlock` base por `charId`, colhido do último `World` montado.
+   * `StatBlock` base por `charId`, montado por `client/main.ts` uma vez, de `CHARS`, com
+   * `baseDoPersonagem` (`sim/stats.ts`) — a mesma função que `makeBall` chama, então é o mesmo
+   * `base` que a bola teria (`architecture-e4.md` §9.1, decisão C, story `e4.11`).
    *
-   * É o contorno do limite que `shop/preview.ts` registra explicitamente para esta story: o único
-   * lugar do projeto que deriva um `StatBlock` de um `CharDef` é o literal dentro de `makeBall`
-   * (`sim/world.ts:141`), e extraí-lo seria mudança em `sim/`. Enquanto não for extraído, o chamador
-   * passa o `ball.base` de uma bola existente — e a fase `loja` só é alcançável depois de uma rodada
-   * (`registrarRodada` é o único caminho para ela), então uma bola sempre existiu.
+   * Não depende de `World` nem de mensagem da rede, e é isso que serve aos dois modos: no conectado
+   * não existe `World` (P4.2), e quem recarrega na loja não recebe `{t:'rodadaInicio'}` (§9.1, B-5).
+   * Mapa vazio, aqui, seria um defeito do chamador: é o que faz `efeitoEfetivo` dizer "efeito
+   * indisponível".
    */
   basePorChar: Record<string, Readonly<StatBlock>>
   /** quem está no controle desta tela. Só para rotular; a projeção já veio filtrada por `visaoPara` */

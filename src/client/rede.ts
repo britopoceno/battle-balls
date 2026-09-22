@@ -158,6 +158,8 @@ interface Soquete {
   assentado: boolean
   /** fechado por este cliente: o `close` que vier depois não é queda de rede */
   fechadoPorNos: boolean
+  /** o primeiro `{t:'entrar'}` deste soquete foi SEM segredo: só então cabe a volta pelo do navegador */
+  entrouSemSegredo: boolean
 }
 
 /**
@@ -167,9 +169,16 @@ interface Soquete {
 export function conectar(salaId: string, receptor: Receptor): Rede {
   const endereco = enderecoDoServidor()
   /**
-   * O segredo de assento fica em `sessionStorage`, por sala: sobrevive a recarregar e a reabrir a aba
-   * fechada, e NÃO é visto por outra aba — duas abas do mesmo navegador no mesmo link (AC 13) são dois
-   * jogadores, e com `localStorage` a segunda reapresentaria o segredo da primeira e a derrubaria.
+   * O segredo de assento fica em DUAS memórias, com a mesma chave por sala e papéis diferentes
+   * (`architecture-e4.md` §6.3, decisão E, story `e4.11`):
+   *  - `sessionStorage` é *o assento desta aba*: sobrevive a recarregar, a navegar e ao Ctrl+Shift+T,
+   *    e NÃO é visto por outra aba. É o único que vai no PRIMEIRO `{t:'entrar'}`;
+   *  - `localStorage` é *o último assento deste navegador nesta sala*: sobrevive a fechar a aba. Só é
+   *    apresentado DEPOIS de uma recusa, num segundo `{t:'entrar'}` na mesma conexão, uma vez por carga.
+   * A ordem é o que mantém duas abas do mesmo navegador no mesmo link (AC 13 de `e4.5`) como dois
+   * jogadores: lido primeiro, o `localStorage` faria a segunda aba reapresentar o segredo da primeira e
+   * derrubá-la com 4000. Tentar primeiro sem segredo nunca ocupa o assento de outro: com um assento
+   * reservado, a sala recusa toda entrada sem segredo conhecido (§6.3, M-7/M-8).
    */
   const chaveDoSegredo = `battle-balls:assento:${salaId}`
 
@@ -180,6 +189,12 @@ export function conectar(salaId: string, receptor: Receptor): Rede {
   let encerrada = false
   /** este cliente parou de vez (fechou por erro, ou mostrou um aviso que encerra a conexão) */
   let desistiu = false
+  /**
+   * Esta carga de página já mandou o segundo `{t:'entrar'}`, com o segredo do `localStorage` (§6.3,
+   * item 3). É o teto de UMA volta pelo segredo do navegador: sem ele, um segredo que a sala não conhece
+   * (inventado, ou de uma partida velha) daria recusa → nova tentativa → recusa, em laço.
+   */
+  let tentouSegredoDoNavegador = false
   let tentativas = 0
   let snapshotHz: number | null = null
   const fila: DoCliente[] = []
@@ -191,7 +206,8 @@ export function conectar(salaId: string, receptor: Receptor): Rede {
   /** o último instante desenhado, em `time` da rodada. Só anda para a frente */
   let ultimoAlvo = -Infinity
 
-  function lerSegredo(): string | null {
+  /** O assento desta aba (`sessionStorage`): o único que vai no primeiro `{t:'entrar'}`. */
+  function lerSegredoDaAba(): string | null {
     try {
       return sessionStorage.getItem(chaveDoSegredo)
     } catch {
@@ -199,12 +215,33 @@ export function conectar(salaId: string, receptor: Receptor): Rede {
     }
   }
 
-  function guardarSegredo(s: string): void {
+  /** O último assento deste navegador nesta sala (`localStorage`): só depois de uma recusa. */
+  function lerSegredoDoNavegador(): string | null {
+    try {
+      return localStorage.getItem(chaveDoSegredo)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Grava o segredo nas duas memórias. Com a partida `encerrada`, a cópia do navegador é APAGADA em vez
+   * de gravada (§6.3, item 4): não é segurança — o segredo morre com a sala —, é para não acumular uma
+   * chave por partida no `localStorage`.
+   */
+  function guardarSegredo(s: string, partidaEncerrada: boolean): void {
     try {
       sessionStorage.setItem(chaveDoSegredo, s)
     } catch (err) {
       // sem armazenamento, o jogador ainda joga; só perde a volta ao assento se recarregar
-      console.warn('[rede] não foi possível guardar o segredo de assento:', err)
+      console.warn('[rede] não foi possível guardar o segredo de assento na aba:', err)
+    }
+    try {
+      if (partidaEncerrada) localStorage.removeItem(chaveDoSegredo)
+      else localStorage.setItem(chaveDoSegredo, s)
+    } catch (err) {
+      // sem esta cópia, só se perde a volta ao assento depois de FECHAR a aba
+      console.warn('[rede] não foi possível guardar o segredo de assento no navegador:', err)
     }
   }
 
@@ -233,13 +270,15 @@ export function conectar(salaId: string, receptor: Receptor): Rede {
   }
 
   function abrir(): void {
-    const s: Soquete = { ws: new WebSocket(endereco), assentado: false, fechadoPorNos: false }
+    const s: Soquete = { ws: new WebSocket(endereco), assentado: false, fechadoPorNos: false, entrouSemSegredo: false }
     atual = s
 
     s.ws.addEventListener('open', () => {
       if (atual !== s) return
-      // AC 4 — a primeira mensagem da conexão, com o segredo guardado quando houver um (AC 11)
-      const assento = lerSegredo()
+      // AC 4 — a primeira mensagem da conexão, com o segredo DESTA ABA quando houver um (AC 11). O do
+      // navegador nunca vai aqui (§6.3, item 2): é o que mantém duas abas como dois jogadores.
+      const assento = lerSegredoDaAba()
+      s.entrouSemSegredo = assento === null
       escrever(s, assento === null ? { t: 'entrar', sala: salaId } : { t: 'entrar', sala: salaId, assento })
     })
 
@@ -309,12 +348,25 @@ export function conectar(salaId: string, receptor: Receptor): Rede {
         tentativas = 0
         snapshotHz = m.snapshotHz
         encerrada = m.estado === 'encerrada'
-        guardarSegredo(m.assento)
+        guardarSegredo(m.assento, encerrada)
         receptor.sala(m)
         for (const x of fila.splice(0)) escrever(s, x)
         return
       case 'erro':
         if (!s.assentado) {
+          // §6.3, item 3 — a volta pelo segredo do navegador: o primeiro `{t:'entrar'}` foi sem segredo,
+          // veio recusa antes de qualquer `{t:'sala'}`, e o `localStorage` tem segredo para esta sala.
+          // Um segundo `{t:'entrar'}` com ele, NA MESMA CONEXÃO (o servidor não fecha a conexão recusada,
+          // `server/main.ts`), sem aviso, e no máximo uma vez por carga de página.
+          if (s.entrouSemSegredo && !tentouSegredoDoNavegador) {
+            const doNavegador = lerSegredoDoNavegador()
+            if (doNavegador !== null) {
+              tentouSegredoDoNavegador = true
+              console.info(`[rede] entrada sem segredo recusada (${m.motivo}); tentando o último assento deste navegador`)
+              escrever(s, { t: 'entrar', sala: salaId, assento: doNavegador })
+              return
+            }
+          }
           // Caso v: o `motivo` é texto de desenvolvedor e vai só ao console; a tela tem texto fixo.
           console.error(`[rede] o servidor recusou a entrada na sala: ${m.motivo}`)
           receptor.aviso({ t: 'linkInvalido' })

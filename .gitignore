@@ -33,3 +33,6 @@ Thumbs.db
 
 # Estado transiente do harness Claude Code, não do projeto
 .claude/scheduled_tasks.lock
+
+# Replays gravados por npm run server sem BB_REPLAYS (architecture-e4.md §9.2, e4.11). Evidência vai para docs/evidence/ de propósito.
+replays/

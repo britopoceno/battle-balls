@@ -3,7 +3,7 @@ import { botCommands, createBot, type BotState } from '../bot/heuristic.ts'
 import { criarPolitica, type PoliticaPartida } from '../bot/partida.ts'
 import { createWorld, step, TICK_MS } from '../sim/world.ts'
 import type { Ball, Command, World } from '../sim/types.ts'
-import type { StatBlock } from '../sim/stats.ts'
+import { baseDoPersonagem, type StatBlock } from '../sim/stats.ts'
 import { hash } from '../tools/harness.ts'
 import { ATRASO_ALVO_TICKS, type EstaticoDaRodada } from '../net/protocolo.ts'
 import { projetar, type BolaVisivel, type VisaoDoMundo } from '../net/projecao.ts'
@@ -108,8 +108,16 @@ let fimDoTimer: number | null = null
  */
 let segundoDesenhado = -1
 
-/** `ball.base` por `charId`, colhido de cada `World` — ver `ContextoDaTela.basePorChar`. */
-const basePorChar: Record<string, Readonly<StatBlock>> = {}
+/**
+ * `StatBlock` base por `charId`, montado UMA vez de `CHARS` com `baseDoPersonagem` (`sim/stats.ts`),
+ * e usado pelos dois modos — ver `ContextoDaTela.basePorChar`. Não depende de `World` nem de mensagem
+ * da rede: no modo conectado não existe `World` (P4.2), e quem recarrega na loja não recebe
+ * `{t:'rodadaInicio'}` (`architecture-e4.md` §9.1, B-5). É aritmética sobre o registro que o bundle já
+ * carrega, e não simulação (story `e4.11`).
+ */
+const basePorChar: Record<string, Readonly<StatBlock>> = Object.fromEntries(
+  Object.entries(CHARS).map(([id, def]) => [id, baseDoPersonagem(def)]),
+)
 
 // ---------------------------------------------------------------- partida
 
@@ -211,8 +219,6 @@ function abrirRodada(): void {
   world = createWorld(CHARS, { ...setup, arena: { w: ARENA_W, h: ARENA_H } })
   // M-1: NOVO a cada rodada, com a seed DAQUELA rodada. Nunca reaproveitar entre rodadas.
   bot = createBot(setup.seed, ladoDoBot)
-
-  for (const b of world.balls) basePorChar[b.charId] = b.base
 }
 
 /**
@@ -592,7 +598,9 @@ function mostrarAviso(a: Aviso): void {
     case 'linkInvalido':
       escreverNoOverlay(
         'Este link não abre uma sala',
-        'A sala não existe, já acabou ou está cheia. Peça um link novo a quem subiu o servidor.',
+        'A sala não existe, já acabou ou está cheia (a partida dela já começou com dois jogadores). ' +
+          'Se você estava nesta partida, abra o link no mesmo navegador em que jogou. ' +
+          'Se não estava, peça um link novo a quem subiu o servidor.',
       )
       return
     case 'semServidor':

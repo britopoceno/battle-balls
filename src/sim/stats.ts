@@ -1,4 +1,4 @@
-import type { Ball } from './types.ts'
+import type { Ball, CharDef } from './types.ts'
 
 /**
  * Camada de stats em 3 níveis: base (do personagem) → bônus (passiva + item, aditivos,
@@ -146,6 +146,35 @@ export function resetClampCounters(observing = true): void {
   }
   c.calls = 0
   c.observing = observing
+}
+
+/**
+ * O `StatBlock` base de um personagem: função só do `CharDef` (story `e4.11`, `architecture-e4.md` §9.1,
+ * decisão C, medição B-1). É o literal que morava dentro de `makeBall`, extraído sem mudar nada, e
+ * `makeBall` o chama: continua existindo uma cópia só. O cliente a aplica a `CHARS` para a loja mostrar
+ * o valor efetivo no modo conectado, onde não existe `World`.
+ *
+ * Ordem das chaves importa: precisa bater com `STAT_KEYS` (maxHp..knockbackTaken) para preservar a
+ * forma fixa de objeto (QA-001, gate de `debt.5`) — os 6 campos do `CharDef` primeiro, spread do
+ * `DEFAULT_STATS` (que já nasce na ordem certa: restBall, restWall, dmg...), e só então os overrides de
+ * restBall/restWall (`debt.5`: fonte própria opcional no `CharDef`; ausência usa `DEFAULT_STATS`), que
+ * apenas atualizam o valor de uma chave já inserida pelo spread, sem reordenar. O golden hash pode não
+ * pegar uma troca de ordem; a conferência é `Object.keys(baseDoPersonagem(d))` contra `STAT_KEYS`.
+ *
+ * Devolve um objeto NOVO a cada chamada, sem cache por `def`: cada bola tem o próprio `base`.
+ */
+export function baseDoPersonagem(def: CharDef): StatBlock {
+  return {
+    maxHp: def.maxHp,
+    radius: def.radius,
+    mass: def.mass,
+    maxSpeed: def.maxSpeed,
+    steer: def.steer,
+    drag: def.drag,
+    ...DEFAULT_STATS,
+    restBall: def.restBall ?? DEFAULT_STATS.restBall,
+    restWall: def.restWall ?? DEFAULT_STATS.restWall,
+  }
 }
 
 /** Cria um StatBlock/BonusBlock com as 14 chaves em forma fixa — mesma hidden class no V8. */
