@@ -30,3 +30,9 @@ apliquei nos dois gates: **reimplementar a versão errada como contrafactual no 
 exigir que ela FALHE. Se o teste não distingue as duas, ele não mede o que promete. Corolário do
 corolário, do gate de `e3.0`: quando um número que eu escrevi vem de uma divisão (`420/250`),
 conferir se todos os clamps do caminho estão na conta antes de publicá-lo.
+
+**Mesma família, E48-ARC-003 (2026-09-21):** fixture "dourada" só discrimina troca de posições se a
+amostra tiver valores **distintos dois a dois** em cada tupla. A amostra que o gate sugeriu
+(`snapshotSintetico`) tinha 3 colisões medidas (0/0, 1/1, 200/200) — congelá-la deixaria passar 3
+mutações da mesma forma da M9 que motivou a fixture. Ao especificar fixture, medir colisões e pôr um
+canário da propriedade na própria guarda.

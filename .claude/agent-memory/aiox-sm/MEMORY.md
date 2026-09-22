@@ -1,1 +1,2 @@
 - [Battle Balls project structure](project_battle_balls_structure.md) — monolithic docs despite sharded config; `debt.N`/`e3.N` story-id conventions; STAT_KEYS 14-vs-15 and PRESET_SOLO doc inconsistencies
+- [Fase 4 determinism.ts sequencing](project_e4_determinism_sequencing.md) — shared edit queue on src/tools/determinism.ts across e4.x/debt.x net stories; always quote the preceding story's "Nota para {next}" verbatim
