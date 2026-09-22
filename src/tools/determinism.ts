@@ -13,7 +13,7 @@ import {
   type RoundSetup,
   type PickSetup,
 } from '../sim/world.ts'
-import { SIGMA_MAX } from '../sim/stats.ts'
+import { baseDoPersonagem, SIGMA_MAX } from '../sim/stats.ts'
 import type { Command, SimEvent, World } from '../sim/types.ts'
 // e4.2 — seta `tools/ → net/`, declarada no AC 11 da story (pedido de emenda do Anexo A de
 // `architecture-e4.md` registrado no Dev Agent Record, para o @architect). É a guarda de
@@ -422,6 +422,8 @@ function guardaBot001(): string[] {
   const problemas: string[] = []
   const sao = comandosNoTick0(false)
   const corrompido = comandosNoTick0(true)
+  if (baseDoPersonagem(CHARS.golem) === baseDoPersonagem(CHARS.golem)) problemas.push('  ✗ E411-TST-001: baseDoPersonagem(golem) devolveu o MESMO objeto em duas chamadas — cache por def (e4.11 AC 8)')
+  if (new Set(createWorld(CHARS, setup(SEED_GUARDA)).balls.filter((b) => b.charId === 'golem').map((b) => b.base)).size !== 2) problemas.push('  ✗ E411-TST-001: as 2 bolas golem de createWorld não têm .base distintos por referência — cache por def (e4.11 AC 8)')
   if (sao !== 0) {
     problemas.push(
       `  ✗ BOT-001: o cenário perdeu poder discriminante — com hp são o bot já emite ${sao} comando(s) no tick 0`,
@@ -2457,6 +2459,10 @@ function salaVariantesEBordas(problemas: string[]): { variantes: string; bordas:
           `rodadaFim ${JSON.stringify(fins)} (índice ${iFim}) (AC 5 i)`,
       )
     } else tetoTxt = `teto de ${TETO} ticks: snap final no tick ${TETO} (over:false) antes do rodadaFim com ticks ${TETO}, aos 2 assentos`
+    // debt.15, AC 4 (a) — R1 (E412-TST-001): a rodada 0 fechou só pelo TERMO do teto de classificarEncerramento (over:false)
+    const encTeto = montarReplay(v.gravacao, v.sala).rodadas[0]?.encerramento
+    if (encTeto !== 'natural') falha(`a rodada 0, fechada no teto de ${TETO} ticks com over:false, saiu '${encTeto}' no replay; esperado 'natural' (debt.15 AC 4 a, R1)`)
+    else if (ok) tetoTxt += "; replay da rodada 0 'natural' (R1)"
   }
 
   // ---- AC 3, fase loja: a primeira loja em que aplicar() aceita a compra do jogador 1 E a troca do jogador 0
@@ -3091,7 +3097,93 @@ function guardaReplayV2(g: PartidaGravada, problemas: string[]): string[] {
       `${DRAFT_E412[0].t === 'draft' ? DRAFT_E412[0].charId : '?'} → o replay começa pela escolha nova, ${lido.rodadas.length} rodada(s), placar ${lido.placar.join('-')}, ` +
       `verificarReplay sem problema (E46-TST-002)`
   }
-  return [linhaWo, linhaAn, linhaDq]
+
+  // ---- debt.15, AC 3 (E412-REL-001) e AC 4 (e) (R13): builds redundantes além do teto fixo de antes, numa gravação com
+  // carimbo sentinela. O jogador 0 manda o MESMO {t:'build'} vezes seguidas (aceito até o pronto, redutor.ts), e a
+  // partida vai ao fim. Com o teto fixo (MAX_PASSOS = 64) em reproduzirPartida, o replay dela "não terminou (fase builds)"
+  const antesTeto = problemas.length
+  const falhaTeto = (m: string) => anotar(problemas, `  ✗ replay teto: ${m}`)
+  const TETO_FIXO_DE_ANTES = 64
+  const BUILDS_REDUNDANTES = 60
+  const SENTINELA = { commit: 'sentinela-e412', sujo: true }
+  const tt = nova('teto')
+  tt.gravacao = criarGravacao(SENTINELA)
+  assentar(tt)
+  let agoraTt = T0_SALA
+  for (const d of DRAFT_E412) conduzir(tt, (agoraTt += 100), pelaFronteira(tt, CHAVES_SALA[d.jogador], { t: 'decisao', d }))
+  const redundante: Decisao = { t: 'build', jogador: 0, slot: 0, abilityIndex: 1, passiveIndex: 1 }
+  conduzir(tt, (agoraTt += 100), Array.from({ length: BUILDS_REDUNDANTES }, () => pelaFronteira(tt, K0, { t: 'decisao', d: redundante })).flat())
+  const buildsGravados = tt.gravacao.decisoes.filter((d) => d.t === 'build').length
+  if (tt.sala.partida.fase !== 'builds' || buildsGravados !== BUILDS_REDUNDANTES) falhaTeto(`${buildsGravados} build(s) gravado(s) de ${BUILDS_REDUNDANTES} mandados, fase ${tt.sala.partida.fase} (esperado todos, ainda em builds)`)
+  partidaAteEncerrar(tt, g, agoraTt, DRAFT_E412, falhaTeto)
+  let linhaTeto = '  replay teto  ✗'
+  const rt = replayDoCondutor(tt, falhaTeto)
+  if (tt.sala.fase !== 'encerrada' || tt.sala.partida.fase !== 'fim') falhaTeto(`a partida não chegou ao fim (sala ${tt.sala.fase}, partida ${tt.sala.partida.fase})`)
+  if (rt !== null) {
+    const { lido } = rt
+    const passos = lido.decisoes.length + lido.rodadas.length
+    if (passos <= TETO_FIXO_DE_ANTES + 1) falhaTeto(`a gravação tem ${passos} passos; o caso só discrimina acima de ${TETO_FIXO_DE_ANTES + 1} (E412-REL-001)`)
+    const v = verificarReplay(lido)
+    for (const x of v.problemas) falhaTeto(`verificador: ${x}`)
+    // AC 4 (e), R13 — o carimbo sobrevive a montarReplay → serializarReplay → lerReplay
+    if (lido.codigo.commit !== SENTINELA.commit || lido.codigo.sujo !== SENTINELA.sujo) {
+      falhaTeto(`o carimbo ${JSON.stringify(SENTINELA)} da gravação voltou ${JSON.stringify(lido.codigo)} de montar, serializar e reler (debt.15 AC 4 e, R13)`)
+    }
+    linhaTeto =
+      `  replay teto  ${marca(antesTeto)} seed ${SEED_W2}: o jogador 0 manda o mesmo {t:'build'} ${BUILDS_REDUNDANTES}× na fase builds e a partida vai ao fim → ` +
+      `${lido.decisoes.length} decisões + ${lido.rodadas.length} rodadas = ${passos} passos (> ${TETO_FIXO_DE_ANTES}, o teto fixo de antes), placar ${lido.placar.join('-')}, ` +
+      `verificarReplay sem problema, pelo limite natural da gravação (debt.15, E412-REL-001) · carimbo ${JSON.stringify(lido.codigo)} volta de montar, serializar e reler (R13)`
+  }
+
+  // ---- debt.15, AC 4 (b)-(d) (E412-TST-001): cada canário é um replay válido com UM campo mudado, e reprova pelo
+  // caminho que o nome diz. O controle positivo de cada um é o replay de origem, que verifica/lê sem problema acima
+  const antesCan = problemas.length
+  const falhaCan = (m: string) => anotar(problemas, `  ✗ replay canários: ${m}`)
+  const canarios: string[] = []
+  // (b) R4 — a partida completa (a do W.O., 'fim') rotulada 'interrompida'
+  const R4 = 'o arquivo diz partida interrompida, e a reprodução chegou à fase fim'
+  if (rw !== null) {
+    const y = lerReplay(rw.texto)
+    y.encerramento = 'interrompida'
+    const pr = verificarReplay(y).problemas
+    if (!pr.includes(R4)) falhaCan(`a Bo5 completa rotulada 'interrompida' deu [${pr.join(' | ')}]; esperado "${R4}" (R4)`)
+    else canarios.push("R4 'fim' rotulada 'interrompida' → chegou à fase fim")
+  }
+  // (c) R3 — a partida 'interrompida' (a do 'anular') com uma decisão a mais no fim, que a reprodução nunca toca
+  if (ra !== null) {
+    const y = lerReplay(ra.texto)
+    y.decisoes.push(y.decisoes[y.decisoes.length - 1])
+    const pr = verificarReplay(y).problemas
+    const esperado = `partida interrompida: a reprodução consumiu ${y.decisoes.length - 1} de ${y.decisoes.length} decisão(ões) gravada(s)`
+    if (!pr.includes(esperado)) falhaCan(`a interrompida com uma decisão a mais no fim deu [${pr.join(' | ')}]; esperado "${esperado}" (R3)`)
+    else canarios.push(`R3 interrompida + 1 decisão no fim → consumiu ${y.decisoes.length - 1} de ${y.decisoes.length}`)
+  }
+  // (d) R6/R6b/R6c/R6d — lerReplay lança com um campo da v2 fora de forma, cada valor reprovando um termo só
+  if (rw !== null) {
+    const casos: [string, (y: Record<string, unknown>) => void, string][] = [
+      ['R6', (y) => ((y.rodadas as Record<string, unknown>[])[0].encerramento = 'empate'), "fora de 'natural' | 'wo'"],
+      ['R6b', (y) => (y.encerramento = 'abandonada'), "fora de 'fim' | 'interrompida'"],
+      ['R6c', (y) => (y.pool = []), 'pool não é uma lista de strings não vazia'],
+      ['R6d', (y) => (y.codigo = { commit: 5, sujo: null }), 'codigo não é { commit: string | null; sujo: boolean | null }'],
+    ]
+    for (const [nome, mudar, esperado] of casos) {
+      const y = JSON.parse(rw.texto) as Record<string, unknown>
+      mudar(y)
+      let erro = '(não lançou)'
+      try {
+        lerReplay(JSON.stringify(y))
+      } catch (err) {
+        erro = err instanceof Error ? err.message : String(err)
+      }
+      if (!erro.includes(esperado)) falhaCan(`lerReplay com o campo de ${nome} fora de forma: ${erro}; esperado lançar com "${esperado}" (${nome})`)
+      else canarios.push(`${nome} lança`)
+    }
+  }
+  if (canarios.length !== 6) falhaCan(`${canarios.length}/6 canários de fixture exercitados (R4, R3, R6, R6b, R6c, R6d)`)
+  const linhaCan =
+    `  replay canár ${marca(antesCan)} ${canarios.join(' · ')} (lerReplay: rodada 'empate', partida 'abandonada', pool [], codigo.commit 5) · ` +
+    `R1 na linha bordas · R13 na linha teto (debt.15, E412-TST-001)`
+  return [linhaWo, linhaAn, linhaDq, linhaTeto, linhaCan]
 }
 
 function guardaSala(): { linhas: string[]; problemas: string[] } {

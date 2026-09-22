@@ -368,7 +368,7 @@ export function reproduzirPartida(g: PartidaGravada, como: ComoReproduzir = {}):
   const erro = (m: string) => new Error(recusadas.length === 0 ? m : `${m}; antes, aplicar() recusou ${recusadas.length} decisão(ões), a primeira: ${recusadas[0]}`)
 
   for (let passo = 0; e.fase !== 'fim'; passo++) {
-    if (passo > MAX_PASSOS) throw erro(`replay de ${g.matchSeed} não terminou (fase ${e.fase})`)
+    if (passo > g.decisoes.length + g.rodadas.length + 1) throw erro(`replay de ${g.matchSeed} não terminou (fase ${e.fase})`)
     // e4.12, AC 2 — interrompida: as N rodadas fechadas já foram, e a partida pede a seguinte ou ficou sem decisões
     if (limite !== undefined && iRodada >= limite && (e.fase === 'rodada' || iDecisao >= g.decisoes.length)) break
     if (e.fase === 'rodada') {

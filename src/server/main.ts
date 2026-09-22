@@ -104,21 +104,23 @@ const DIRETORIO_DE_REPLAYS = resolve(process.env.BB_REPLAYS ?? 'replays')
 
 /**
  * `e4.12`, AC 4 (`architecture-e4.md` §7.3 item 4) — o carimbo `codigo` de todo replay: o commit do código que
- * roda (`git rev-parse HEAD`) e se a árvore dele tem mudança não commitada (`git status --porcelain` não
- * vazio). Lido UMA vez, na subida, na pasta deste arquivo (e não no diretório de onde o servidor foi iniciado).
- * Sem git, ou fora de um repositório: `null` nos dois campos. Entra na gravação por `criarGravacao`, nunca pela
- * sala. O commit não é segredo.
+ * roda (`git rev-parse HEAD`) e se o código que o servidor executa difere desse commit. Lido UMA vez, na subida,
+ * na pasta deste arquivo (e não no diretório de onde o servidor foi iniciado). Sem git, ou fora de um
+ * repositório: `null` nos dois campos. Entra na gravação por `criarGravacao`, nunca pela sala. O commit não é
+ * segredo.
  *
- * ⚠️ `sujo` conta QUALQUER arquivo da árvore, e não só `src/`: nesta árvore ele sai `true` quase sempre
- * (`.claude/agent-memory/**`, e `replays/` enquanto não estiver no `.gitignore`). `sujo: true` não quer dizer
- * que o código difere do commit. Estreitar o campo é mudança da §7.3 item 4, do @architect (nota do AC 4).
+ * `sujo` (`debt.15`, AC 9; §7.3, emenda ao item 4, E412-ARC-001): `git status --porcelain` só de `src/` (o que
+ * roda), `package.json` (decide o `"type": "module"`) e `package-lock.json` (fixa o `ws`), com os não rastreados
+ * incluídos (um arquivo novo em `src/` conta). `tsconfig.json` e `node_modules/` ficam de fora, e o resto da
+ * árvore (`.claude/**`, `docs/`) não suja o carimbo. O `:(top)` é obrigatório: o `cwd` é `src/server/`, e o
+ * pathspec relativo `src/` resolveria para `src/server/src/`, com `sujo` sempre `false`, mesmo com `src/` mudado.
  */
 function lerCodigo(): CodigoDoReplay {
   const pasta = dirname(fileURLToPath(import.meta.url))
   const git = (args: string[]) => execFileSync('git', args, { cwd: pasta, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
   try {
     const commit = git(['rev-parse', 'HEAD']).trim()
-    const sujo = git(['status', '--porcelain']).trim() !== ''
+    const sujo = git(['status', '--porcelain', '--', ':(top)src/', ':(top)package.json', ':(top)package-lock.json']).trim() !== ''
     return commit === '' ? { commit: null, sujo: null } : { commit, sujo }
   } catch {
     return { commit: null, sujo: null }

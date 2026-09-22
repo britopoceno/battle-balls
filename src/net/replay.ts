@@ -80,10 +80,10 @@ export type EncerramentoDaRodada = 'natural' | 'wo'
 export type EncerramentoDaPartida = 'fim' | 'interrompida'
 
 /**
- * `e4.12`, AC 4 — o código que gravou: `git rev-parse HEAD`, e se `git status --porcelain` saiu não vazio, lidos
- * UMA vez pelo servidor na subida. `null` nos dois quando o git não está lá. É aviso para quem verifica, nunca
- * reprovação. ⚠️ `sujo` conta qualquer arquivo da árvore, e não só `src/`: nesta árvore ele sai `true` quase
- * sempre (nota do AC 4, registrada para o @architect).
+ * `e4.12`, AC 4 — o código que gravou: `git rev-parse HEAD`, e se o código que o servidor executa difere desse
+ * commit, lidos UMA vez pelo servidor na subida. `null` nos dois quando o git não está lá. É aviso para quem
+ * verifica, nunca reprovação. `sujo` (`debt.15`, AC 9; §7.3, emenda ao item 4) olha só `src/`, `package.json` e
+ * `package-lock.json`, com os não rastreados incluídos: o resto da árvore não suja o carimbo.
  */
 export interface CodigoDoReplay {
   commit: string | null
