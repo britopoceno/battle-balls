@@ -29,7 +29,9 @@
 > pelo navegador** (E45-REQ-001); **§9.1: `StatBlock` base da loja por função pura em `sim/`, sem fio**
 > (E45-ARC-001); **§7.3: `bb.replay.v2` com a causa do fim da rodada e da partida** (E46-ARC-001/002);
 > errata do custo de armazenamento do replay (§1.3, §7.1); §9.2 com os donos dos itens menores; §0,
-> §12/R-02, Anexos A e B).
+> §12/R-02, Anexos A e B). · 2026-09-22 (E412-ARC-001, gate de `e4.12` — **§7.3 item 4 emendado: `sujo`
+> passa a olhar só `src/`, `package.json` e `package-lock.json`, por pathspec ancorado na raiz**; o pathspec
+> relativo foi medido como armadilha, sempre `false`).
 
 ---
 
@@ -1746,6 +1748,107 @@ carimbo do item 4) e `src/tools/determinism.ts` (a guarda).
   → §7.3 da arquitetura: `bb.replay.v2` grava a causa e verifica até o tick do corte. Nada a decidir. Se a
   escolha for 'bot assume', os comandos do bot entram pelo `pendentes` da rodada".
 - **`.gitignore`:** ver a §9.2.
+
+#### Emenda ao item 4 — `sujo` olha só o que roda *(decisão, 2026-09-22, E412-ARC-001, gate de `e4.12`, `fc65c82`)*
+
+**O problema.** O item 4 pedia `git status --porcelain` na árvore inteira. Nesta árvore, esse comando
+**nunca** sai vazio, então `sujo` é sempre `true` e não carrega informação. O código disso está em
+`src/server/main.ts:121`, e o aviso do próprio @dev em `main.ts:112-114` e `net/replay.ts:85-87`. A `e4.7`
+já desistiu do campo: pelo AC 8 dela, v1.13.0, "`sujo` não é critério", e o README registra à mão
+`git status --porcelain -- src/` vazio na subida.
+
+**Medições feitas para esta decisão.** Foram feitas em `fc65c82`, com o git rodando em `src/server/`,
+que é o `cwd` que `lerCodigo()` usa (`main.ts:117-118`). Usei um `git clone` descartável com a junção de
+`node_modules` e, para o caso C, a cópia por `git archive` + `git init` da receita do @dev. Cada mutação
+foi desfeita antes da seguinte. As colunas contam linhas da saída.
+
+| # | Estado | árvore inteira (item 4 hoje) | `--untracked-files=no` | `-- src/ package.json package-lock.json` (relativo) | **`-- ':(top)src/' ':(top)package.json' ':(top)package-lock.json'`** |
+|---|---|---|---|---|---|
+| A | Árvore do projeto, `src/` idêntico ao commit | **13** | 9 | 0 | **0** |
+| B0 | Clone limpo + junção `node_modules` | 0 | 0 | 0 | 0 |
+| C0 | Cópia por `archive` + `init` + junção (sem `.gitignore`) | **1** (`?? node_modules/`) | 0 | 0 | **0** |
+| M5 | + arquivo não rastreado em `.claude/agent-memory/` | 1 | 0 | 0 | **0** |
+| M5b | + `.claude/CLAUDE.md` rastreado e modificado | 1 | 1 | 0 | **0** |
+| M6 | + `replays/r.json` | 0 | 0 | 0 | 0 (já no `.gitignore`, §9.2) |
+| M3 | + `tsconfig.json` modificado | 1 | 1 | 0 | **0** |
+| **M1** | + `src/sim/world.ts` modificado | 1 | 1 | **0** | **1** |
+| **M2** | + `src/sim/novo.ts` não rastreado | 1 | **0** | **0** | **1** |
+| **M4** | + `package-lock.json` modificado | 1 | 1 | **0** | **1** |
+| C1 | cópia C + `src/net/replay.ts` modificado | — | — | — | **1** |
+
+O que a tabela prova:
+
+- **A árvore inteira** acusa por `.claude/**` (A, M5, M5b) e pela junção (C0). É a E412-ARC-001.
+- **`--untracked-files=no`**, a alternativa do gate, **não resolve.** Continua 9 na árvore do projeto,
+  porque há arquivos rastreados de `.claude/agent-memory/` modificados, e fica **cego a arquivo novo em
+  `src/`** (M2).
+- **O pathspec relativo é uma armadilha.** É o texto literal da sugestão do gate e do AC 8 da `e4.7`. Com
+  `cwd` em `src/server/`, o git resolve `src/` para `src/server/src/` (ele avisa "could not open directory
+  'src/server/src/'" no stderr, que `main.ts:118` descarta). O resultado é sempre 0: `sujo` passaria a ser
+  sempre `false`, **inclusive com `src/` modificado** (M1, M2, M4). Seria pior que hoje, porque hoje o campo
+  não informa, e assim ele mentiria. No README da `e4.7` o mesmo texto é correto, porque lá o comando roda
+  na raiz.
+- **O pathspec ancorado na raiz** (`:(top)`) é o único que discrimina nos dois sentidos. É 0 em tudo o
+  que não roda (A, C0, M3, M5, M5b, M6) e 1 em tudo o que roda (M1, M2, M4, C1).
+
+**Por que esses três caminhos, e só eles.** O servidor roda com `node src/server/main.ts` (`package.json:12`),
+com type stripping nativo do Node 24.13.1. Então:
+
+- **`src/`**: é todo o código que o servidor e o verificador executam.
+- **`package.json`**: o `"type": "module"` (`package.json:5`) decide como o Node carrega `src/`.
+- **`package-lock.json`**: fixa a versão do `ws` (`package.json:22`), o único import de pacote do
+  servidor (`main.ts:6`).
+- **`tsconfig.json` fica de fora**: o Node não o lê em tempo de execução, só o `tsc --noEmit` (`npm run
+  check`). Incluí-lo traria de volta o ruído de M3, sem uma única diferença de comportamento que ele
+  pudesse anunciar.
+- **`node_modules/` fica de fora** porque não é rastreado. O que ele deveria conter já está no
+  `package-lock.json`.
+
+**As opções**
+
+| Opção | O que faz | Custo | Veredito |
+|---|---|---|---|
+| **A. Estreitar com `:(top)`** | `sujo` = "o código que roda difere de `commit`" | Uma linha em `main.ts:121` e dois comentários. O formato não muda | **Escolhida** |
+| B. Remover o campo | `codigo` vira `{ commit }` | Muda o formato `bb.replay.v2` já em produção local: o `lerReplay` (`replay-check.ts:87`), a guarda (`determinism.ts:2721`, `:2813`, `:2816`) e `net/replay.ts:90`. Ou exige `v3`, ou quebra os v2 já gravados. E perde o dado que a `e4.7` hoje registra à mão | Rejeitada |
+| C. Deixar como está | — | O campo segue sem informar, e cada leitor precisa saber disso | Rejeitada |
+| A' com pathspec relativo | — | Sempre `false` (M1, M2, M4) | **Rejeitada, e é o erro a evitar** |
+| A'' com `--untracked-files=no` | — | Segue `true` na árvore (A = 9) e fica cego a M2 | Rejeitada |
+
+**Decisão: A.** O item 4 passa a dizer:
+
+> `codigo: { commit: string | null; sujo: boolean | null }`, injetado por `server/main.ts`, que lê o git
+> uma vez na subida: `git rev-parse HEAD`, e `git status --porcelain -- ':(top)src/' ':(top)package.json'
+> ':(top)package-lock.json'` não vazio para `sujo`. **`sujo` quer dizer "o código que o servidor executa
+> difere de `commit`"**, e não "a árvore tem qualquer mudança". O resto do item não muda.
+
+**Compatibilidade.** Nem formato nem versão mudam, e `lerReplay` não muda. A semântica fica **mais
+estreita**, e a mudança é monótona. Um v2 gravado antes dela com `sujo: false` continua certo, porque se a
+árvore inteira estava limpa, o subconjunto também estava. Um `sujo: true` antigo é só "talvez": a mesma
+não-informação de hoje, e nenhum `false` antigo vira mentira. Não há v2 de coleta gravado:
+`docs/evidence/` não tem pasta da `e4.7`.
+
+**Segurança.** Nada muda. O carimbo continua sem segredo (o commit não é segredo, item 4), e a saída do
+`git status` não entra no arquivo, só o booleano. O `execFileSync` com argumentos em vetor, sem shell,
+continua. Os pathspecs são constantes do código, e não entrada.
+
+**Quem implementa.** Delta para o @po, na story curta de dívida que o @sm está redigindo:
+
+- **O escopo cresce de 2 para 4 arquivos.** Entram `src/server/main.ts` (a linha 121 e o comentário de
+  112-114) e `src/net/replay.ts` (só o comentário de 82-87, que hoje descreve o defeito como vigente). A
+  outra saída é uma story própria. Não recomendo, porque é uma linha.
+- **AC:** `lerCodigo()` usa o pathspec **ancorado na raiz** acima, com o `cwd` de hoje (`src/server/`). Os
+  dois comentários passam a dizer o que o campo significa, e não o aviso antigo.
+- **AC de verificação, com o cenário discriminante.** É registrado no Dev Agent Record, e não vai para o
+  `sim:check`, que não lê git (`CODIGO_DESCONHECIDO`, `net/replay.ts:94`). Numa cópia descartável com git:
+  - (i) A árvore limpa, mais um arquivo não rastreado fora de `src/`, dá `sujo: false`.
+  - (ii) Com `src/` modificado, dá `true`.
+  - (iii) Com um arquivo **novo** não rastreado em `src/`, dá `true`.
+  - **Mutações que têm de FALHAR:** o pathspec **relativo** `-- src/ …` reprova em (ii) e (iii). `--untracked-files=no`
+    reprova em (iii). A árvore inteira reprova em (i).
+  - "O campo existe e é booleano" **não** vale como verificação, porque o pathspec relativo passa nela.
+- **`e4.7`:** nenhum AC muda. O critério manual do AC 8 roda na raiz e continua correto. Se o @po quiser, depois
+  deste delta Done, aceitar `codigo.sujo === false` como equivalente ao registro manual, a escolha é dele. O
+  campo passa a cobrir também `package*.json`, e por isso é um critério **mais** forte.
 
 ---
 
