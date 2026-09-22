@@ -1,0 +1,312 @@
+schema: 1
+story: 'e4.6'
+story_title: 'P4.3 — gravador de replay no servidor e verificação bit-exata na mesma engine'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 12 ACs estão MET. Refiz as verificações do zero, numa cópia descartável de 7850a7f, sem confiar no
+  Dev Agent Record. check, sim:check e build saíram com rc=0, e o golden hash não mudou. O escopo são
+  exatamente os 5 arquivos do AC 12. Os greps de pureza e de setas não acham fs, node: nem tools/ em
+  src/net/, e o ciclo tools/ → net/ → tools/ não existe. Rodei de novo a partida real do @dev contra o
+  servidor, na porta 5261: 8/8, e `replay:check` deu rc=0 em 3 rodadas com 2 085 comandos. Escrevi um
+  roteiro meu com duas Bo5 SIMULTÂNEAS no mesmo servidor, com reconexão do assento 1: 8/8, e os dois
+  replays deram rc=0. A mutação de hash stub (E43-ARC-001) dá sim:check verde, como o AC 5 prevê, e
+  `replay:check` rc=1 nos 3 hashes. Rodei 11 mutações minhas. Também exercitei, por execução, a
+  rodada de W.O. que o @dev declarou como não exercitada. Nenhum defeito de implementação contra os
+  ACs. O veredito é CONCERNS, e não PASS, por 1 achado MEDIUM de formato e 5 LOW.
+  (1) E46-ARC-001 (medium): uma partida com rodada de W.O. (R-02) grava um replay que nunca verifica,
+  e a falha parece divergência de determinismo. P4.3 fica com esse asterisco enquanto o formato for
+  a v1.
+  (2) E46-TST-001: os canários do verificador na guarda ficam todos na rodada 0 e no campo hash. Q5,
+  a verificação só da rodada 0, passa verde e aprova uma divergência real na rodada 2.
+  (3) E46-TST-002: o ramo de recomeço da gravação na queda no draft não tem conferência de saída
+  (Q12 verde e nociva).
+  (4) E46-TST-003: o roteiro do @dev joga uma partida só, e uma gravação compartilhada entre salas
+  passa 8/8.
+  (5) E46-DOC-001: "bit-exata / bit-a-bit" no texto da story contra o que o instrumento prova, que é
+  igualdade de hash quantizado.
+  (6) E46-ARC-002: o replay está preso à versão do código (pool e roster) e não carrega carimbo
+  dela, e `replays/` fica fora do .gitignore.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:7850a7f (implementação). O pai é e279c43 (story da e4.5, só docs), e o código-base é 205e693.
+  fbbf313, o registro do @dev, toca só a story. Durante o gate o HEAD andou para 197047e, o gate da
+  e4.5, que mexe só em docs/qa/gates/e4.5-* e na story da e4.5. `git diff 7850a7f HEAD -- src
+  package.json package-lock.json tsconfig.json` sai vazio, então o código que rodei é o de 7850a7f.
+  7850a7f NÃO está em origin/master (merge-base --is-ancestor rc=1): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2, 7)'
+    verdict: PASS
+    evidence: >-
+      Cópia por `git archive 7850a7f` no scratchpad, com node_modules por junction. Node v24.13.1.
+      `npm run check` deu rc=0, `npm run sim:check` rc=0 e `npm run build` rc=0 (index 65,39 kB). A saída
+      tem "golden hash ✓ ok — 6 seeds batem o baseline", e o diff não toca a lista dourada. A linha da
+      guarda do AC 7, sob `sala pura`: "replay ✓ a Bo5 da sala → bb.replay.v1 (16570 B: 3 rodada(s),
+      141 comando(s) carimbado(s), 14 decisão(ões) aceitas de 16 no log da sala; 5523 B/rodada) →
+      lerReplay + verificarReplay (replay:check): hash/ticks/vencedor/seed/lados iguais em 3/3, placar
+      0-3 … dx trocado e hash stub reprovados · formato ≠ bb.replay.v1 lança · cast no passo da largada
+      gravado no tick 6 · {t:'pronto'} recusado no meio da rodada: no log da sala (9), fora do replay
+      (8)". A Bo5 é a mesma da guarda da e4.3 (bo5PelaSala), como o AC 7 pede. `npm run lint` não
+      existe no projeto.
+  - id: 'Escopo (AC 12)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 7850a7f` lista package.json (+2/−1), src/net/replay.ts (novo, 198),
+      src/server/main.ts (+65/−3), src/tools/determinism.ts (+176/−3) e src/tools/replay-check.ts (novo,
+      197): 638/7. São os 5 do AC 12. Nenhum arquivo de sim/, match/, shop/, bot/, chars/, client/ ou
+      docs/. A story vai no commit separado fbbf313.
+  - id: 'Pureza e setas (AC 11)'
+    verdict: PASS
+    evidence: >-
+      `grep -rnw fs src/net/` dá rc=1, `grep -rn "node:" src/net/` rc=1, `grep -rnwE
+      "ws|document|window|localStorage|Math\.random|process" src/net/` rc=1 e `grep -rnE
+      "Date\.now|performance\.now" src/net/` rc=1. `grep -rnE "from ['\"]\.\./(tools|server|client)/"
+      src/net/` também dá rc=1, então o ciclo tools/ → net/ → tools/ não existe (as duas ocorrências de
+      "tools/" em sala.ts e a de match/types.ts são comentários). net/replay.ts importa só o tipo
+      Command de sim/types, match/ e tipos de ./sala.ts. tools/replay-check.ts importa node:fs,
+      node:path, o tipo RoundSetup, ../net/replay.ts e ./partida.ts. Só determinism.ts importa
+      replay-check. `grep -rn "from '\.\./tools/" src/server/` continua devolvendo 1 linha (hash).
+      server/main.ts lê process.env só para BB_REPLAYS e não lê Sala.partida: quem lê é montarReplay.
+  - id: 'Sem reimplementar a reprodução (AC 3), versão (AC 8), Node e não navegador (AC 6)'
+    verdict: PASS
+    evidence: >-
+      verificarReplay chama reproduzirPartida de tools/partida.ts. comoPartidaGravada só adapta o
+      formato, e o setup é um getter que lança. O aplicar() de net/replay.ts classifica decisão e não
+      roda rodada. FORMATO_DO_REPLAY = 'bb.replay.v1' fica em net/replay.ts, e lerReplay recusa outra
+      versão. A guarda testa v0, v2 e ausente. O comentário do AC 6 está em tools/replay-check.ts:22-31,
+      com §1.5, a Muralha em golem.ts:140, §11.1 (arredondamento não é tolerância) e o |a − b| < ε para um
+      visualizador futuro.
+  - id: 'Partida real do @dev, reexecutada (AC 5, AC 4, AC 9)'
+    verdict: PASS
+    evidence: >-
+      Extraí o script da story. Ele é idêntico a scratchpad/e46-partida-real.mjs, e a única diferença
+      é a porta vir de QA46_PORTA. Rodei na cópia com PORTA_DO_SERVIDOR 5261: 8/8, rc=0. Placar
+      [3,0] em 3 rodadas, 2 085 comandos carimbados, 3 {t:'pronto'} de B recusados ao vivo, e A caiu e
+      reassentou. O aoVivo do arquivo é igual aos rodadaFim dos dois clientes (203cb45f 0f5946f5
+      5e1ee62a). O matchSeed é a seed da visao e não está no log. `npm run replay:check` deu rc=0.
+      Orçamento, medido por mim no arquivo: 241 987 B, 115,5 B/comando, 16 decisões em 716 B.
+  - id: 'Duas partidas simultâneas no mesmo servidor, com reconexão do assento 1 (roteiro próprio)'
+    verdict: PASS
+    evidence: >-
+      qa-e46-conc.mjs sobe um servidor (porta 5271). A e B jogam na sala da 1ª linha "sala criada", e C
+      e D na da 2ª, ao mesmo tempo, com casts dos quatro. B (assento 1) cai e volta pelo segredo no meio
+      da 1ª rodada. Resultado: 8/8. Saíram dois arquivos, um por id. Sala 1: [2,3] em 5 rodadas, 3 005
+      comandos, replay:check rc=0. Sala 2: [0,3], 1 809 comandos, rc=0. Em cada sala o aoVivo é igual
+      aos rodadaFim recebidos, e as seeds são distintas e iguais às da visao de cada sala.
+  - id: 'AC 5 / E43-ARC-001 — hash stub no servidor'
+    verdict: PASS
+    evidence: >-
+      R9, meu: `hashDoMundo: (w) => (hash.length < 0 ? hash(w) : '')`, com tsc 0. A forma `() => ''` do
+      @dev dá TS6133 com noUnusedLocals, e por isso usei esta. sim:check verde por construção, porque a
+      guarda injeta o hash dela. Na partida real, 7/8: o arquivo sai com hashes ['', '', ''], e
+      replay:check dá rc=1 com "rodada 0: hash reproduzido 6bae5a5b != '' ao vivo" nas 3 rodadas. Os
+      hashes "ao vivo" vêm do hash injetado pelo servidor, como o acréscimo v1.5.0 do AC 5 exige.
+  - id: 'Só decisões aceitas (desvio 6 do @dev), conferido'
+    verdict: PASS
+    evidence: >-
+      Conferido por leitura. A recusa por identidade (d.jogador alheio, AC 16) retorna ANTES de
+      decidir() e não entra em Sala.decisoes (sala.ts, case 'decisao'). Toda decisão do log passou por
+      aplicar(n.partida) na ordem do log (decidir, sala.ts:525-540), inclusive as produzidas pela sala
+      (buildPadrao de RF-04, buildPadrao/pronto de R-02). Nenhuma decisão é legal na fase rodada: cada
+      aplicarX tem guarda de fase em redutor.ts, e só registrarRodada vale em 'rodada'. Por isso o
+      consumo "fora da rodada" de reproduzirPartida equivale ao ponto em que a sala aceitou. A tripwire
+      compara o estado inteiro quando nenhuma rodada fecha no passo. Conferido por execução: R1 (gravar
+      as recusadas, a M1 do @dev) dá sim:check rc=1 (14 → 16 decisões) e, na partida real, "ficou sem
+      decisões antes do fim", rc=1. Q2 (classificar contra a partida DEPOIS do passo) dá sim:check rc=1,
+      e a tripwire dispara em 6 salas da guarda. Gravar Sala.decisoes inteiro estaria errado: na Bo5 da
+      guarda o verificador aprova os 16 (as recusadas são no-op na reprodução), e só a contagem da guarda
+      e a partida real, com o 'pronto' no meio da rodada, pegam.
+  - id: 'W.O. de R-02 (desvio 1 do @dev), exercitado'
+    verdict: CONCERNS
+    evidence: >-
+      O @dev não exercitou esse caminho, e eu exercitei de dois jeitos. (a) Servidor real, porta 5272: B
+      cai 1,5 s depois do início da rodada 0 e volta 23 s depois. A pausa estoura, e a rodada 0 fecha por
+      W.O. com 92 ticks. O arquivo é gravado com aoVivo = rodadaFim, e replay:check dá rc=1 com "rodada 0:
+      hash reproduzido 54f945e7 != 7a4cb71a" e "ticks reproduzido 4214 != 92". Nas rodadas 1-2, o
+      placar e os vencedores bateram. (b) Driver puro (passo() com a gravação em volta, como o
+      servidor), W.O. na rodada 1: "placar reproduzido 0-3 != 3-2 ao vivo" e "3 rodada(s) reproduzida(s)
+      != 5". A falha é ALTA, não silenciosa. Ver E46-ARC-001.
+  - id: 'Mutações próprias (11, uma cópia e uma porta por mutação)'
+    verdict: CONCERNS
+    evidence: >-
+      Script qa-e46-mut.mjs no scratchpad: git archive de 7850a7f, porta própria de 5261 a 5272, padrão
+      casando exatamente 1 vez e EOL normalizado. Controles verdes: CTRL (sim + partida real 8/8) e
+      CTRLC (duas salas, 8/8). PEGAS: R1 (sim + real), R9 (real), Q2 (sim). Q3 (reordenar por ballId os
+      comandos do mesmo tick) é pega pela subsequência da guarda, mas o verificador aprova 3/3. Com 3
+      casts por assento em todo passo (driver burst, 22 622 comandos), o verificador também aprova. A
+      ordem entre bolas no mesmo tick não muda o hash, e a conferência de ordem da guarda é mais
+      estrita que o necessário, o que é aceitável. SOBREVIVENTES, que viram achados: Q5, verificação só da
+      rodada 0 (sim verde; aprova dx trocado na rodada 2, com hash d81a3443 ≠ 5e1ee62a e ticks 5545 ≠
+      5249, E46-TST-001). Q15, contagem de rodadas desligada (sim verde; aprova arquivo com uma rodada a
+      mais). Q14, placar desligado (sim verde; o vencedor ainda pega a inversão, então é redundante).
+      Q12, recomeço na queda no draft desligado (sim verde; nociva, E46-TST-002). Q8, gravação única para
+      todas as salas (sim verde, e o roteiro do @dev dá 8/8 e rc=0; só o meu roteiro concorrente pega:
+      "pediu a rodada 4 sem gravação" e "placar reproduzido 1-3 != 3-2", E46-TST-003).
+  - id: 'Orçamento de armazenamento (AC 9, desvio 5 do @dev)'
+    verdict: PASS
+    evidence: >-
+      MET. O AC pede "medido e registrado", e o teste de alarme é "ordens de grandeza a mais → estado
+      gravado". Medi 115,5 B/comando (o @dev mediu 115,6 B) e 16 570 B na guarda. Os comandos são 99,5%
+      do arquivo, e não há World nem snapshot. O 1,4 kB da §1.3 vem de "bytes por comando (tupla
+      quantizada) 26,3 B" (architecture-e4.md:157). Um replay não pode quantizar o comando gravado sem
+      reproduzir outro comando, e por isso o fator de 4,4× é de codificação (JSON com double completo) e
+      não de conteúdo. Na taxa da §1.3, isso dá cerca de 6,3 kB/rodada e 32 kB/Bo5. É mais que os
+      "poucos kB" do texto, mas fica dentro de uma ordem de grandeza e é receita. A estimativa da §7/§1.3
+      é que precisa de nota (observação para o @architect). A lição de e4.2 vale aqui: o limiar herdado
+      pressupõe a codificação do script que o mediu.
+
+top_issues:
+  - id: 'E46-ARC-001'
+    severity: medium
+    category: architecture
+    owner: '@architect (formato v2) + usuário (lista de R-02, via @po)'
+    finding: >-
+      No estouro da pausa de R-02, `estourarPausa` → `encerrarRodada(presente)` registra a rodada com o
+      hash e os ticks do mundo NAQUELE instante. É um fato de relógio de parede que não está na receita
+      (seed + decisões + comandos). O formato bb.replay.v1 não tem como dizer que a rodada acabou por
+      W.O., e reproduzirPartida roda a rodada até o fim natural. Resultado, medido em servidor real e no
+      driver puro: toda partida com uma rodada de W.O. grava um replay que NUNCA verifica, e o
+      replay:check reporta "hash reproduzido 54f945e7 != 7a4cb71a / ticks 4214 != 92", que não se
+      distingue de uma quebra de determinismo. O mesmo vale para a sala encerrada antes de 'fim' ('anular',
+      dois ausentes): "não chegou ao fim da partida". Não é defeito contra os ACs, porque nenhum AC cobre
+      o W.O. e a política de R-02 é provisória. É aceitável nesta story porque a falha é alta e não
+      silenciosa. Mas o "P4.3 sem asterisco" da story passa a ter o asterisco "exceto partidas com W.O.
+      ou encerradas antes do fim".
+    suggested_action: >-
+      @architect: na próxima versão do formato (bb.replay.v2), gravar por rodada como ela acabou
+      (`encerramento: 'natural' | 'wo'`) e, na partida, por que a sala encerrou. O verificador, para
+      'wo', reproduz até aoVivo.ticks e compara o hash nesse tick, ou no mínimo classifica ("rodada de
+      W.O., não reproduzível na v1") em vez de reportar divergência. @po: acrescentar à lista de
+      perguntas de R-02 (e4.4/AC 14) "o que o replay faz com a rodada de W.O.", e registrar na evidência
+      de P4.3 (e4.7) que partidas com queda além do prazo ficam fora da prova de replay, como já ficam de
+      P3.1/P3.2.
+  - id: 'E46-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia; próxima story que abrir determinism.ts ou replay-check.ts)'
+    finding: >-
+      Os canários de poder discriminante da guarda do AC 7 (dx trocado no primeiro comando e hash stub)
+      ficam os dois na RODADA 0, e só exercitam o campo hash. Q5 (`Math.min(1, …)` no laço de
+      comparação por rodada, tsc 0) dá sim:check verde. Sobre o replay real do CTRL, um dx trocado no
+      comando 0 da rodada 2 muda hash e ticks dessa rodada, sem mudar o vencedor. O verificador de hoje
+      reprova, e o verificador Q5 APROVA. Q15 (contagem de rodadas desligada) também passa verde e aprova
+      um arquivo com uma rodada a mais. É a lição da composição fixa (e4.2): o canário prova o caso que
+      ele exercita.
+    suggested_action: >-
+      Acrescentar à guarda um canário na ÚLTIMA rodada (dx trocado num comando que mude o hash dela) e
+      outro com uma rodada a mais no arquivo. Mutações de aceite: Q5 e Q15 têm de dar rc=1.
+  - id: 'E46-TST-002'
+    severity: low
+    category: tests
+    owner: '@po (roteia)'
+    finding: >-
+      `gravarDecisoes` tem um ramo especial para a queda no draft (a sala zera o log e recria a partida,
+      e a gravação recomeça). A guarda roda gravarPasso na sala "queda no draft" só para conferir que
+      não lança, e nunca verifica o replay dela. Q12 (o ramo nunca é tomado: `continua = len >= 0 || …`)
+      dá sim:check verde. No meu driver puro (o jogador da vez escolhe golem, cai, volta e escolhe vex,
+      e a Bo5 segue), o replay de hoje verifica (3-1, 20/20 decisões), e o replay de Q12 sai com 21/20
+      decisões, com "placar reproduzido 0-3 != 3-1". Nesse cenário o verificador acusaria alto. A
+      lacuna é da guarda, que não pega o defeito na hora do sim:check.
+    suggested_action: >-
+      Na guarda: depois da queda no draft, fazer a sala jogar até o fim com uma escolha DIFERENTE da de
+      antes da queda, e passar o replay dela por verificarReplay. Mutação de aceite: Q12 tem de dar rc=1.
+  - id: 'E46-TST-003'
+    severity: low
+    category: tests
+    owner: '@po (roteia; dono natural é quem reusar o roteiro — e4.7)'
+    finding: >-
+      O roteiro de partida real do @dev joga UMA partida por servidor. Q8 (uma GravacaoDeReplay só,
+      compartilhada por todas as salas do servidor, tsc 0) dá sim:check verde e 8/8, rc=0, no roteiro do
+      @dev. No meu roteiro com duas Bo5 simultâneas, os dois replays reprovam ("pediu a rodada 4 sem
+      gravação"; "placar reproduzido 1-3 != 3-2"). O código de hoje está certo: uma gravação por
+      SalaNoServidor, e o CTRLC deu 8/8 com as duas salas verificando.
+    suggested_action: >-
+      Não bloqueia. Em qualquer roteiro de servidor reusado (e4.7), jogar duas partidas ao mesmo tempo e
+      verificar os dois replays. Mutação de aceite: Q8 tem de dar FALHA.
+  - id: 'E46-DOC-001'
+    severity: low
+    category: docs
+    owner: '@po (texto da story) / @architect (se quiser digest sem quantização na v2)'
+    finding: >-
+      O título, o AC 5 ("Verificação bit-exata") e o quality_gate_tools ("reproduz bit-a-bit") prometem
+      mais do que o instrumento prova. O verificador prova igualdade do hash() quantizado, do placar e dos
+      vencedores. Sobre o replay real: dos 40 primeiros comandos da rodada 0, dx+1e-12 é aprovado em
+      38/40 e dx trocado de sinal em 37/40. Só 3 dos 40 comandos mudam o jogo (os outros caem em recarga),
+      e 1 desses 3 passa com +1e-12. Na mesma engine e com JSON exato (round-trip de double), a
+      reprodução é bit-exata por construção, mas o que o replay:check TESTEMUNHA é igualdade de hash. O
+      @dev já escreveu isso na saída do CLI ("prova igualdade de hash, não de cada bit do estado, §11.1").
+      Aceito o desvio: é a formulação honesta.
+    suggested_action: >-
+      @po: trocar "bit-exata"/"bit-a-bit" por "hash idêntico, na mesma engine" no título, no AC 5 e no
+      quality_gate_tools, sem mudar o sentido do AC. Opcional, @architect: se a prova tiver de ser de
+      bits, a v2 grava um digest não quantizado (os bytes Float64 do estado final) no aoVivo.
+  - id: 'E46-ARC-002'
+    severity: low
+    category: architecture
+    owner: '@architect (formato) / @devops ou @po (.gitignore)'
+    finding: >-
+      (a) O replay está preso à versão do código e não diz qual é. O pool não é gravado:
+      reproduzirPartida usa POOL = ['golem','vex'] e o servidor usa Object.keys(CHARS), que conferi ser
+      ['golem','vex'] hoje. Também não há carimbo de build. Um replay antigo verificado depois de uma
+      mudança de roster ou de balanceamento reprova como se o determinismo tivesse quebrado. Não é
+      corrupção silenciosa (o AC 8 cobre a mudança de FORMATO, e não a de engine). (b) `npm run server`
+      sem BB_REPLAYS cria replays/ na raiz do repositório, e o .gitignore não ignora a pasta (`git
+      check-ignore replays/x.json` dá rc=1). Os arquivos carregam matchSeed. O arquivo só é escrito com a
+      sala encerrada, então a seed não vaza durante a partida.
+    suggested_action: >-
+      (a) Na v2, gravar o pool e um carimbo de build (commit do servidor), no espírito da debt.10. O
+      verificador passa a recusar ou avisar quando a versão diferir. (b) Uma linha `replays/` no
+      .gitignore, fora do AC 12 desta story, num chore ou na próxima story que tocar a raiz.
+
+avaliacoes_pedidas:
+  wo_de_r02_nao_reproduz: >-
+    ACEITÁVEL nesta story, e não é defeito contra os ACs. Nenhum AC cobre o W.O., a política de R-02 é
+    provisória e está com o usuário, e a falha é alta: replay:check rc=1, exercitado por mim em
+    servidor real e no driver puro. Mas é um furo de formato com efeito no portão (P4.3 ganha um
+    asterisco), e por isso virou E46-ARC-001 (medium), roteado ao @architect e à lista de R-02.
+  pool_nao_gravado: >-
+    ACEITÁVEL hoje. As duas fontes dão ['golem','vex'] (conferido), e a divergência futura reprova alto,
+    porque o draft recusa o charId fora do POOL. O conserto certo é o formato v2, junto do carimbo de
+    build. Ver E46-ARC-002.
+  hash_quantizado_nao_bits: >-
+    ACEITO. O desvio de redação é o honesto: medi 38/40 aprovados com dx+1e-12. O texto da story é
+    que deve mudar (E46-DOC-001, @po).
+  replays_sem_gitignore: >-
+    Não é defeito da story, porque o .gitignore está fora do AC 12. É LOW operacional, em E46-ARC-002
+    (b).
+  orcamento_5_5_kB_por_rodada: >-
+    NÃO viola o AC 9. O AC pede medir e registrar, e o alarme dele é "ordens de grandeza a mais =
+    estado". Os comandos são 99,5% do arquivo, e o fator de 4,4× por comando vem da codificação JSON sem
+    quantização (a §1.3 mediu uma tupla quantizada, que o replay não pode usar). O "poucos kB" da §1.3
+    fica desatualizado, e isso é observação para o @architect.
+  so_decisoes_aceitas: >-
+    CORRETO, e necessário. Ver "Só decisões aceitas". Gravar Sala.decisoes inteiro reproduziria outra
+    partida quando um 'pronto' recusado no meio da rodada fosse consumido na loja seguinte (R1 e M1 na
+    partida real).
+
+observacoes:
+  - >-
+    O verificador não exige que todas as decisões do arquivo sejam consumidas. Com uma decisão extra
+    depois do fim, ele aprova (reproduzirPartida para em fase 'fim'). É inócuo hoje, porque montarReplay
+    só grava aceitas e nada é aceito em 'fim'. Fica registrado para a v2: conferir `iDecisao ===
+    decisoes.length`.
+  - >-
+    Alinhamento cosmético na saída do sim:check. O commit trocou "  flush        " (8 espaços) por
+    "  flush       " (7), e a coluna da linha flush ficou deslocada em 1 caractere em relação a
+    bo5/replay/assentos. Não afeta nenhuma checagem.
+  - >-
+    O driver puro com 3 casts por assento em todo passo (22 622 comandos, 1 906 recusas de cast) verifica,
+    e isso cobre a gravação de muitos comandos por passo e por tick. A queda no draft com escolha
+    diferente, no código de hoje, também verifica (3-1, 20/20).
+  - >-
+    CodeRabbit não roda nesta máquina (sem WSL/CLI). A cobertura veio de check, sim:check e build, da
+    leitura linha a linha dos 5 arquivos, da partida real do @dev reexecutada, do meu roteiro de duas
+    salas simultâneas, da rodada de W.O. em servidor real, do driver puro (queda no draft, burst, W.O.),
+    de sondas sobre o replay real e de 11 mutações. As cópias e junctions foram removidas (junctions com
+    `.Delete()`, e o node_modules do repositório está intacto). Nenhum processo node do gate ficou de pé,
+    e nenhuma porta de 5261 a 5272 ficou escutando. A árvore compartilhada nunca foi mutada, e não usei
+    5179 nem as portas do gate da e4.5 (5193 a 5197).
+
+waiver: { active: false }
+updated: '2026-09-22T05:55:00Z'
