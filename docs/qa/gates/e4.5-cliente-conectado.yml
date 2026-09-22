@@ -1,0 +1,311 @@
+schema: 1
+story: 'e4.5'
+story_title: '`client/rede.ts` + o modo conectado — buffer, interpolação, e o cliente que não simula'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 14 ACs (v1.10.0) estão MET. Refiz as verificações do zero, sem confiar no Dev Agent Record. check,
+  sim:check e build deram rc=0 numa cópia descartável de 205e693, e o golden hash não mudou. O escopo tem só
+  os dois arquivos do AC 14. Os greps do L-3, de P4.2, de JSON.parse e de instanceof batem. A bateria
+  dirigida do @dev deu 77/77 de novo. Escrevi uma bateria minha de 9 conferências e uma bateria negativa de
+  28 conferências em Chrome headless contra um servidor FALSO: casos i a vi, os três ramos de versão, porta
+  errada, servidor desligado, 4000, teto de reconexão e AC 4. Rodei duas Bo5 contra o servidor real, uma
+  com duas abas no mesmo navegador e outra com perfis separados, reconectando OS DOIS assentos. Também
+  conferi o lado e as bolas do jogador em cada rodada, dos dois assentos, contra o `ladoDoJogador` do
+  rodadaFim. Rodei 21 mutações de rede.ts e 3 de main.ts. Não achei falha de implementação que reprove AC.
+  O veredito é CONCERNS, e não PASS, por dois MEDIUM que precisam de dono fora desta story e por cinco LOW.
+  (1) E45-REQ-001: o segredo de assento em sessionStorage não sobrevive a FECHAR a aba e abrir o link de
+  novo. A tela ainda manda "pedir um link novo" enquanto o assento continua reservado.
+  (2) E45-ARC-001 (F-2): o preview de valor efetivo da loja fica indisponível no modo conectado.
+  Os LOW são E45-DEBT-001 (F-1), E45-UX-001 (F-3), E45-TEL-001 (F-4), E45-UX-002 (F-6) e E45-TST-001. O F-5 é
+  o E44-DOC-001, que continua aberto.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:205e693 (implementação, pai 1d75b8d). e279c43 (registro do @dev) toca só a story. Durante o gate o
+  HEAD andou para fbbf313 (e4.6: 7850a7f + fbbf313). `git diff 205e693 HEAD -- src/client` sai vazio, e o
+  grep das duas cópias da porta em HEAD continua com duas linhas de 5179 (rede.ts:36, server/main.ts:43).
+  205e693 NÃO está em origin/master (merge-base --is-ancestor rc=1): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Cópia por `git archive 205e693` no scratchpad, com node_modules por junction, e Node v24.13.1.
+      `npm run check` deu rc=0, `npm run sim:check` deu rc=0 com "golden hash ✓ ok — 6 seeds batem o
+      baseline" e 0 linhas ✗, e `npm run build` deu rc=0 com index-*.js de 65.39 kB, o mesmo tamanho do Dev
+      Agent Record. O sim:check não carrega client/, e por isso o hash é idêntico por construção, como o AC 2
+      pede ("não deve passar a ser coberto"). `npm run lint` não existe no projeto.
+  - id: 'Escopo (AC 12, AC 14)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat 205e693` lista só src/client/main.ts (+352/-5) e src/client/rede.ts (+466, novo). render,
+      telas, input, layout e telemetria estão intactos, e não há nada em sim/, match/, shop/, bot/, chars/,
+      net/, server/, tools/ nem docs/. Os arquivos da e4.6 ficaram fora do commit.
+  - id: 'Greps do gate (AC 3, AC 5, AC 7, L-3 §6.2)'
+    verdict: PASS
+    evidence: >-
+      Na árvore de 205e693: o grep `^(export )?const PORTA_DO_SERVIDOR = [0-9]+$` dá exatamente 2 linhas,
+      rede.ts:36 e server/main.ts:38, as duas com 5179. O grep dos padrões proibidos em src/client/ dá rc=1. Na
+      seção INÍCIO/FIM DO MODO CONECTADO (318 linhas), um grep mais largo que o do AC 5 dá rc=1: step,
+      createWorld, aplicar, setupDaRodada, registrarRodada, criarPartida, criarPolitica, botCommands,
+      createBot, avancarBot, abrirRodada, fecharRodada, decidir, aplicarDecisao, novaPartida e render(.
+      rede.ts também dá rc=1. `JSON.parse` em src/client/ só aparece em telemetria.ts:193, que é anterior à
+      story e lê o localStorage, não o fio. `instanceof DescompassoDeVersao` aparece só em rede.ts:259.
+      `.message` só aparece dentro do console.error (rede.ts:256), e `motivo` só em console.error
+      (:319/:325). SNAPSHOT_HZ aparece só em 2 comentários, sem import. HUMANO/BOT/partida/world não aparecem
+      na seção conectada (só em comentários).
+  - id: 'Bateria dirigida do @dev, reexecutada, e a minha (AC 3, 7, 8, 11)'
+    verdict: PASS
+    evidence: >-
+      dev-harness.mjs (cópia de rede-harness.mjs) contra o rede.ts da cópia: 77 ok, 0 falhas. A minha,
+      qa-e45-h.mjs, deu 9/9. Ela confere que um projétil que só existe no snapshot seguinte não aparece antes
+      e que x/vx interpolam, e que o segredo é por sala (outra sala entra sem ele). Confere também que 7 quedas
+      com reassentamento entre elas nunca desistem (o teto é de tentativas seguidas), que o rodadaInicio
+      esvazia o buffer, que as decisões enfileiradas na queda só saem depois do {t:'sala'} da nova conexão e
+      que um {t:'erro'} na conexão de reconexão dá o aviso linkInvalido e para.
+  - id: 'Bateria negativa em navegador real, servidor FALSO (AC 3 i–vi, AC 4, AC 11)'
+    verdict: PASS
+    evidence: >-
+      Script qa-e45-neg.mjs com 28 ok e 0 falhas. Chrome headless por CDP, Vite na 5194 e um servidor falso de
+      protocolo na 5193 (as duas cópias da constante trocadas para 5193 na cópia). O id da sala escolhe o
+      cenário. AC 4: sem hash, com `#/sala/`, com `#/sala/abc/extra` e com `#/outra/abc` a página abre o modo
+      local, com 0 sockets ao jogo e a tela "Draft". Com o link, abre 1 socket a `ws://localhost:5193/`, sem a
+      porta do Vite, e a 1ª mensagem é `{"t":"entrar","sala":"qualquer"}`. Casos i, ii, iii e snapshotHz 7:
+      1 socket, fechado pelo cliente, com console.error e sem aviso. Caso iv, com a tela lida no DOM: versão
+      3 dá "Página desatualizada … versão 2 … versão 3. Recarregue". Versão 1 dá "Servidor desatualizado …
+      Recarregar não resolve". Sem versão, e com a versão "2" em string, dá "… sem versão …". Caso v: "Este link
+      não abre uma sala", com o motivo só no console. Um erro depois do {t:'sala'} fica só no console, e a
+      conexão continua aberta. Caso vi: o servidor fecha sem sala, a porta errada (cliente em 5197) e o
+      servidor desligado dão todos "Servidor não alcançado", com o endereço tentado, e ficam em 1 socket por
+      6,5 s. AC 11: o código 4000 dá "Partida aberta em outro lugar" com 1 socket. Estado encerrada seguido de
+      queda não reconecta nem avisa. Queda de quem já sentou reconecta com
+      `{"t":"entrar","sala":…,"assento":"SEG-QA"}`. Uma reconexão recusada dá linkInvalido. O teto deu 6
+      sockets (1 + 5), depois "Servidor não alcançado", e continuava em 6 três segundos depois.
+  - id: 'Duas abas, Bo5 completa, servidor real (AC 13, 4, 5, 6, 8, 10, 11; RF-05)'
+    verdict: PASS
+    evidence: >-
+      qa-e45-bo5.mjs contra `npm run server` da cópia (porta 5193 nas duas cópias da constante). Duas corridas.
+      (1) Duas abas no mesmo navegador: 3—1 em 4 rodadas. (2) Perfis separados: 0—3 em 3 rodadas, 22/22. Link
+      montado com a PRIMEIRA linha de log (ex.: `sala criada: id=b7KnvZ6dpQchVIdlmmBFdg`). Quando A senta, o
+      servidor escreve outra linha, e B usa a primeira. A é o jogador 0 e B o jogador 1. Uma 3ª aba recebe
+      "Este link não abre uma sala". Nas duas corridas: todas as decisões de A saem com jogador 0 e todas as de
+      B com jogador 1. 345/327 e 264/277 casts, 0 com tick. As 3 visões de builds de cada aba não trazem nenhum
+      personagem do oponente com abilityIndex/passiveIndex/revelado (RF-05). Nenhum {t:'evento'} traz o
+      jogador do outro assento. LADO: em cada rodada, entre 243 e 320 amostras do gancho só-leitura __qa por
+      aba, e em todas `ladoConectado` e as 2 bolas de `minhasBolasConectado()` batem com
+      `rodadaFim.ladoDoJogador[eu]`, para A e para B (0 erradas), com o lado alternando 0/1/0/1. AC 8: da
+      chegada do rodadaFim à tela de fim passam 46–84 ms, na ordem do ATRASO_DE_BUFFER de 83 ms a 30 Hz. O
+      snap anterior a cada rodadaFim traz o roundEnd. O prazo de RF-04 contou até "Builds 1s", e o
+      buildPadrao:j1 veio do servidor. Sala acabada: uma aba nova no link recebe "Este link não abre uma sala".
+  - id: 'Reconexão dos DOIS assentos (AC 11)'
+    verdict: PASS
+    evidence: >-
+      Lição de E44-TST-001 aplicada. Assento 0 (A), no meio da rodada 2, sai para about:blank e volta 3 s
+      depois. Volta como jogador 0, com o mesmo placar e a mesma rodada, fase rodada, overlay fechado, entrar
+      com segredo, e `sala, visao, rodadaInicio, …` na ordem. Assento 1 (B) recarrega na loja (Page.reload).
+      Volta como jogador 1, com o mesmo placar, fase loja e entrar com segredo. As duas partidas terminaram
+      depois disso. Nenhuma linha de reconciliação no cliente.
+  - id: 'Telemetria por assento (AC 10)'
+    verdict: PASS
+    evidence: >-
+      Perfis separados, com os dois assentos reconectados. O export de A tem cast ×264 (todos casam com os 264
+      casts que A mandou e nenhum com os de B), rodadaFim ×3, partidaFim ×1 e compra:j0 ×1. O de B tem cast ×277
+      (todos de B), buildPadrao:j1 ×1, rodadaFim ×3, partidaFim ×1 e compra:j1 ×1. A seed é a mesma da visão
+      (3603958711). Todo rodadaFim tem controle ["humano","humano"], como veio, e todo cast tem anguloErro
+      numérico. No mesmo navegador, o F-4 se reproduz (E45-TEL-001).
+  - id: 'F-1: a troca de jogadores de visaoParaATela'
+    verdict: PASS
+    evidence: >-
+      Leitura: a cópia é só da visão entregue a desenharTela, só na fase draft e só com j !== 0. A troca muda
+      draft.ordem e draft.escolhas[].jogador por `rel(x) = x === j ? 0 : 1`, e draft.passo/pool não mudam.
+      telaDraft lê só ordem[passo], escolhas e pool. prontos, eu/oponente e historico não são trocados, e
+      telaBuilds/telaLoja usam `ctx.humano = eu`, o jogador verdadeiro. As decisões saem por
+      `decidirConectado(montar(eu))`. Execução: nas duas Bo5, a tela de B diz "Sua vez de escolher." e habilita
+      2 botões exatamente quando `ordem[passo] === 1` no fio, e desabilita no passo 3. Mutação M1 (sem troca):
+      o draft trava, e a rodada não chega em 40 s. Mutação M2 (decisão com jogador 0): a sala recusa com
+      "decisão em nome do jogador 0 vinda do assento do jogador 1". O único efeito que sobra é o rótulo
+      "j0: …" da dica, que no assento 1 aponta para o próprio jogador.
+  - id: 'F-7: fechar a aba de verdade'
+    verdict: CONCERNS
+    evidence: >-
+      O @dev "fechou" navegando para fora. Eu fechei com Target.closeTarget no meio da rodada 1. (a) Uma aba
+      nova e vazia no mesmo link manda `{t:'entrar'}` SEM segredo e recebe "Este link não abre uma sala — … Peça
+      um link novo", embora o assento dela continue reservado pela pausa de R-02. (b) Uma aba nova com o
+      sessionStorage restaurado antes da carga, que é o que o Ctrl+Shift+T faz, volta como jogador 1: `sala,
+      visao, rodadaInicio`, fase rodada, overlay fechado. O mecanismo do AC 11 funciona com o segredo. O que
+      falta é o segredo sobreviver ao fluxo natural do celular da e4.7, em que a pessoa fecha a aba e toca o
+      link de novo. Ver E45-REQ-001.
+  - id: 'Mutações próprias (21 em rede.ts, 3 em main.ts, cópias descartáveis)'
+    verdict: CONCERNS
+    evidence: >-
+      rede.ts (qa-e45-mut.mjs): cada mutação roda numa cópia própria de src/, o padrão tem de casar exatamente
+      uma vez e o EOL é normalizado. O CTRL ficou verde nas duas baterias. Estas são pegas pela bateria do
+      @dev: R1 (taxa compilada 30 no lugar do snapshotHz), R2 (hp interpolado), R3 (zonas de b), R5 (catch sem
+      desistir, que reconecta), R6 (erro depois do sala fecha), R9 (ramo 1 sem typeof, e "3" vira
+      recarregue), R10 (sem teto), R11 (sem zerar tentativas), R12 (segredo global), R15 (reconecta depois de
+      encerrada), R16 (fila sai no open, antes do entrar), R17 (cast enfileirado), R20 (exibiuOUltimo sempre
+      true), R21 (sem eventos na chegada, rc=1), R24 (4000 reconecta), R25 (location.host) e R26 (sem
+      realinhar). Verdes na bateria do @dev e pegas só pela minha (E45-TST-001): R4 (lista de projéteis vinda
+      do snapshot seguinte), R23 (buffer não esvaziado no rodadaInicio) e R27 (erro na conexão de reconexão
+      não dá aviso nem para). R19 (sem o Math.max monotônico) passa verde nas duas: o shift do buffer já
+      impede o instante desenhado de voltar, e só `exibiuOUltimo` perderia a monotonicidade. Quase
+      equivalente, fica como observação. main.ts, pelo roteiro curto qa-e45-draft.mjs: o CTRL chega à rodada
+      com B no lado 1 e as bolas 3 e 4 do time 1. M1 e M2 estão acima. M3 (`ladosDaVisao(visao)[0]`, que
+      assume HUMANO=0 no lado): o roteiro acusa "B (jogador 1): lado 0, bolas do time 0".
+
+top_issues:
+  - id: 'E45-REQ-001'
+    severity: medium
+    category: requirements
+    owner: '@po (roteia; a escolha de armazenamento é do @architect)'
+    finding: >-
+      Decisão autônoma 1 do @dev: o segredo de assento fica em sessionStorage por sala. Ela resolve o AC 13
+      (duas abas do MESMO navegador seriam derrubadas uma pela outra com localStorage), mas o segredo não
+      sobrevive a fechar a aba e abrir o link de novo. É o fluxo natural no celular da e4.7 (fechar e tocar o
+      link no chat). Medido: com a aba fechada, uma aba nova recebe a tela do caso v, "A sala não existe, já
+      acabou ou está cheia. Peça um link novo…", enquanto o assento continua reservado e o W.O. corre pela
+      pausa de R-02. A mensagem manda o jogador fazer a coisa errada. O AC 11 fica MET com o segredo presente
+      (recarga, navegação e Ctrl+Shift+T, que restaura o sessionStorage, medidos), mas o texto "fechar a aba
+      … e reabrir" só vale pela restauração.
+    suggested_action: >-
+      Não bloqueia a e4.5. Decidir antes da coleta da e4.7. Opções: (a) localStorage por sala, com a
+      reivindicação da aba resolvida de outro jeito (a derrubada 4000 já existe); (b) aceitar a restauração e
+      mudar o texto do caso v para mencionar que "se você já estava nesta partida, reabra a aba fechada"; (c)
+      registrar a limitação no roteiro da e4.7. O @architect escolhe o armazenamento, e o @po escreve o AC.
+  - id: 'E45-ARC-001'
+    severity: medium
+    category: architecture
+    owner: '@architect (canal do StatBlock base) → @po (story)'
+    finding: >-
+      F-2, confirmado nas duas Bo5: no modo conectado, todo item da loja mostra "efeito indisponível". O
+      preview de valor efetivo (§7.3 de architecture-e3, "o ponto desta tela") depende de
+      `ContextoDaTela.basePorChar`, colhido de um World local, e o contrato de telas.ts:55-62 supõe que "uma
+      bola sempre existiu". No modo conectado não existe World (AC 5). O `base` é classe 3, fora do Snapshot e
+      do EstaticoDaRodada (protocolo.ts:95), e makeBall é privado em sim/world.ts:103. Não viola nenhum AC da
+      e4.5: nenhum AC pede o preview, e o AC 5/12/14 proíbe todas as correções possíveis aqui. Mas é uma
+      regressão de requisito da Fase 3 exatamente no modo em que a Fase 4 é jogada, e o jogador volta a pagar
+      por um bônus que o teto come sem ser avisado.
+    suggested_action: >-
+      O @architect decide o canal: o base por charId no EstaticoDaRodada ou no {t:'sala'} (com bump de
+      VERSAO_DO_FIO), ou a derivação de makeBall extraída de sim/ para uma função pura importável pelo
+      cliente. Não use createWorld no cliente para colher o base, porque isso reabriria P4.2. Depois o @po
+      escreve a story.
+  - id: 'E45-DEBT-001'
+    severity: low
+    category: tech-debt
+    owner: '@po (na próxima story que abrir client/telas.ts)'
+    finding: >-
+      F-1. O @dev classificou como MEDIUM. Eu rebaixo para LOW porque o contorno está correto e tem dente
+      (ver verificação F-1, M1/M2). O débito que sobra é telaDraft comparar `daVez` com o literal 0
+      (telas.ts:102/:113), com o adaptador de main.ts compensando. O efeito visível é só a dica "j0: golem"
+      rotular o próprio jogador como j0 no assento 1.
+    suggested_action: >-
+      Quando telas.ts abrir, trocar `0` por `ctx.humano` em telaDraft (e na dica) e apagar visaoParaATela. O
+      M1 deste gate vira o teste de aceite: sem adaptador, o draft do assento 1 não pode travar.
+  - id: 'E45-UX-001'
+    severity: low
+    category: ux
+    owner: '@po (quando render.ts abrir; @ux-design-expert no texto)'
+    finding: >-
+      F-3, confirmado por leitura: o HUD de render.ts rotula o oponente como "BOT" também no modo conectado,
+      contra humano. render.ts está congelado pelo AC 12.
+    suggested_action: >-
+      Um campo de rótulo em OpcoesRender, na story que abrir render.ts.
+  - id: 'E45-TEL-001'
+    severity: low
+    category: telemetry
+    owner: '@po (protocolo de coleta da e4.7 / debt.9)'
+    finding: >-
+      F-4, reproduzido. Duas abas no mesmo navegador com recarga: o export de B tem 338 casts, dos quais 106
+      são de A e 232 de B. 95 casts de B e o buildPadrao:j1 se perderam. Com perfis separados, os exports
+      saem limpos. Agravante que o @dev não citou: `cast` não tem campo `jogador`, e por isso a conferência do
+      AC 10 (nenhum compra/trocaDeBuild/buildPadrao de outro assento) passa verde num export contaminado.
+    suggested_action: >-
+      Registrar no roteiro de coleta da e4.7/debt.9 que cada assento usa aparelho ou perfil de navegador
+      próprio, e conferir a contaminação cruzando os casts do export com o fio (o método deste gate). A
+      correção no coletor é de uma story que abra telemetria.ts.
+  - id: 'E45-UX-002'
+    severity: low
+    category: ux
+    owner: '@po (opcional)'
+    finding: >-
+      F-6, medido. Nos casos i, ii, iii e com snapshotHz 7, a conexão fecha e a tela fica em "Conectando…" ou,
+      no caso iii, em "Aguardando o oponente…". Cumpre o AC 3 ("basta o console.error"), mas no celular
+      "Aguardando o oponente…" com a conexão morta é enganoso.
+    suggested_action: >-
+      Se o @po quiser, um aviso genérico ("conexão encerrada por erro de protocolo; recarregue") em
+      fecharPorNos, sem texto de erro. É uma linha em rede.ts mais um caso em mostrarAviso.
+  - id: 'E45-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia)'
+    finding: >-
+      Três mutações nocivas passam verdes na bateria do @dev (77/77) e só a minha as pega. R4: projéteis que
+      só existem no snapshot seguinte aparecem antes da hora. R23: o buffer da rodada anterior não é esvaziado
+      no rodadaInicio. R27: uma reconexão recusada com {t:'erro'} deixa o jogador sem aviso nem desistência.
+      As duas baterias vivem só no scratchpad, e o cliente não tem teste no repositório. Uma regressão
+      futura em rede.ts só aparece em teste manual.
+    suggested_action: >-
+      Numa story futura, levar a bateria de rede.ts (WebSocket, location, sessionStorage e relógio falsos,
+      que roda em Node strip-only) para src/tools/, com as conferências Q1–Q6 deste gate. Mutações de aceite:
+      R4, R23 e R27 têm de dar FALHA.
+
+avaliacoes_pedidas:
+  F-1: >-
+    Troca correta: não troca nada que vá ao servidor, e só a visão da tela do draft no assento 1 muda.
+    Verificado por leitura, pelas duas Bo5 e pelas mutações M1/M2. Rebaixado para LOW (E45-DEBT-001).
+  F-2: >-
+    Não viola AC da e4.5. É uma regressão de requisito da Fase 3 que precisa de canal decidido pelo
+    @architect. MEDIUM, E45-ARC-001.
+  F-3: 'Confirmado. LOW, E45-UX-001.'
+  F-4: >-
+    Reproduzido, e com um agravante: o filtro do AC 10 é cego à contaminação de casts. LOW, E45-TEL-001, com
+    nota para o protocolo de coleta da e4.7.
+  F-5: >-
+    É o E44-DOC-001, ainda aberto: em HEAD fbbf313, src/server/main.ts:40 ainda diz "L-3, em aberto na e4.5".
+    O dono é a próxima story que abrir src/server/main.ts (e4.7/AC 11). Sem ID novo.
+  F-6: 'Medido. Cumpre o AC 3. LOW, E45-UX-002.'
+  F-7: >-
+    Exercitado com fechamento real (Target.closeTarget). Com a aba restaurada, o jogador volta. Com uma aba
+    nova, perde o assento e recebe uma mensagem enganosa. Elevado para MEDIUM, E45-REQ-001.
+  decisoes_autonomas: >-
+    1 (sessionStorage por sala): aceita para o AC 13, com a consequência em E45-REQ-001. 2 (1 s, 5 tentativas
+    seguidas): aceita, medida (6 sockets e parada) e com zeragem a cada {t:'sala'} provada por Q3. A janela
+    de ~5 s é mais curta que a pausa de 20 s de R-02, mas o aviso manda recarregar, e a recarga reapresenta
+    o segredo. É lever para a e4.7 medir. 3 (4000 sem reconexão): aceita, medida. 4 (queda depois de
+    encerrada): aceita, medida. 5 (cast sem assento descartado): aceita, e R17 é pega. 6 (jitter 50 ms,
+    realinhamento em 500 ms): aceita como ponto de partida da e4.7, e R26 é pega. 7 (listas e estado discreto
+    do anterior): aceita, é a leitura literal do AC 8, e R3/R4 são pegas. 8 (a tela de fim espera o último
+    snapshot, e o cast fica bloqueado nesse intervalo): aceita, medida em 46–84 ms. 9 (status no overlay):
+    aceita, ver E45-UX-002. 10 ("Nova partida" → reload): aceita, dentro do AC 4 (sem tela de criação), mas a
+    tela seguinte é a de "link inválido", que parece erro. Fica como observação. 11 (espaço sem efeito):
+    aceita. 12 (ladosDaRodada via cast `as EstadoPartida`): aceita, porque evita a segunda fonte de verdade de
+    lado, e M3 prova que o lado é conferido. O cast é frágil se ladosDaRodada passar a ler outro campo.
+    Fica como observação.
+
+observacoes:
+  - >-
+    O único ✗ da corrida no mesmo navegador foi uma corrida do MEU roteiro, e não do código. A observação do
+    draft leu o `sub` numa avaliação e os botões em outra, e um {t:'visao'} redesenhou a tela entre as duas
+    (sub do passo 0 e botões do passo 1). O dump mostra B coerente nos passos 2 e 3. A corrida com perfis
+    separados deu 0 divergências, e a M1 prova que a conferência tem dente.
+  - >-
+    Quando o prazo de RF-04 estoura, `segundoDesenhado` fica com o último segundo das builds, e
+    frameConectado chama telaConectada a cada quadro durante a rodada, e ela só remove a classe `show`. É
+    inócuo, e fica registrado para quem mexer no laço conectado.
+  - >-
+    AC 7 a 20 Hz: coberto pelas duas baterias em Node (150 ms a 20 Hz e 83,33 ms a 30 Hz), com R1 pega pelas
+    duas. Não rodei o servidor real a 20 Hz, porque o override de taxa é da e4.7.
+  - >-
+    CodeRabbit não roda nesta máquina (sem WSL). A cobertura veio de check, sim:check e build, da leitura linha
+    a linha de rede.ts e do diff de main.ts, das baterias em Node (77 + 9), da bateria negativa em navegador
+    (28), de duas Bo5 (21/22 com a corrida do roteiro explicada, e 22/22), do experimento de fechamento real e
+    de 24 mutações.
+  - >-
+    Higiene: tudo rodou em cópias no scratchpad (qa-e45/), com portas 5193–5210 e CDP 9345–9353. A 5179 do
+    servidor da e4.6 não foi tocada. Os processos que subi foram mortos com taskkill /T. Depois do gate,
+    nenhuma porta minha ficou escutando e nenhum processo com qa-e45 na linha de comando ficou vivo. O único
+    Chrome em escuta (9349) é de outro perfil, que não é meu. A árvore compartilhada não foi mutada.
+
+waiver: { active: false }
+updated: '2026-09-22T05:45:00Z'
