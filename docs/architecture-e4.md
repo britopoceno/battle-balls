@@ -21,6 +21,9 @@
 > assento, com `VERSAO_DO_FIO` 2, e a pausa de R-02 à espera de R-02**; E43-DOC-006, nota da §2.2; §0,
 > §9, §11.6.1, §12/R-02, Anexos A e B). · 2026-09-21 (DEBT12-ARC-001, gate de `debt.12` — **errata de
 > `'shield'` na amostra do fio**, sem subir versão, na §11.6.1; ponteiro de §12/R-02 para `e4.4`/AC 14).
+> · 2026-09-22 (O-2 do @po, revalidação de `e4.4` v1.9.0 — **§6.1: canal de criação de sala decidido**,
+> o servidor cria a sala sozinho e o id sai no log, sem mudar o fio; achados L-1 a L-3; §0, §6, §12/R-07,
+> Anexo A).
 
 ---
 
@@ -31,7 +34,7 @@
 | RF-37 — servidor Node autoritativo importando `sim/` | §3 | Fechado. A sala é **pura**, com relógio injetado — mesma disciplina de `match/` (§2.6 de E3) |
 | RF-38 / P4.1 — input delay de 6 ticks | §4 | Fechado. O atraso é agendado **no servidor**, e o cliente perde o direito de escolher o tick |
 | RF-39 — interpolação entre snapshots | §5 | Fechado em forma. **Taxa é lever medido no aparelho** (P4.4), não número decidido aqui |
-| RF-40 — sala por link | §6 | Fechado. Reconexão sai **de graça** do modelo autoritativo |
+| RF-40 — sala por link | §6 | Fechado. Reconexão sai **de graça** do modelo autoritativo. *(2026-09-22, §6.1: **quem cria a sala é o servidor**, sem pedido de cliente; o id sai no log de operação; o fio não muda. O-2 do @po)* |
 | RF-41 / P4.3 / D-08 — replay = seed + linha do tempo | §7 | Fechado, **com uma ressalva medida**: bit-exato só vale dentro da mesma engine (§1.5) |
 | RF-42 / P4.2 — anti-cheat | §8 | Fechado pela via mais barata: em rede o cliente **não simula**. Não há o que validar |
 | Segredo da build (§13.6 de E3 — "convenção reforçada por tipo") | §8.2 | **Fecha aqui.** `visaoPara` deixa de ser convenção e vira fato de fio |
@@ -1120,6 +1123,169 @@ fase:  aguardando ──(2 assentos ocupados)──▶ jogando ──(partidaFim
   *(2026-09-21, §11.6.1: a reconexão é de graça para o ESTADO. A IDENTIDADE é o segredo de assento,
   que chega em `{t:'sala'}.assento`. Por isso o `{t:'sala'}` é mensagem por assento, nunca broadcast.)*
 - **Desconexão durante a rodada é decisão de produto**, não de arquitetura. Ver §12/R-02.
+- *(2026-09-22, §6.1)* **Quem cria a sala é o próprio servidor**, sem pedido de cliente. O id chega ao
+  primeiro jogador pelo log de operação do servidor, e daí pelo link.
+
+### 6.1 Quem cria a sala, e como o id chega ao primeiro jogador *(decisão, 2026-09-22, O-2 do @po, `e4.4` v1.9.0)*
+
+> **Nome.** Esta é a **O-2 do @po**, aberta na revalidação de `e4.4` (v1.9.0, `1f6bd65`, AC 6). A
+> "Observação O-2" da §11.6.2 (a seed da partida já está no fio) é **outro item** e continua como está.
+> Quando houver ambiguidade, esta é a "O-2 (canal de criação de sala)" e aquela é a "O-2 (seed no fio)".
+
+**A pergunta.** A §6 diz que o id é gerado pelo servidor e dá a forma do link. Nenhum documento diz
+**quem pede** a sala nem **por onde** o id gerado chega a quem vai compartilhar o link. O cliente não tem
+como pedir: `DoCliente` é fechado (`src/net/protocolo.ts:125-150`) e a única porta de entrada,
+`{t:'entrar'; sala: string; assento?}` (`:134`), já exige o id. Na volta, o `{t:'sala'}` (`:177-184`)
+não tem campo de id.
+
+**Medido nesta sessão** (Node 24.13.1, sonda descartável fora de `src/`, contra o código de `1f6bd65`):
+
+| sonda | resultado | o que diz |
+|---|---|---|
+| `parseDoCliente({t:'entrar', sala:''})` | `{"t":"entrar","sala":""}` | a convenção "entrar sem id = criar" passaria no parser **hoje**, sem mudar uma linha. É barata na entrada, e por isso é armadilha |
+| `parseDoCliente({t:'entrar'})` / `({t:'criar'})` | `null` / `null` | sem id, ou com `t` novo, o parser recusa. Um canal pelo fio precisa de mudança em `codec.ts` |
+| `decodificarDoServidor` de um `{t:'sala'}` com `id:'abc'` a mais | passa, e **devolve o `id`** | um id acrescentado ao `{t:'sala'}` sem subir `VERSAO_DO_FIO` chegaria ao cliente em silêncio. É o caso (iii) do critério da descida permissiva (§11.6.1, adendo E49-REQ-004): funciona, e o erro aparece longe da causa |
+| `parseDoCliente({t:'entrar', sala:'a'.repeat(10000)})` | aceito | o parser não limita o tamanho do id. Não é defeito do parser (a forma é `string`), mas o teto do quadro fica com o servidor. Ver "Achados laterais" |
+| `sala.ts:391-398` (`assentar`) | uma chave desconhecida vira assento **novo**, com essa string como chave | quem decide qual string vira segredo é a fronteira, e ela não pode ser a string que o cliente mandou. Ver "Achados laterais" |
+| `sala.ts:413-415` e `:418-427` (`cair`) | queda em `aguardando`, ou no `draft`, libera o assento e a sala volta a `aguardando` | uma sala pode voltar a ter zero assentos. O ciclo de vida abaixo conta com isso |
+
+**Opções, com o custo medido de cada uma:**
+
+| | canal | muda o fio? | escopo que reabre | superfície nova | serve `e4.4`/AC 10 · `e4.5`/AC 13 · `e4.7`/AC 1? |
+|---|---|---|---|---|---|
+| **A** | rota HTTP no mesmo processo (`POST` → `{id}`), antes do WebSocket | não | `e4.5`/AC 12 e 14: um botão "criar sala" pede tela (`telas.ts` está na lista que não muda) e é tela que nenhum documento desenhou (§0: telas de sala são do @ux-design-expert) | endpoint sem autenticação que **aloca memória por pedido**: precisa de teto e de política de CORS (o cliente vem do Vite, `:5177`, ou do Pages, e o servidor tem outra origem) | sim · sim, com UI nova · sim |
+| **B** | variante nova `{t:'criar'}` em `DoCliente` + id no `{t:'sala'}` | **sim**: `VERSAO_DO_FIO` 2 → 3, entrada 3 em `FIO_CONGELADO`, `parseDoCliente`, `T_DO_CLIENTE`, `receber` de `sala.ts:448` | `e4.4`/AC 13 (proíbe `src/net/`) **e** uma story nova de `net/` antes da Task 2, com guarda e mutações | a mesma alocação por pedido de A, agora dentro do fio | sim · sim, com UI nova · sim |
+| **C** | convenção: `{t:'entrar', sala:''}` = criar | **sim**, de forma escondida: muda o **significado** de um campo (regra da §11.6.1: sobe a versão) e ainda precisa do id na volta, que é B | igual a B, sem a honestidade de B | igual a B | igual a B |
+| **D** | **o servidor cria a sala sozinho** e escreve o id no log de operação | **não** | **nenhum**: tudo em `src/server/main.ts` | **nenhuma**: não existe pedido de criação, logo não existe criação a pedido de estranho | sim · sim, colando o link nas duas abas · sim, com quem sobe o servidor passando o link |
+
+**Decisão: D, para a Fase 4.** O servidor é o único que cria sala, e cria sem pedido de ninguém.
+
+1. **Ciclo de vida.** O servidor garante que existe sempre **ao menos uma sala livre**: fase
+   `aguardando` e os dois assentos `null`. Ele cria a primeira na subida. Quando a sala livre mais nova
+   recebe o primeiro assento, o servidor cria a próxima. Uma sala que volta a zero assentos
+   (`sala.ts:413-415`, `:418-427`) volta a ser livre, e quem tem o link dela pode entrar. Uma sala
+   `encerrada` sai do mapa **depois** de escritos os envios do passo em que encerrou (`e4.4`/AC 16).
+2. **O id chega pelo log.** Toda sala criada gera **uma linha de log de operação**, no mesmo canal do
+   log do teto de passos (`e4.4`/AC 5), com o id e o caminho `/#/sala/{id}`. O servidor não sabe de que
+   origem o cliente vai ser servido (Vite na LAN, Pages), então não escreve a URL inteira. Quem abre o
+   servidor copia o id e manda o link.
+   - ⚠️ **SEGURANÇA — a linha tem o id e nada mais.** O id é público por desenho (está no link). O
+     segredo de assento e a seed da partida **nunca** vão ao log: o segredo reassenta e derruba a
+     conexão dona (`e4.4`/AC 7), e a seed determina a partida (§7). Um log copiado para um chat ou
+     para a evidência de `e4.7` vira canal de vazamento se tiver qualquer um dos dois.
+3. **Entrar numa sala que não existe é recusado, nunca vira criação.** `{t:'entrar', sala}` com id fora
+   do mapa (nunca criado, ou já descartado por `encerrada`) → `{t:'erro'}` só para aquela conexão. A
+   conexão não é assentada e nada chega a sala nenhuma. É este item que faz valer, no código, "o cliente
+   não escolhe o id": sem ele, um servidor que criasse a sala ao ver um id novo deixaria o cliente
+   escolher o id, e com ele a colisão com uma sala alheia.
+4. **O que o servidor lê da sala.** Para o ciclo de vida, `server/` lê `Sala.fase` (a fase **da sala**,
+   `aguardando | jogando | encerrada`, `sala.ts:165`) e se `Sala.assentos` está vazio. Nunca lê
+   `Sala.partida`. Não é regra de jogo, e não esbarra no AC 4 de `e4.4`, que reprova `if` sobre fase **de
+   partida**, ouro, vitória ou dano. O @qa distingue as duas pelo campo lido.
+5. **Tamanho do id.** `node:crypto`, como `e4.4`/AC 6 já exige, com **128 bits**:
+   `randomBytes(16).toString('base64url')`, 22 caracteres, cabe no link sem escape. O mesmo tamanho para o
+   segredo de assento. A seed sai da mesma fonte, sorteada à parte, com os 32 bits que o gerador usa
+   (`OpcoesDaSala.seed` em `sala.ts:147`; `mulberry32` faz `seed >>> 0` em `sim/rng.ts:7`). 128 bits é o que torna inútil adivinhar o id de uma sala livre para
+   sentar nela. A fonte continua sendo requisito do @po (AC 6). O tamanho é recomendação: menos que
+   64 bits reprova, e o executor não precisa de outra decisão.
+6. **O fio não muda.** `DoCliente`, `DoServidor`, `codec.ts` e `VERSAO_DO_FIO = 2` ficam como estão. Nenhuma
+   entrada nova em `FIO_CONGELADO`.
+
+**Por que D e não A, que é a opção "de produto".** A é o canal certo **se** um jogador tiver de criar sala
+sem ninguém subindo o servidor por ele. Nenhum documento pede isso. O PRD diz "sala por link" (RF-40,
+`docs/prd.md:319`) e a §6 diz "sem contas, sem matchmaking". As três stories que precisam de dois jogadores
+na mesma sala têm um operador presente: o `@dev` com dois clientes de protocolo (`e4.4`/AC 10), o `@dev`
+com duas abas (`e4.5`/AC 13) e o usuário que deixa o servidor acessível em rede real (`e4.7`, Task 1). A
+traria agora um botão que nenhuma tela desenhou, um endpoint que aloca memória para qualquer um que o
+chame, e uma política de CORS para escolher. D não fecha a porta para A: a rota entra depois no mesmo
+processo, **sem subir a versão do fio**, e o ciclo de vida do item 1 continua servindo. A escolha entre
+ficar em D ou abrir A é de produto, e está em §12/R-07.
+
+**Por que não B nem C.** Os dois mudam o fio para resolver um problema que não é do fio. B é honesto: sobe
+a versão, reabre o AC 13 de `e4.4` e exige uma story de `net/` com guarda antes da Task 2. C faz a mesma
+mudança sem declarar. A sonda acima mostra que o parser já aceita `sala:''` e que o decodificador já deixa
+passar um `id` a mais. C "funcionaria" sem subir a versão, e é exatamente o caso que a §11.6.1 proíbe.
+
+**Trade-offs aceitos por D, registrados:**
+- **Não há autosserviço.** Com o servidor hospedado e sem ninguém lendo o log, ninguém cria sala. Para a
+  Fase 4 isso não custa nada, porque ninguém hospeda (a §11.6 aceita o risco de versão "até haver
+  deploy"). Para depois, é R-07.
+- **Uma partida por link.** Uma sala `encerrada` é descartada, e a revanche usa o próximo id do log. Na
+  varredura de `e4.7`/AC 4, cada ponto é uma partida nova, então um link novo. O override de `snapshotHz`
+  vale para as salas criadas depois da subida. Trocar de taxa é reiniciar o servidor, que mata as salas
+  abertas, e isso já é o que o AC 4 descreve ("na subida do servidor, sem rebuild").
+- **Uma sala livre pode ser ocupada por quem recebeu o link errado.** É o mesmo risco de qualquer link, em
+  qualquer opção. Os 128 bits do item 5 tiram o risco de adivinhação, e o que sobra é o link vazado.
+
+**Achados laterais, do mesmo pedaço de código (não são O-2, e não mudam a decisão):**
+- **L-1 (segurança, `e4.4`/AC 7): o segredo que o cliente manda nunca vira chave de assento novo.** Medido
+  em `sala.ts:391-398`: a sala assenta qualquer chave que não conhece. Se `server/` repassar o `assento` de
+  `{t:'entrar', sala, assento}` como chave quando ele não bate com um assento **daquela** sala, o cliente
+  escolheu o próprio segredo, e o requisito de entropia do AC 6 cai por um caminho que nenhum grep de
+  `Math.random` pega. Regra: segredo que não é igual a um dos `Sala.assentos` daquela sala é tratado como
+  **ausente**. O servidor gera um novo, e a partir daí vale o AC 7 como está (assento livre, ou recusa com
+  sala cheia).
+- **L-2 (segurança, `e4.4`/AC 15): teto de tamanho do quadro.** O parser aceita um `sala` de 10.000
+  caracteres, e isso está certo para o parser. O teto é da biblioteca: o `ws` tem a opção `maxPayload`, e o
+  padrão documentado é de 100 MiB por mensagem, **não conferido aqui** porque o `ws` ainda não está
+  instalado. O maior `DoCliente` legítimo é um `{t:'cast'}` ou uma `{t:'decisao'}` de compra, de dezenas de
+  bytes. Recomendação: uma constante nomeada em `server/main.ts`, na forma da constante de deflate do
+  AC 17, com um teto de poucos kB. O padrão exato é conferido na Task 1, na versão instalada.
+- **L-3 (lacuna irmã, `e4.5`): como o cliente acha o servidor.** O link só dá o id. Nenhum documento diz a
+  que endereço o `WebSocket` do navegador se conecta (conferido: nenhuma ocorrência de `ws://`, `wss://`,
+  `VITE_` ou `import.meta.env` em `docs/` ou `src/`). Não trava `e4.4`, porque os clientes de protocolo
+  recebem o endereço de quem os roda. Trava a conexão de `e4.5`. **Recomendação** (o @po decide onde
+  entra): o endereço sai de `location`. O esquema é `wss:` se a página é `https:`, e `ws:` se não é. O
+  host é `location.hostname`, e a porta é uma constante nomeada, com o mesmo default do servidor. Isso
+  cobre as duas abas de `e4.5` e o caminho da LAN de `e4.7` (Vite com `--host`, o celular abre
+  `http://<ip-da-máquina>:5177/#/sala/{id}`). **Não cobre o cliente do Pages** que `e4.7`/AC 12 permite:
+  a página `https:` do Pages não abre `ws:` (conteúdo misto, regra do navegador, não medida aqui), e o
+  servidor não está no host do Pages. Esse caminho precisa de `wss:` num host com certificado, e é
+  implantação, da Task 1 de `e4.7`. Se a `e4.7` quiser usar o Pages, a forma de dizer ao cliente onde está o
+  servidor (por exemplo, um parâmetro no link) é uma decisão a mais, e volta ao @architect. A porta ser
+  definida uma vez só, em vez de duas cópias (servidor e cliente), pede uma constante em
+  `net/protocolo.ts`, que o AC 13 de `e4.4` e o AC 14 de `e4.5` proíbem. Com duas cópias, cada uma cita a
+  outra no comentário. É a mesma troca que a §11.6.1 fez com o `snapshotHz`, e o @po escolhe.
+
+**Deltas para o @po** (este documento não edita story):
+
+- **`e4.4`: a Task 2 destrava. O AC 13 NÃO reabre.** Tudo acima mora em `src/server/main.ts`. `DoCliente`
+  não ganha variante, e `src/net/` não é tocado.
+  - **AC 6:** o subitem *"(v1.9.0) Canal de criação de sala: em aberto (O-2...)"* passa a registrar os
+    itens 1 a 5 da decisão: o servidor cria as salas sozinho, com ao menos uma livre; uma linha de log
+    por sala criada, com o id e o caminho `/#/sala/{id}`, e **sem** segredo nem seed; `{t:'entrar'}` com
+    id desconhecido → `{t:'erro'}` só para a conexão, sem assentar e sem criar; sala `encerrada`
+    descartada depois dos envios do AC 16; 128 bits de `node:crypto` para o id e o segredo.
+  - **AC 7, dois itens novos:** (i) L-1: segredo que não bate com um assento daquela sala é tratado como
+    ausente, e a chave nova é gerada pelo servidor; (ii) `{t:'entrar'}` com id desconhecido é recusado.
+    Os dois vão para o Testing, junto com "terceira aba recusada".
+  - **AC 4, esclarecimento para o @qa:** ler `Sala.fase` e a ocupação de `Sala.assentos` para o ciclo de
+    vida não é regra de jogo. Ler `Sala.partida` é.
+  - **AC 10:** os clientes de protocolo pegam o id da linha de log. O script, ou a sequência, no Dev Agent
+    Record diz como.
+  - **AC 15, recomendado (L-2):** `maxPayload` como constante nomeada, com o padrão da versão instalada
+    registrado no Dev Agent Record.
+  - **CodeRabbit Focus e Testing:** segredo ou seed na linha de log; sala criada a partir de um id vindo
+    do cliente; `assento` do cliente usado como chave nova.
+- **`e4.5`: o AC 14 NÃO reabre.** O cliente lê o id de `location.hash` (`#/sala/{id}`, a forma da §6) e
+  manda `{t:'entrar', sala: id}`. Não cria sala e não ganha tela de criação.
+  - **Recomendado, AC novo ou acréscimo ao AC 4:** o modo conectado é escolhido pela presença de
+    `#/sala/{id}` na URL. Sem ela, o cliente abre no modo `local` de hoje, sem mudança. Hoje nenhum AC diz
+    como o cliente escolhe o modo. É a leitura mínima da §6, e não põe tela nova.
+  - **AC 13:** as duas abas abrem o mesmo link, copiado da linha de log do servidor.
+  - **`{t:'erro'}` antes de qualquer `{t:'sala'}`** (id desconhecido, sala cheia) é caminho possível
+    agora. O decodificador aceita, porque só o `sala` passa por `conferirSala` (`src/net/codec.ts:481`; medido:
+    um `{t:'erro'}` sozinho decodifica), e o AC 3 já trata o fechamento.
+    Para o Testing: um link com id inventado mostra o erro e não fica em tela preta.
+  - **L-3:** o endereço do servidor. Recomendação acima. Tem de estar resolvido antes da Task de
+    `client/rede.ts` que abre o socket.
+- **`e4.7`: nenhum AC muda por O-2.** Para as Dev Notes e a Task 1: quem sobe o servidor copia o id da
+  linha de log e manda o link à segunda pessoa, e cada partida da evidência usa um link novo. O README do
+  AC 8 **não** precisa registrar o id da sala: é descartável e não identifica o build. Se registrar,
+  confere que a linha copiada não tem segredo nem seed, o que a regra do item 2 já garante. **L-3** afeta
+  a escolha entre o cliente do Pages e o Vite na LAN (AC 12). Com a recomendação de L-3, o caminho sem
+  decisão extra é a LAN.
+- **§12/R-07 (nova, @pm):** autosserviço de sala fora da Fase 4.
 
 ---
 
@@ -1958,6 +2124,22 @@ e a evidência humana de `e3.6` registrou `atingiu60s` em 3 de 4 partidas. Não 
 — é observação de que uma decisão de produto mudou um indicador de produto, e o @pm pode querer
 reler R-05 com o número novo. **Não reabre D-05.**
 
+### R-07 — Um jogador cria a própria sala? *(decisão de produto, não bloqueia a Fase 4)* *(2026-09-22)*
+
+A §6.1 decidiu que, na Fase 4, **só o servidor cria sala**, e o id chega a quem vai compartilhar o link
+pelo log de operação. Isso serve às três stories que precisam de dois jogadores numa sala (`e4.4`, `e4.5`,
+`e4.7`), porque em todas alguém sobe o servidor. Com o servidor hospedado e sem ninguém lendo o log,
+ninguém cria sala. **Pergunta ao @pm:** fora da Fase 4, um jogador cria a sala pelo próprio cliente?
+- **Se não:** nada muda. O link continua saindo de quem opera o servidor.
+- **Se sim:** a forma técnica já está escolhida, e é a opção A da §6.1. É uma rota HTTP no mesmo processo
+  do WebSocket, **sem subir `VERSAO_DO_FIO`**, e o ciclo de vida da §6.1 continua servindo. Custa três
+  coisas, que a resposta tem de trazer ou mandar decidir: uma tela com o botão de criar e o link para
+  copiar (é do @ux-design-expert, §0), um teto de salas abertas (o endpoint aloca memória para quem o
+  chamar) e as origens permitidas no CORS (Pages, e o que mais houver).
+
+*Recomendação: não decidir antes de P4.4.* O portão da fase é "dois celulares jogam fluido", e isso se
+responde com a §6.1 como está.
+
 ---
 
 ## Anexo A — Mapa de arquivos
@@ -1969,7 +2151,7 @@ reler R-05 com o número novo. **Não reabre D-05.**
 | `src/net/snapshot.ts` | **novo** (`e4.2`) | `World → EstaticoDaRodada`, `ProdutorDeSnapshot` (acumula eventos; contrato da §5.6). Puro. Só campos da §5.1 |
 | `src/net/projecao.ts` | **novo** (`e4.2`) | `Snapshot + estático + CHARS → VisaoDoMundo`, a forma que `render.ts` passou a declarar. Puro |
 | `src/net/sala.ts` | **novo** (`e4.3`, `99f4ee3`); **muda** (`e4.10`) | Máquina de estados da sala. Pura, relógio injetado (§3.2). Produz o `{t:'sala'}` por assento, com `versao` e o segredo do destinatário (§11.6.1). Recebe `hash` e roster injetados (§2.2, E43-ARC-001). `e4.10`: envia `{t:'evento'}` por assento, com o filtro da §11.6.2 |
-| `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento. Único arquivo de `server/` que importa `tools/`, e só `hash` de `tools/harness.ts`, injetado na sala (§2.2, E43-ARC-001) |
+| `src/server/main.ts` | **novo** | Entrada Node: `ws`, assentos, laço de relógio, roteamento. Único arquivo de `server/` que importa `tools/`, e só `hash` de `tools/harness.ts`, injetado na sala (§2.2, E43-ARC-001). Cria as salas sozinho, com ao menos uma livre, e escreve o id de cada uma no log de operação, sem segredo nem seed (§6.1) |
 | `src/client/rede.ts` | **novo** | WebSocket do navegador, buffer de snapshots, interpolação |
 | `src/client/main.ts` | **muda** | Ganha os modos `local` e `conectado` (§9) |
 | `package.json` | **muda** | Dependência `ws`; script `server` |
