@@ -9,7 +9,8 @@
     "check": "tsc --noEmit",
     "sim:check": "node src/tools/determinism.ts",
     "balance": "node src/tools/balance.ts",
-    "server": "node src/server/main.ts"
+    "server": "node src/server/main.ts",
+    "replay:check": "node src/tools/replay-check.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",

@@ -1,8 +1,11 @@
 import { randomBytes } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { WebSocket, WebSocketServer, type RawData } from 'ws'
 import { CHARS } from '../chars/index.ts'
 import { codificarDoServidor, parseDoCliente } from '../net/codec.ts'
 import type { DoCliente, DoServidor } from '../net/protocolo.ts'
+import { criarGravacao, gravarPasso, marcarAntesDoPasso, montarReplay, serializarReplay, type GravacaoDeReplay } from '../net/replay.ts'
 import { criarSala, passo, type EntradaDaSala, type Envio, type Sala } from '../net/sala.ts'
 import { hash } from '../tools/harness.ts'
 
@@ -11,11 +14,13 @@ import { hash } from '../tools/harness.ts'
  * `e4.4`). Roda com `npm run server`.
  *
  * **Fino de propósito (§2.3, AC 4): nenhuma regra de jogo mora aqui.** Toda mudança de estado de partida
- * passa por `passo()` de `net/sala.ts`. Este arquivo faz exatamente quatro coisas:
+ * passa por `passo()` de `net/sala.ts`. Este arquivo faz exatamente cinco coisas:
  *  1. fala WebSocket (a biblioteca ratificada em R-05, `architecture-e4.md` §12);
  *  2. mantém o mapa de conexões → sala → chave de assento;
  *  3. roda o relógio (acumulador de passo fixo, AC 5) e injeta `agora` na sala;
- *  4. escreve no socket os `envios` que a sala devolveu, na ordem devolvida (AC 15, AC 16).
+ *  4. escreve no socket os `envios` que a sala devolveu, na ordem devolvida (AC 15, AC 16);
+ *  5. grava em disco o replay de cada partida (`e4.6`, AC 10). A gravação e a montagem são de `net/replay.ts`;
+ *     daqui sai só a escrita do arquivo. O servidor grava e não verifica: quem reproduz é `npm run replay:check`.
  *
  * Da sala, este arquivo lê só `Sala.fase` (a fase DA SALA: `aguardando | jogando | encerrada`) e
  * `Sala.assentos`, para o ciclo de vida das salas (AC 6, §6.1 item 4) e para a regra L-1 (AC 7). Nunca lê
@@ -77,6 +82,15 @@ const TETO_DE_PASSOS_POR_QUADRO = 60
 /** Com que frequência o servidor mede o RTT de cada conexão assentada (AC 9). */
 const INTERVALO_DE_PING_MS = 2000
 
+/**
+ * Onde os replays ficam (`e4.6`, AC 10): arquivo em disco, um por partida, sem banco e sem retenção
+ * automática. O servidor não apaga nenhum. O caminho é configurável na subida pela variável de ambiente
+ * `BB_REPLAYS`, e sem ela é a pasta `replays/` do diretório de onde o servidor foi iniciado. A pasta é
+ * criada na primeira gravação, não na subida. ⚠️ O arquivo carrega a seed da partida (AC 4: é metade da
+ * receita), e por isso ele não vai ao log: o log de operação diz só o caminho e o tamanho.
+ */
+const DIRETORIO_DE_REPLAYS = resolve(process.env.BB_REPLAYS ?? 'replays')
+
 // --------------------------------------------------------------------------- log de operação
 
 /**
@@ -112,6 +126,12 @@ interface SalaNoServidor {
   fila: { de: Conexao; entrada: EntradaDaSala }[]
   /** chave de assento → conexão. Inclui a conexão que entrou e ainda não foi confirmada pela sala */
   conexoes: Map<string, Conexao>
+  /**
+   * `e4.6` — a gravação do replay desta sala, nascida com ela. `null` depois que a gravação lançou: a partida
+   * segue, e o replay dela não é gravado (e o log diz por quê), porque um replay com comando ou decisão a
+   * menos reproduziria outra partida.
+   */
+  gravacao: GravacaoDeReplay | null
 }
 
 const salas = new Map<string, SalaNoServidor>()
@@ -142,7 +162,7 @@ function seed32(): number {
 function criarSalaLivre(): void {
   const id = segredo128()
   const sala = criarSala({ id, seed: seed32(), pool: Object.keys(CHARS), chars: CHARS, hashDoMundo: hash })
-  salas.set(id, { sala, fila: [], conexoes: new Map() })
+  salas.set(id, { sala, fila: [], conexoes: new Map(), gravacao: criarGravacao() })
   idDaMaisNova = id
   logOperacao(`sala criada: id=${id} caminho=/#/sala/${id}`)
 }
@@ -188,9 +208,19 @@ function rodarPasso(id: string, e: SalaNoServidor, agora: number): void {
   e.fila = []
   let envios: Envio[]
   try {
+    const marca = e.gravacao === null ? null : marcarAntesDoPasso(e.sala)
     const r = passo(e.sala, agora, fila.map((x) => x.entrada))
     e.sala = r.sala
     envios = r.envios
+    if (e.gravacao !== null && marca !== null) {
+      try {
+        gravarPasso(e.gravacao, marca, r.sala)
+      } catch (err) {
+        // A gravação falhou, a sala não: a partida segue sem replay (ver `SalaNoServidor.gravacao`).
+        e.gravacao = null
+        logOperacao(`sala ${id}: gravação do replay interrompida, a partida segue sem replay: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
   } catch (err) {
     // Uma sala que lança está inconsistente: descartá-la derruba só a partida dela, não o processo.
     logOperacao(`sala ${id} falhou no passo e foi descartada: ${err instanceof Error ? err.message : String(err)}`)
@@ -217,7 +247,39 @@ function rodarPasso(id: string, e: SalaNoServidor, agora: number): void {
     for (const c of [...e.conexoes.values()]) desligar(c)
     salas.delete(id)
     logOperacao(`sala encerrada e descartada: id=${id}`)
+    gravarReplay(id, e)
   }
+}
+
+// --------------------------------------------------------------------------- replay (e4.6, AC 10)
+
+/**
+ * Escreve o replay da sala encerrada em `DIRETORIO_DE_REPLAYS`. Assíncrono, para o laço de relógio das outras
+ * salas não esperar o disco; a montagem é síncrona e acontece aqui, com a sala final na mão. Uma falha de
+ * disco vira linha de log e não derruba nada.
+ */
+function gravarReplay(id: string, e: SalaNoServidor): void {
+  if (e.gravacao === null) {
+    logOperacao(`sala ${id}: sem replay (a gravação foi interrompida durante a partida)`)
+    return
+  }
+  let texto: string
+  let rodadas: number
+  try {
+    const replay = montarReplay(e.gravacao, e.sala)
+    texto = serializarReplay(replay)
+    rodadas = replay.rodadas.length
+  } catch (err) {
+    logOperacao(`sala ${id}: replay não montado: ${err instanceof Error ? err.message : String(err)}`)
+    return
+  }
+  const arquivo = join(DIRETORIO_DE_REPLAYS, `${new Date().toISOString().replace(/[:.]/g, '-')}-${id}.json`)
+  mkdir(DIRETORIO_DE_REPLAYS, { recursive: true })
+    .then(() => writeFile(arquivo, texto, 'utf8'))
+    .then(
+      () => logOperacao(`replay gravado: ${arquivo} (${Buffer.byteLength(texto, 'utf8')} B, ${rodadas} rodada(s))`),
+      (err: unknown) => logOperacao(`sala ${id}: replay não gravado em ${arquivo}: ${err instanceof Error ? err.message : String(err)}`),
+    )
 }
 
 // --------------------------------------------------------------------------- entrada (AC 7, AC 15)
