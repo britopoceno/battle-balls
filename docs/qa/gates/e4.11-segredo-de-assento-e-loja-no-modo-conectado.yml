@@ -1,0 +1,197 @@
+schema: 1
+story: 'e4.11'
+story_title: 'Segredo de assento sobrevive a fechar a aba, e a loja mostra o valor efetivo no modo conectado'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 19 ACs (v1.1.0) estão MET. Refiz tudo do zero numa cópia descartável de eccff6a, sem confiar no Dev
+  Agent Record. check, sim:check e build deram rc=0. A linha do golden hash é idêntica à da cópia do pai
+  47d6517, e a saída inteira do sim:check também (sem os tempos). O escopo tem os 7 arquivos do AC 17. Os
+  greps do AC 13, o one-liner do AC 15, o check-ignore do AC 16 (rc=1 no pai, rc=0 no commit) e o grep de
+  P4.2 batem. No navegador, contra o servidor real, rodei cenários que o @dev não rodou: fechamento real no
+  ASSENTO 0 na fase RODADA e no assento 1 na LOJA, com perfis separados; segredo velho de outra sala; e uma
+  Bo5 COMPLETA no navegador, que prova a limpeza do AC 4 (o @dev só a conferiu em Node). Rodei 4 mutações
+  minhas, além das 7 do @dev, e todas falham. O veredito é CONCERNS, e não PASS, por um LOW: a cláusula
+  "objeto novo a cada chamada, sem cache" do AC 8 não tem guarda. O mutante com cache passa em check,
+  sim:check, no one-liner do AC 15 e nos roteiros do @dev (E411-TST-001). Não achei falha de implementação.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:eccff6a (implementação, pai 47d6517). 57b154b (registro do @dev) toca só a story. Durante o gate o
+  HEAD andou para a9ad204 (e4.12). `git diff eccff6a HEAD -- src/client src/sim src/shop .gitignore` sai
+  vazio. A a9ad204 mantém aberta a conexão recusada em server/main.ts, que é o contrato de que a Parte A
+  depende (§6.3), e acrescenta o comentário que diz isso. eccff6a NÃO está em origin/master
+  (merge-base --is-ancestor rc=1): é commit local, não publicado.
+
+verificacao_independente:
+  - id: 'check + sim:check + build, golden hash pela linha (ACs 9, 12)'
+    verdict: PASS
+    evidence: >-
+      Duas cópias por `git archive` no scratchpad (qa-e411/), eccff6a e o pai 47d6517, com node_modules por
+      junction e Node v24.13.1, sem nada da e4.12. Na eccff6a: `npm run check` rc=0, `npm run sim:check` rc=0
+      e `npm run build` rc=0, com index-D3kxcjgS.js de 66.08 kB. Na 47d6517: check rc=0 e sim:check rc=0. A
+      linha é `golden hash    ✓ ok — 6 seeds batem o baseline` nas duas, e o `diff` das duas saídas
+      inteiras, sem os tempos, sai vazio. Há 0 linhas ✗ nas duas. `npm run lint` não existe no projeto.
+  - id: 'O call site de makeBall passa por baseDoPersonagem (AC 9)'
+    verdict: PASS
+    evidence: >-
+      Hash idêntico prova que nada mudou, mas não prova que makeBall chama a função nova. Mutação QM-B1:
+      `drag: def.drag * 1.0001` dentro de baseDoPersonagem dá sim:check rc=1, com `golden hash ✗ 15
+      desvio(s)`. Logo, o base da bola sai da função extraída, e continua existindo uma cópia só.
+  - id: 'Escopo (AC 17)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat eccff6a` lista 7 arquivos: .gitignore (+3), src/client/main.ts (20), src/client/rede.ts
+      (72), src/client/telas.ts (13), src/shop/preview.ts (13), src/sim/stats.ts (31) e src/sim/world.ts (24).
+      São 127 inserções e 49 remoções. Não há arquivo novo, e nada em net/, server/, match/ ou chars/. No
+      diff de telas.ts e preview.ts, toda linha +/− começa com ` *`, dentro de `/** */` (o grep de linhas que
+      não são de comentário dá rc=1). A a9ad204 da e4.12 não toca nenhum dos 7.
+  - id: 'Greps e conferências de forma (ACs 8, 10, 13, 15, 16)'
+    verdict: PASS
+    evidence: >-
+      Na cópia de eccff6a: `grep -rnF "maxHp: def.maxHp," src/` dá 1 linha, sim/stats.ts:168. Sem a vírgula dá
+      2 linhas, e a outra é chars/index.ts:17, como o AC prevê. `grep -rn "\.\.\.DEFAULT_STATS" src/` dá 1
+      linha, sim/stats.ts:174. sim/stats.ts:1 importa só `import type { Ball, CharDef } from './types.ts'`. O
+      one-liner Object.keys × STAT_KEYS do AC 15 dá rc=0. `git check-ignore replays/x.json` dá rc=1 no pai e
+      rc=0 no commit (git init descartável em cada cópia). P4.2: o grep do AC 5 de e4.5 na seção conectada de
+      main.ts dá 0, e em rede.ts dá 0. Um grep mais largo (step, createWorld, aplicar, setupDaRodada,
+      makeBall, recomputeStats, createBot, decidir e outros) dá rc=1. basePorChar é montado fora da seção,
+      por aritmética sobre CHARS. A única escrita em `.base` no src/ é preview.ts:63, na bola sintética, e
+      ela copia sem mutar.
+  - id: 'Parte B em Node, pelo mesmo caminho do cliente (ACs 8, 10, 14)'
+    verdict: PASS
+    evidence: >-
+      qa-e411-node.mjs, 12/12. Q1: o base de 640 bolas de createWorld (40 seeds, todas as composições de
+      CHARS, builds variadas) é igual a baseDoPersonagem(CHARS[id]) em valores e ordem, com 0 divergências.
+      Por isso o modo local fica idêntico ao coletado por World (B-1). Q2: um objeto novo a cada chamada, e
+      duas bolas golem não dividem o base. Q3: a ordem de STAT_KEYS vale em todo CHARS. Q4: a Couraça dá
+      +228.00 no golem e +120.00 no vex. A Borracha dá restWall +0.14, depois +0.06, depois +0.00 (teto), nos
+      dois personagens. Q5: basePorChar cobre todo CHARS com números finitos.
+  - id: 'Parte A no navegador, servidor real, cenários do AC 6 e da segurança (ACs 1–3, 5, 6)'
+    verdict: PASS
+    evidence: >-
+      qa-e411-a.mjs, 4/4. Chrome headless por CDP, `npm run server` e Vite da cópia, com PORTA_DO_SERVIDOR =
+      5271 nas duas cópias da constante, Vite na 5272 e CDP em 9381–9384. Uma sala nova por cenário, pegando
+      a última linha "sala criada". (ii) Duas abas no mesmo perfil dão A = j0 e B = j1, sem 4000, e B manda
+      1 entrar sem segredo. (iii) Um perfil com o localStorage vazio recebe "Este link não abre uma sala",
+      com o texto completo e o item (b), 1 entrar e 1 socket. (iv) Com um segredo inventado de 22
+      caracteres: 2 entrar aos 3 s e ainda 2 aos 8 s (sem laço), o primeiro sem segredo e o segundo com o
+      inventado, `erro, erro`, 1 socket e o caso (v). SEGREDO VELHO: o perfil 1 guarda um segredo real e
+      válido da sala R1 e abre o link de R2, que está jogando. Manda 1 entrar sem segredo, e nenhum quadro
+      enviado contém segredo de R1. Mostra o caso (v), E e F de R2 não recebem 4000, e o perfil não ganha
+      chave para R2. O log do servidor não contém nenhum segredo, nem o inventado.
+  - id: 'Bo5 completa no navegador, perfis separados (ACs 4, 6 i, 14)'
+    verdict: PASS
+    evidence: >-
+      qa-e411-bo5.mjs. Dois perfis, como dois aparelhos, contra o servidor real. (i) no ASSENTO 0, na fase
+      RODADA: A fechada com Target.closeTarget 2 s depois do rodadaInicio. A aba nova do mesmo perfil recebe
+      `erro, sala:j0, visao, rodadaInicio`, manda 2 entrar (`sem`, depois o segredo de A) num socket, fica
+      com o overlay fechado na fase rodada, e B não recebe 4000. (i) no assento 1, na fase LOJA: B fechada e
+      reaberta recebe `erro, sala:j1, visao`, sem rodadaInicio, com 2 entrar num socket e sem 4000 em A. A
+      loja dela, reconstruída depois da volta pelo segredo do navegador, mostra a Couraça no golem em +228.00
+      e nenhum "efeito indisponível". AC 14 na loja de A: a loja 1 dá Couraça +228.00 e Borracha restWall
+      +0.14. Na loja 2, depois de 1 Borracha, a próxima dá +0.06. Cada recarga na loja recebe `sala, visao,
+      ping`, sem rodadaInicio, e mantém os números. A partida acabou 3—0. AC 4: A e B recebem
+      `{t:'sala', estado:'encerrada'}`. A chave da sala some do localStorage dos DOIS perfis, e a chave
+      `battle-balls:assento:SALA-QUE-NAO-E-ESTA`, semeada antes no perfil A, continua lá. O sessionStorage
+      segue como hoje. Depois do fim, uma aba nova no perfil A manda só 1 entrar e mostra o caso (v). A loja 3
+      e o teto aparecem na corrida da QM-A4, abaixo. A mutação é só na remoção da chave, e a Parte B da cópia
+      é idêntica à de eccff6a: a 3ª Borracha mostra restWall +0.00 (teto), e a recarga mantém.
+  - id: 'Mutações próprias (4, além das 7 do @dev, cada uma numa cópia descartável)'
+    verdict: PASS
+    evidence: >-
+      QM-B1, drag perturbado em baseDoPersonagem: sim:check rc=1, com golden hash ✗ 15 desvio(s). Pega. QM-B2,
+      cache por def (Map) em baseDoPersonagem: tsc rc=0, sim:check rc=0 (golden hash ✓), one-liner do AC 15
+      rc=0. Só o meu Q2a/Q2b a pega (E411-TST-001). QM-A1, a chave do localStorage sem o id da sala (uma
+      chave global): no cenário do segredo velho, a aba manda 2 entrar em R2, e o segundo leva o segredo de
+      R1. Em (iv), a aba manda 1 entrar só. Pega. QM-A4, sem a remoção no `encerrada`: a Bo5 completa termina
+      com a chave presente nos dois perfis (ac4=false), e a aba nova depois do fim manda 2 entrar. Pega. O
+      padrão de cada mutação tem de casar exatamente uma vez, com o EOL normalizado, e conferi o diff
+      aplicado de cada uma.
+  - id: 'Segurança: a volta pelo localStorage nunca toma o assento de outro'
+    verdict: PASS
+    evidence: >-
+      Leitura mais medição. O primeiro entrar vai sem segredo (lerSegredoDaAba). Com a sala em jogando,
+      `assentar` recusa toda chave desconhecida (sala.ts, `n.fase !== 'aguardando' || livre === null` →
+      erro). Com a sala aguardando, a entrada só ocupa um assento LIVRE. Então a primeira tentativa nunca
+      toma um assento reservado. O segundo entrar leva só um segredo que o servidor entregou a ESTE navegador
+      para ESTA sala, com a chave por id de sala. Isso foi medido pelo cenário do segredo velho, e a QM-A1
+      prova que o cenário tem dente. Ele toma só o assento cujo segredo é esse. Entre aparelhos ou perfis,
+      portanto, não há como tomar o assento do outro jogador. O único caso cruzado é o de dois assentos no
+      MESMO navegador, que é consequência aceita e dita às claras na §6.3. Medi: com A e B no perfil 1, fechar
+      A e abrir uma aba nova levou a aba para j1 com o segredo de B, e B recebeu "Partida aberta em outro
+      lugar". O assento 0 ficou órfão. A coleta da e4.7 usa um aparelho ou perfil por assento, e com isso o
+      caso não existe. O segredo nunca vai para a tela nem para o log do servidor.
+
+top_issues:
+  - id: 'E411-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia; a próxima story que abrir src/tools/determinism.ts)'
+    finding: >-
+      O AC 8 exige que baseDoPersonagem devolva "um objeto novo a cada chamada; nada de cache por def". Nenhuma
+      guarda do repositório confere isso. O mutante QM-B2, um Map por CharDef, passa em tsc, em sim:check (com
+      o golden hash ✓), no one-liner do AC 15 e nos roteiros de navegador do @dev. Só uma conferência de
+      identidade o pega: `baseDoPersonagem(d) !== baseDoPersonagem(d)` e `balls[0].base !== balls[1].base`
+      em duas bolas do mesmo personagem. Hoje não há dano: o único escritor de `.base` em src/ é preview.ts:63,
+      numa bola sintética que COPIA o base. Mas um cache faria qualquer escritor futuro de `ball.base` (uma
+      passiva, um item que mexa no base) vazar entre as bolas do mesmo personagem na rodada, e para o
+      `basePorChar` do cliente. Nenhuma das duas coisas mexe no hash das 6 seeds de hoje.
+    suggested_action: >-
+      Duas linhas numa checagem existente de determinism.ts, na próxima story que abrir o arquivo (esta não
+      podia, AC 17): identidade distinta entre duas chamadas e entre os base de duas bolas do mesmo charId.
+      Mutação de aceite: a QM-B2 deste gate tem de dar FALHA.
+
+avaliacoes_pedidas:
+  golden_hash_na_copia: >-
+    Provado pela linha e pela saída inteira, com os tempos fora: o pai e o commit dão a mesma coisa, ambos
+    sem nada da e4.12. A QM-B1 prova que o hash passa pelo call site novo.
+  fechamento_real: >-
+    Target.closeTarget nos dois assentos, em duas fases (rodada e loja), com perfis separados. O @dev testou
+    só o assento 1 na fase builds, no mesmo perfil.
+  duas_abas_sem_4000: 'Medido de novo (ii): j0/j1, 0 × 4000.'
+  segredo_inventado: 'Exatamente 2 entrar, que continuam 2 depois de 8 s, num socket, e o caso (v).'
+  loja: >-
+    Sem "efeito indisponível" em nenhuma loja, nem depois da volta pelo navegador. Couraça golem +228.00.
+    Borracha +0.14 → +0.06 → +0.00 (teto). A recarga na loja mantém os números nas lojas 1, 2 e 3.
+  limpeza_no_encerrada: >-
+    Medida numa Bo5 real no navegador, nos dois perfis. Só a chave da sala sai, e a QM-A4 prova que a
+    conferência tem dente.
+  seguranca: >-
+    A volta nunca toma o assento de outro aparelho, e um segredo velho de outra sala não é enviado a uma sala
+    diferente (a QM-A1 prova o dente). O único caso cruzado é o de dois assentos no mesmo navegador, aceito
+    pela §6.3 e medido.
+  decisoes_autonomas: >-
+    1 (redação do caso v): aceita. Tem (a), (b) e (c), e o texto antigo continua inteiro. 2 (o teto de uma
+    volta por carga em `tentouSegredoDoNavegador`, mais `entrouSemSegredo` por soquete): aceita. Levar o
+    teto para dentro de `abrir` (por soquete) é quase equivalente hoje, porque quem nunca sentou não
+    reconecta. 3 (a limpeza dentro de guardarSegredo): aceita, medida na Bo5, e a QM-A4 é pega.
+
+observacoes:
+  - >-
+    Com duas abas no MESMO perfil, qual segredo fica no localStorage é uma corrida, e não "quem reconectou por
+    último". Quando B senta, a sala manda no mesmo passo o `{t:'sala'}` de B e um segundo `{t:'sala'}` para A,
+    e cada aba grava o próprio segredo ao processar a mensagem. Nas duas medições (a do @dev e a minha),
+    ficou o de B. A §6.3 descreve o efeito ("retoma o assento que gravou por último") e o aceita. Isso só
+    importa no teste de duas abas, que a coleta da e4.7 não usa. Fica como nota de precisão para o
+    @architect, sem ID.
+  - >-
+    Um assento que estava desconectado quando a partida acabou (W.O. de R-02 até o fim) não recebe o
+    `{t:'sala', estado:'encerrada'}`, e a chave dele fica no localStorage daquele navegador. É só higiene.
+    Se alguém reabrir aquele link morto, a aba manda 2 entrar, o segundo é recusado e a tela mostra o caso
+    (v). Não há risco, porque a sala e o segredo morreram no servidor. O AC 4 fala do `{t:'sala'}` com
+    `encerrada`, e isso está cumprido.
+  - >-
+    Regra de "Depende de" sobre a que fecha por último: a e4.12 já tem código em a9ad204. Cabe a ela rodar
+    `npm run check && npm run sim:check` no HEAD com os dois commits. Este gate não substitui isso.
+  - >-
+    CodeRabbit não roda nesta máquina (sem WSL). A cobertura veio de check, sim:check e build, da leitura do
+    diff inteiro, de 12 conferências em Node, de 4 cenários de navegador, de 2 Bo5 completas no navegador
+    (a de controle e a da QM-A4) e de 4 mutações.
+  - >-
+    Higiene: tudo rodou em cópias no scratchpad (qa-e411/), com as portas 5271/5272 e o CDP em 9381–9384. As
+    portas 5179, 5231 e 5232 não foram tocadas. Os processos foram mortos com taskkill /T. Depois do gate,
+    nenhuma dessas portas ficou escutando, e as cópias foram apagadas, com a junction primeiro. A árvore
+    compartilhada não foi mutada.
+
+waiver: { active: false }
+updated: '2026-09-22T08:05:00Z'
