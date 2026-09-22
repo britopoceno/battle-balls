@@ -1,11 +1,21 @@
+import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { WebSocket, WebSocketServer, type RawData } from 'ws'
 import { CHARS } from '../chars/index.ts'
 import { codificarDoServidor, parseDoCliente } from '../net/codec.ts'
 import type { DoCliente, DoServidor } from '../net/protocolo.ts'
-import { criarGravacao, gravarPasso, marcarAntesDoPasso, montarReplay, serializarReplay, type GravacaoDeReplay } from '../net/replay.ts'
+import {
+  criarGravacao,
+  gravarPasso,
+  marcarAntesDoPasso,
+  montarReplay,
+  serializarReplay,
+  type CodigoDoReplay,
+  type GravacaoDeReplay,
+} from '../net/replay.ts'
 import { criarSala, passo, type EntradaDaSala, type Envio, type Sala } from '../net/sala.ts'
 import { hash } from '../tools/harness.ts'
 
@@ -20,7 +30,8 @@ import { hash } from '../tools/harness.ts'
  *  3. roda o relógio (acumulador de passo fixo, AC 5) e injeta `agora` na sala;
  *  4. escreve no socket os `envios` que a sala devolveu, na ordem devolvida (AC 15, AC 16);
  *  5. grava em disco o replay de cada partida (`e4.6`, AC 10). A gravação e a montagem são de `net/replay.ts`;
- *     daqui sai só a escrita do arquivo. O servidor grava e não verifica: quem reproduz é `npm run replay:check`.
+ *     daqui sai só a escrita do arquivo, e o carimbo `codigo` que vai nele (`e4.12`, lido do git na subida). O
+ *     servidor grava e não verifica: quem reproduz é `npm run replay:check`.
  *
  * Da sala, este arquivo lê só `Sala.fase` (a fase DA SALA: `aguardando | jogando | encerrada`) e
  * `Sala.assentos`, para o ciclo de vida das salas (AC 6, §6.1 item 4) e para a regra L-1 (AC 7). Nunca lê
@@ -36,9 +47,9 @@ import { hash } from '../tools/harness.ts'
 // --------------------------------------------------------------------------- levers de operação
 
 /**
- * Porta de escuta (AC 6, nota de L-3 da §6.1). O cliente de navegador (`e4.5`) vai precisar do mesmo
- * número para abrir o socket; a forma de dizer isso a ele é L-3, em aberto na `e4.5`. Se o desenho
- * confirmar duas cópias da constante, a do cliente cita esta, e esta passa a citar a do cliente.
+ * Porta de escuta (AC 6; L-3, decidido na §6.2). ⚠️ CÓPIA, de propósito: o cliente de navegador abre o socket
+ * com a constante de mesmo nome em `src/client/rede.ts` (`const PORTA_DO_SERVIDOR`), cujo doc cita esta. As
+ * duas mudam JUNTAS: se divergirem, o cliente não conecta. A §6.2 explica por que não existe cópia única.
  */
 const PORTA_DO_SERVIDOR = 5179
 
@@ -90,6 +101,31 @@ const INTERVALO_DE_PING_MS = 2000
  * receita), e por isso ele não vai ao log: o log de operação diz só o caminho e o tamanho.
  */
 const DIRETORIO_DE_REPLAYS = resolve(process.env.BB_REPLAYS ?? 'replays')
+
+/**
+ * `e4.12`, AC 4 (`architecture-e4.md` §7.3 item 4) — o carimbo `codigo` de todo replay: o commit do código que
+ * roda (`git rev-parse HEAD`) e se a árvore dele tem mudança não commitada (`git status --porcelain` não
+ * vazio). Lido UMA vez, na subida, na pasta deste arquivo (e não no diretório de onde o servidor foi iniciado).
+ * Sem git, ou fora de um repositório: `null` nos dois campos. Entra na gravação por `criarGravacao`, nunca pela
+ * sala. O commit não é segredo.
+ *
+ * ⚠️ `sujo` conta QUALQUER arquivo da árvore, e não só `src/`: nesta árvore ele sai `true` quase sempre
+ * (`.claude/agent-memory/**`, e `replays/` enquanto não estiver no `.gitignore`). `sujo: true` não quer dizer
+ * que o código difere do commit. Estreitar o campo é mudança da §7.3 item 4, do @architect (nota do AC 4).
+ */
+function lerCodigo(): CodigoDoReplay {
+  const pasta = dirname(fileURLToPath(import.meta.url))
+  const git = (args: string[]) => execFileSync('git', args, { cwd: pasta, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  try {
+    const commit = git(['rev-parse', 'HEAD']).trim()
+    const sujo = git(['status', '--porcelain']).trim() !== ''
+    return commit === '' ? { commit: null, sujo: null } : { commit, sujo }
+  } catch {
+    return { commit: null, sujo: null }
+  }
+}
+
+const CODIGO_DO_SERVIDOR: CodigoDoReplay = lerCodigo()
 
 // --------------------------------------------------------------------------- log de operação
 
@@ -162,7 +198,7 @@ function seed32(): number {
 function criarSalaLivre(): void {
   const id = segredo128()
   const sala = criarSala({ id, seed: seed32(), pool: Object.keys(CHARS), chars: CHARS, hashDoMundo: hash })
-  salas.set(id, { sala, fila: [], conexoes: new Map(), gravacao: criarGravacao() })
+  salas.set(id, { sala, fila: [], conexoes: new Map(), gravacao: criarGravacao(CODIGO_DO_SERVIDOR) })
   idDaMaisNova = id
   logOperacao(`sala criada: id=${id} caminho=/#/sala/${id}`)
 }
@@ -239,6 +275,8 @@ function rodarPasso(id: string, e: SalaNoServidor, agora: number): void {
 
   // Conexão cuja chave não ocupa assento depois do passo foi recusada pela sala (cheia ou já jogando):
   // já recebeu o `{t:'erro'}` acima, e sai do mapa para poder tentar outro `{t:'entrar'}`.
+  // A conexão recusada fica aberta; o cliente depende disso para voltar ao assento (§6.3). `desligar`
+  // solta a conexão da sala sem fechar o socket: fechá-lo aqui quebraria a volta ao assento em silêncio.
   for (const [chave, c] of [...e.conexoes]) {
     if (e.sala.assentos[0] !== chave && e.sala.assentos[1] !== chave) desligar(c)
   }

@@ -2,7 +2,7 @@ import { CHARS } from '../chars/index.ts'
 import { botCommands, createBot, type BotState } from '../bot/heuristic.ts'
 import { criarPolitica, POLITICA_VERSION, type PoliticaPartida } from '../bot/partida.ts'
 import type { Command } from '../sim/types.ts'
-import type { PickSetup, RoundSetup } from '../sim/world.ts'
+import { createWorld, step, type PickSetup, type RoundSetup } from '../sim/world.ts'
 import {
   aplicar,
   criarPartida,
@@ -23,7 +23,7 @@ import {
 } from '../match/index.ts'
 import { validarCatalogo } from '../shop/agregar.ts'
 import { CATALOGO } from '../shop/catalogo.ts'
-import { runRound, type RoundDriver, type RoundResult } from './harness.ts'
+import { hash, MAX_ROUND_TICKS, runRound, type RoundDriver, type RoundResult } from './harness.ts'
 
 /**
  * REPLAY DE PARTIDA — Regra 3 de `docs/architecture-e3.md` §2.5, e o teste dirigido da story `e3.2`.
@@ -190,6 +190,23 @@ function reproduzirRodada(setup: RoundSetup, comandos: readonly Command[]): Roun
   return runRound(CHARS, setup, () => () => [...comandos])
 }
 
+/**
+ * `e4.12`, AC 1 — a rodada de W.O. (`bb.replay.v2`, §7.3): o laço de `runRound`, com o mesmo mundo e os mesmos
+ * comandos por tick de `reproduzirRodada`, CORTADO no tick `corte`. É o tick em que `estourarPausa` fechou a
+ * rodada ao vivo, com o mundo sem `over`. Se o mundo acabar antes do corte, o laço para ali, e o `ticks` que sai
+ * é menor que o gravado: o verificador compara `ticks` e acusa. `runRound` não tem esse parâmetro, e
+ * `tools/harness.ts` é a definição do laço do golden hash, fora do escopo da story: por isso o laço cortado mora
+ * aqui, com a mesma condição de parada mais o corte.
+ */
+function reproduzirRodadaAteOTick(setup: RoundSetup, comandos: readonly Command[], corte: number): RoundResult {
+  const world = createWorld(CHARS, setup)
+  const tick = () => [...comandos]
+  while (!world.over && world.tick < MAX_ROUND_TICKS && world.tick < corte) {
+    step(world, tick())
+  }
+  return { winner: world.winner, ticks: world.tick, hash: hash(world) }
+}
+
 // --------------------------------------------------------------------------- partida gravada
 
 export interface RodadaGravada {
@@ -215,6 +232,41 @@ export interface PartidaReproduzida {
   placar: [number, number]
   vencedor: Jogador | -1
   rodadas: ResultadoRodada[]
+  /** `e4.12` — quantas decisões da lista a reprodução consumiu (numa interrompida, todas têm de ter sido) */
+  decisoesConsumidas: number
+  /**
+   * `e4.12` — as decisões que `aplicar()` recusou NA REPRODUÇÃO, com o motivo. Um replay de sala grava só as
+   * aceitas ao vivo, então ali qualquer recusa é divergência (por exemplo, um `pool` sem o personagem escolhido).
+   * A `PartidaGravada` do roteiro fixo tem recusas de propósito (saldo), e `compararPartida` não olha isto.
+   */
+  recusadas: string[]
+  /** `e4.12` — a reprodução chegou à fase `fim` (numa interrompida, não pode chegar) */
+  chegouAoFim: boolean
+}
+
+/**
+ * `e4.12`, AC 1-3 — como reproduzir um replay da sala (`bb.replay.v2`, §7.3). Sem nenhuma opção, a reprodução é a
+ * de sempre (a da Regra 3 e a do `bb.replay.v1`): pool `POOL`, toda rodada até o fim natural, a partida até a
+ * fase `fim`.
+ */
+export interface ComoReproduzir {
+  /** AC 3 — o roster do draft gravado no replay (`injetado.pool` da sala). Sem ele, `POOL` */
+  pool?: readonly string[]
+  /**
+   * AC 1 — por índice de rodada: `null` (ou ausente) reproduz até o fim natural; um corte PARA a rodada no tick
+   * dado e a registra com o vencedor dado (o W.O. de R-02, um fato de relógio que a receita não tem)
+   */
+  cortes?: readonly (CorteDaRodada | null)[]
+  /**
+   * AC 2 — partida interrompida: parar depois de N rodadas fechadas, quando a partida pedir a rodada N + 1 ou
+   * quando as decisões acabarem. Nunca compara placar nem vencedor da partida, que não existem
+   */
+  pararDepoisDeRodadas?: number
+}
+
+export interface CorteDaRodada {
+  tick: number
+  vencedor: Jogador
 }
 
 /**
@@ -226,6 +278,7 @@ export interface PartidaReproduzida {
 function fecharRodada(
   e: EstadoPartida,
   comandos?: readonly Command[],
+  corte: CorteDaRodada | null = null,
 ): {
   estado: EstadoPartida
   resultado: ResultadoRodada
@@ -238,7 +291,7 @@ function fecharRodada(
   // jogador (§5.3) e o `itemBonus` agregado das compras (§5.2).
   const setup = setupDaRodada(e, CHARS)
   const bruto = comandos
-    ? { resultado: reproduzirRodada(setup, comandos), comandos: [...comandos] }
+    ? { resultado: corte === null ? reproduzirRodada(setup, comandos) : reproduzirRodadaAteOTick(setup, comandos, corte.tick), comandos: [...comandos] }
     : rodarRodada(setup)
   const resultadoBruto = bruto.resultado
   const usados = bruto.comandos
@@ -248,7 +301,8 @@ function fecharRodada(
     indice: e.rodada,
     seedDaRodada: setup.seed,
     ladoDoJogador: lados,
-    vencedor: vencedorDaRodada(lados, resultadoBruto.winner),
+    // e4.12, AC 1 — só a rodada cortada (W.O.) leva o vencedor dado; a natural o calcula do mundo, como sempre
+    vencedor: corte === null ? vencedorDaRodada(lados, resultadoBruto.winner) : corte.vencedor,
     ticks: resultadoBruto.ticks,
     hash: resultadoBruto.hash,
   }
@@ -299,28 +353,40 @@ export function jogarPartida(matchSeed: number): PartidaGravada {
  * Passo (ii) da Regra 3: **sem bot nenhum**. Só `matchSeed`, a lista de decisões gravada e o
  * `Command[]` por rodada. O roteiro não é consultado aqui — se a reprodução dependesse dele, o teste
  * estaria provando que a mesma função dá o mesmo resultado, que é trivialmente verdade.
+ *
+ * `e4.12`: `como` (`ComoReproduzir`) traz o que um `bb.replay.v2` sabe e a Regra 3 não precisa: o pool, os
+ * cortes de W.O. e o fim antecipado. Sem ele, o caminho é o de antes, linha a linha.
  */
-export function reproduzirPartida(g: PartidaGravada): PartidaReproduzida {
-  let e = criarPartida({ seed: g.matchSeed, pool: POOL })
+export function reproduzirPartida(g: PartidaGravada, como: ComoReproduzir = {}): PartidaReproduzida {
+  let e = criarPartida({ seed: g.matchSeed, pool: como.pool === undefined ? POOL : [...como.pool] })
   const rodadas: ResultadoRodada[] = []
+  const recusadas: string[] = []
   let iDecisao = 0
   let iRodada = 0
+  const limite = como.pararDepoisDeRodadas
+  // uma recusa anterior explica o erro que vem depois dela (a lista de decisões desalinha): ela vai junto
+  const erro = (m: string) => new Error(recusadas.length === 0 ? m : `${m}; antes, aplicar() recusou ${recusadas.length} decisão(ões), a primeira: ${recusadas[0]}`)
 
   for (let passo = 0; e.fase !== 'fim'; passo++) {
-    if (passo > MAX_PASSOS) throw new Error(`replay de ${g.matchSeed} não terminou (fase ${e.fase})`)
+    if (passo > MAX_PASSOS) throw erro(`replay de ${g.matchSeed} não terminou (fase ${e.fase})`)
+    // e4.12, AC 2 — interrompida: as N rodadas fechadas já foram, e a partida pede a seguinte ou ficou sem decisões
+    if (limite !== undefined && iRodada >= limite && (e.fase === 'rodada' || iDecisao >= g.decisoes.length)) break
     if (e.fase === 'rodada') {
+      const corte = como.cortes?.[iRodada] ?? null
       const gravada = g.rodadas[iRodada++]
-      if (!gravada) throw new Error(`replay de ${g.matchSeed} pediu a rodada ${iRodada} sem gravação`)
-      const f = fecharRodada(e, gravada.comandos)
+      if (!gravada) throw erro(`replay de ${g.matchSeed} pediu a rodada ${iRodada} sem gravação`)
+      const f = fecharRodada(e, gravada.comandos, corte)
       rodadas.push(f.resultado)
       e = f.estado
       continue
     }
     const d = g.decisoes[iDecisao++]
-    if (!d) throw new Error(`replay de ${g.matchSeed} ficou sem decisões antes do fim da partida`)
-    e = aplicar(e, d).estado
+    if (!d) throw erro(`replay de ${g.matchSeed} ficou sem decisões antes do fim da partida`)
+    const t = aplicar(e, d)
+    if (t.erro !== undefined) recusadas.push(`decisão ${iDecisao - 1} (${d.t}/j${d.jogador}, fase ${e.fase}): ${t.erro}`)
+    e = t.estado
   }
-  return { placar: placarDe(e), vencedor: vencedorDaPartida(e), rodadas }
+  return { placar: placarDe(e), vencedor: vencedorDaPartida(e), rodadas, decisoesConsumidas: iDecisao, recusadas, chegouAoFim: e.fase === 'fim' }
 }
 
 /** Passo (iii): placar, sequência de vencedores e os hashes de TODAS as rodadas. */

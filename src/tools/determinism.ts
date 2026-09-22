@@ -62,8 +62,10 @@ import { jogarPartida, type PartidaGravada } from './partida.ts'
 // e4.6 — o replay (AC 7): a gravação acompanha TODO passo de todo condutor da guarda da sala, e a Bo5 gravada
 // é reproduzida pelo verificador de `npm run replay:check`, pela mesma seta `tools/ → net/`.
 import {
+  CODIGO_DESCONHECIDO,
   criarGravacao,
   FORMATO_DO_REPLAY,
+  FORMATO_DO_REPLAY_V1,
   gravarPasso,
   marcarAntesDoPasso,
   montarReplay,
@@ -1672,7 +1674,7 @@ function novoCondutor(sala: Sala, rotulo: string, problemas: string[]): Condutor
     sala, hz: sala.config.snapshotHz, rotulo, problemas,
     conf: { salas: 0, assentamentos: 0, visoes: 0, pelaFronteira: 0, transicoes: 0, rodadasFechadas: 0, passosComEventos: 0, eventosEntregues: 0 },
     rodadaVista: null, inicios: new Map(), eventosRecebidos: new Map(), encerradas: new Set(),
-    gravacao: criarGravacao(),
+    gravacao: criarGravacao(CODIGO_DESCONHECIDO),
   }
 }
 
@@ -2624,7 +2626,8 @@ function guardaReplay(b: ResumoBo5, g: PartidaGravada, problemas: string[]): str
   if (primeiro === undefined) falha('canário: a Bo5 gravada não tem comando nenhum')
   else if (!reprova((y) => (y.rodadas[lido.rodadas.indexOf(primeiro)].comandos[0].dx *= -1))) falha('o verificador aprovou o replay com o dx do primeiro comando trocado de sinal')
   if (!reprova((y) => (y.rodadas[0].aoVivo.hash = ''))) falha("o verificador aprovou o replay com o hash ao vivo da rodada 0 trocado por '' (stub de hashDoMundo, E43-ARC-001)")
-  const formatos: unknown[] = ['bb.replay.v0', 'bb.replay.v2', undefined]
+  // e4.12, AC 5 — v1 e v2 lidos; qualquer outro formato lança
+  const formatos: unknown[] = ['bb.replay.v0', 'bb.replay.v3', undefined]
   const aceitos = formatos.filter((f) => {
     try {
       lerReplay(JSON.stringify({ ...JSON.parse(texto), formato: f }))
@@ -2633,7 +2636,8 @@ function guardaReplay(b: ResumoBo5, g: PartidaGravada, problemas: string[]): str
       return false
     }
   })
-  if (aceitos.length > 0) falha(`lerReplay aceitou formato(s) ${JSON.stringify(aceitos)} diferente(s) de '${FORMATO_DO_REPLAY}' (AC 8)`)
+  if (aceitos.length > 0) falha(`lerReplay aceitou formato(s) ${JSON.stringify(aceitos)} diferente(s) de '${FORMATO_DO_REPLAY}' e '${FORMATO_DO_REPLAY_V1}' (AC 8; e4.12 AC 5)`)
+  const v2 = canariosV2(lido, texto, falha)
 
   // (d) a decisão recusada no meio da rodada fica fora do replay
   const recusa = recusadaNaRodada(g, problemas)
@@ -2644,7 +2648,7 @@ function guardaReplay(b: ResumoBo5, g: PartidaGravada, problemas: string[]): str
     `  replay       ${ok} a Bo5 da sala → ${FORMATO_DO_REPLAY} (${bytes} B: ${lido.rodadas.length} rodada(s), ${comandos} comando(s) carimbado(s), ${lido.decisoes.length} decisão(ões) ` +
     `aceitas de ${b.logDaSala.length} no log da sala; ${(bytes / Math.max(1, lido.rodadas.length)).toFixed(0)} B/rodada) → lerReplay + verificarReplay (replay:check): ` +
     `hash/ticks/vencedor/seed/lados iguais em ${v.problemas.length === 0 ? lido.rodadas.length : 0}/${lido.rodadas.length}, placar ${v.placar}, venc/rodada [${v.vencedores}] · ` +
-    `hashes = os do arnês · dx trocado e hash stub reprovados · formato ≠ ${FORMATO_DO_REPLAY} lança · ${recusa} (e4.6)`
+    `hashes = os do arnês · dx trocado e hash stub reprovados · formato ≠ v1/v2 lança · ${recusa} (e4.6) · ${v2} (e4.12)`
   )
 }
 
@@ -2693,6 +2697,403 @@ function recusadaNaRodada(g: PartidaGravada, problemas: string[]): string {
   )
 }
 
+/**
+ * `e4.12` (`bb.replay.v2`, §7.3) — o que a guarda de `e4.6` não pegava, no replay da Bo5 da sala (AC 7, AC 9
+ * `E46-TST-001`). Cada canário é o replay honesto com UM campo mudado, e tem de reprovar pelo caminho que o nome diz:
+ *  - a forma v2: o pool da sala, partida `'fim'`, toda rodada `'natural'`, código desconhecido (a guarda não lê git);
+ *  - na ÚLTIMA rodada, um `dx` trocado que muda só o hash dela, sem mexer em vencedor nem placar. Só a comparação
+ *    por rodada o vê, e é ela que o `Q5` (`Math.min(1, …)` no laço) desliga;
+ *  - uma rodada a mais no arquivo. Só a contagem de rodadas a vê (o `Q15`);
+ *  - o vencedor ao vivo de uma rodada `'natural'` trocado. Só a comparação do vencedor por rodada o vê: é a
+ *    mutação "aceitar `aoVivo.vencedor` também para rodadas natural" do AC 7;
+ *  - o pool do arquivo sem um personagem escolhido no draft. Com o pool do arquivo, a reprodução recusa a
+ *    escolha; com o `POOL` fixo, aprovaria: é a mutação "ignorar o pool do arquivo" do AC 7;
+ *  - uma decisão que `aplicar()` recusa, dentro do arquivo. A sala grava só as aceitas, então a reprodução não pode
+ *    recusar nenhuma (é o `R1` do gate de `e4.6`, "gravar as recusadas", visto do lado do verificador);
+ *  - a mesma Bo5 como `bb.replay.v1` continua verificando (AC 5);
+ *  - um commit diferente só avisa, e numa divergência o aviso ganha "pode ser mudança de código" (AC 4).
+ */
+function canariosV2(lido: Replay, texto: string, falha: (m: string) => void): string {
+  const copia = (): Replay => lerReplay(texto)
+  const problemasDe = (y: Replay): string[] => verificarReplay(y).problemas
+  if (
+    lido.formato !== FORMATO_DO_REPLAY || lido.encerramento !== 'fim' || lido.pool.join(',') !== POOL_SALA.join(',') ||
+    lido.rodadas.some((x) => x.encerramento !== 'natural') || lido.codigo.commit !== null || lido.codigo.sujo !== null
+  ) {
+    falha(
+      `a Bo5 da sala gravou ${lido.formato}, partida ${lido.encerramento}, pool [${lido.pool.join(',')}], rodadas [${lido.rodadas.map((x) => x.encerramento).join(',')}], ` +
+        `código ${JSON.stringify(lido.codigo)}; esperado ${FORMATO_DO_REPLAY}, fim, [${POOL_SALA.join(',')}], todas natural, código desconhecido (e4.12 AC 1-4)`,
+    )
+  }
+
+  // E46-TST-001 — a última rodada, com um dx que muda só o hash dela
+  const ult = lido.rodadas.length - 1
+  const cmds = ult >= 0 ? lido.rodadas[ult].comandos : []
+  let ultimaTxt = 'última rodada ✗'
+  for (let k = 0; k < cmds.length && k < 80; k++) {
+    if (cmds[k].dx === 0) continue
+    const y = copia()
+    y.rodadas[ult].comandos[k].dx *= -1
+    const pr = problemasDe(y)
+    if (pr.length > 0 && pr.every((x) => x.startsWith(`rodada ${ult}:`)) && pr.some((x) => x.includes(': hash ')) && !pr.some((x) => x.includes(': vencedor '))) {
+      ultimaTxt = `última rodada (${ult}): o dx do comando ${k} trocado muda só o hash dela → reprovado`
+      break
+    }
+  }
+  if (ultimaTxt.endsWith('✗')) falha(`canário: nenhum dx trocado na última rodada (${ult}) muda só o hash dela, sem vencedor nem placar; o Q5 não seria medido (E46-TST-001)`)
+
+  // E46-TST-001 — uma rodada a mais no arquivo
+  const mais = copia()
+  if (ult >= 0) mais.rodadas.push(JSON.parse(JSON.stringify(mais.rodadas[ult])) as Replay['rodadas'][number])
+  const maisOk = ult >= 0 && problemasDe(mais).length > 0
+  if (!maisOk) falha('o verificador aprovou o replay com uma rodada a mais no arquivo (E46-TST-001)')
+
+  // AC 7 — vencedor adulterado numa rodada natural
+  const iv = lido.rodadas.findIndex((x) => x.encerramento === 'natural' && x.aoVivo.vencedor !== -1)
+  let vencTxt = 'vencedor adulterado ✗'
+  if (iv < 0) falha('canário: a Bo5 não tem rodada natural com vencedor (e4.12 AC 7)')
+  else {
+    const y = copia()
+    y.rodadas[iv].aoVivo.vencedor = y.rodadas[iv].aoVivo.vencedor === 0 ? 1 : 0
+    const pr = problemasDe(y)
+    if (pr.length === 0 || !pr.every((x) => x.startsWith(`rodada ${iv}: vencedor `))) {
+      falha(`o vencedor ao vivo da rodada natural ${iv} trocado deu [${pr.join(' | ')}]; esperado reprovar só pelo vencedor da rodada (e4.12 AC 7)`)
+    } else vencTxt = `vencedor ao vivo da rodada natural ${iv} trocado → reprovado`
+  }
+
+  // AC 3, AC 7 — pool adulterado: sem um personagem que o draft escolheu
+  const escolhidos = new Set(lido.decisoes.flatMap((d) => (d.t === 'draft' ? [d.charId] : [])))
+  const fora = lido.pool.find((x) => escolhidos.has(x) && x !== lido.pool[0])
+  let poolTxt = 'pool adulterado ✗'
+  if (fora === undefined) falha(`canário: o draft da Bo5 não escolheu personagem além de '${lido.pool[0]}' (e4.12 AC 7)`)
+  else {
+    const y = copia()
+    y.pool = lido.pool.filter((x) => x !== fora)
+    const pr = problemasDe(y)
+    if (!pr.some((x) => x.includes('recusou'))) {
+      falha(`o pool [${y.pool.join(',')}], sem '${fora}' escolhido no draft, deu [${pr.slice(0, 2).join(' | ')}]; esperado a reprodução recusar a escolha (e4.12 AC 3, AC 7)`)
+    } else poolTxt = `pool [${y.pool.join(',')}] sem '${fora}' → a reprodução recusa o draft`
+  }
+
+  // AC 3 — uma decisão que aplicar() recusa, no arquivo: a primeira do draft repetida (é a vez do outro jogador).
+  // Ela não desalinha o resto, então só a lista de recusas da reprodução a vê
+  let recusaTxt = 'decisão recusada no arquivo ✗'
+  const yr = copia()
+  yr.decisoes.splice(1, 0, yr.decisoes[0])
+  const prRecusa = problemasDe(yr)
+  if (yr.decisoes[0]?.t !== 'draft' || prRecusa.length !== 1 || !prRecusa[0].startsWith('a reprodução recusou uma decisão que a sala aceitou ao vivo: decisão 1 ')) {
+    falha(`a primeira decisão do draft repetida no arquivo deu [${prRecusa.join(' | ')}]; esperado só a recusa dela (e4.12 AC 3)`)
+  } else recusaTxt = 'decisão recusada no arquivo → reprovada'
+
+  // AC 5 — a mesma Bo5 no formato v1 (sem pool, código e encerramentos) continua verificando
+  let v1Txt = 'v1 ✗'
+  const comoV1 = {
+    formato: FORMATO_DO_REPLAY_V1,
+    matchSeed: lido.matchSeed,
+    decisoes: lido.decisoes,
+    rodadas: lido.rodadas.map((x) => ({ comandos: x.comandos, aoVivo: x.aoVivo })),
+    placar: lido.placar,
+    vencedor: lido.vencedor,
+  }
+  try {
+    const r1 = lerReplay(JSON.stringify(comoV1))
+    const pr = verificarReplay(r1).problemas
+    if (pr.length > 0) falha(`a mesma Bo5 como ${FORMATO_DO_REPLAY_V1} reprovou: ${pr[0]} (e4.12 AC 5)`)
+    else if (r1.pool.join(',') !== 'golem,vex' || r1.encerramento !== 'fim' || r1.rodadas.some((x) => x.encerramento !== 'natural') || r1.codigo.commit !== null) {
+      falha(`a ${FORMATO_DO_REPLAY_V1} lida não sai com os padrões do AC 5 (pool [${r1.pool.join(',')}], ${r1.encerramento}, código ${JSON.stringify(r1.codigo)})`)
+    } else v1Txt = `a mesma Bo5 como ${FORMATO_DO_REPLAY_V1} verifica`
+  } catch (err) {
+    falha(`lerReplay recusou a ${FORMATO_DO_REPLAY_V1}: ${err instanceof Error ? err.message : String(err)} (e4.12 AC 5)`)
+  }
+
+  // AC 4 — commit diferente: aviso, nunca reprovação; numa divergência, o aviso de código
+  const gravadoEm = 'commit-da-gravacao'
+  const verificadoEm = 'commit-de-quem-verifica'
+  const yc = copia()
+  yc.codigo = { commit: gravadoEm, sujo: true }
+  const vc = verificarReplay(yc, verificadoEm)
+  const yd = copia()
+  yd.codigo = { commit: gravadoEm, sujo: true }
+  yd.rodadas[0].aoVivo.hash = ''
+  const vd = verificarReplay(yd, verificadoEm)
+  const aviso = `replay gravado em ${gravadoEm}, verificado em ${verificadoEm}`
+  const codigoOk =
+    vc.problemas.length === 0 && vc.avisos.includes(aviso) && !vc.avisos.some((a) => a.includes('pode ser mudança')) &&
+    vd.problemas.length > 0 && vd.avisos.includes(aviso) && vd.avisos.includes('pode ser mudança de código, não de determinismo')
+  if (!codigoOk) {
+    falha(`commit diferente: sem divergência [${vc.problemas.length} problema(s); ${vc.avisos.join(' | ')}], com divergência [${vd.problemas.length}; ${vd.avisos.join(' | ')}] — esperado aviso sem reprovar, e o aviso de código só na divergência (e4.12 AC 4)`)
+  }
+
+  return `v2: pool, fim, ${lido.rodadas.length}/${lido.rodadas.length} natural · ${ultimaTxt} · rodada a mais reprovada · ${vencTxt} · ${poolTxt} · ${recusaTxt} · ${v1Txt} · commit diferente avisa sem reprovar`
+}
+
+/** `e4.12` — o draft das partidas da guarda da v2: o de `ROTEIRO_DRAFT` (`tools/partida.ts`), na ordem snake. */
+const DRAFT_E412: readonly Decisao[] = [
+  { t: 'draft', jogador: 0, charId: 'golem' },
+  { t: 'draft', jogador: 1, charId: 'golem' },
+  { t: 'draft', jogador: 1, charId: 'vex' },
+  { t: 'draft', jogador: 0, charId: 'vex' },
+]
+
+/**
+ * `e4.12` — a rodada em curso pela sala, com os comandos de uma rodada do arnês como ESTÍMULO (não como gabarito:
+ * depois de um W.O. a partida é outra, e aqui nada é comparado com o arnês). Cada comando sai pelo assento dono
+ * da bola nesta rodada, em T − ATRASO, como os casts de `conduzirRodada`. Bola morta ou dono ausente: o comando é
+ * pulado. Para no fim da rodada, ou ao chegar no tick `ateOTick`. Devolve o `agora` final.
+ */
+function estimularRodada(c: Condutor, comandos: readonly Command[], agoraInicial: number, ateOTick: number | null, falha: (m: string) => void): number {
+  let agora = agoraInicial
+  const r = c.sala.rodada
+  if (r === null) return agora
+  const w = r.world
+  let i = 0
+  for (let volta = 0; c.sala.rodada === r && c.sala.pausa === null; volta++) {
+    if (volta > 20_000) {
+      falha(`a rodada ${c.sala.partida.rodada} não terminou pela sala (${c.rotulo})`)
+      break
+    }
+    const N = w.tick
+    if (ateOTick !== null && N >= ateOTick) break
+    while (i < comandos.length && comandos[i].tick < N + ATRASO_ALVO_TICKS) i++
+    const entrada: EntradaDaSala[] = []
+    while (i < comandos.length && comandos[i].tick === N + ATRASO_ALVO_TICKS) {
+      const cmd = comandos[i++]
+      const bola = w.balls.find((b) => b.id === cmd.ballId)
+      if (bola === undefined || !bola.alive) continue
+      const j = jogadorDoLado(r.lados, bola.team)
+      if (!c.sala.conectados[j]) continue
+      const ballIndex = w.balls.filter((b) => b.team === bola.team).indexOf(bola)
+      entrada.push(...pelaFronteira(c, CHAVES_SALA[j], { t: 'cast', ballIndex, slot: cmd.slot, dx: cmd.dx, dy: cmd.dy, mag: cmd.mag }))
+    }
+    if (entrada.length > 0) conduzir(c, agora, entrada)
+    let alvo = i < comandos.length ? comandos[i].tick - ATRASO_ALVO_TICKS : c.sala.config.tetoDeTicks
+    if (ateOTick !== null) alvo = Math.min(alvo, ateOTick)
+    alvo = Math.max(alvo, N + 1)
+    agora = Math.max(agora, agoraDoTick(r, alvo))
+    conduzir(c, agora, [])
+  }
+  return agora
+}
+
+/**
+ * `e4.12` — conduz a sala até ela encerrar, com decisões mínimas: o `draft` dado, e `{t:'pronto'}` de cada
+ * jogador CONECTADO nas fases `builds` e `loja`. Quem está ausente fica para o W.O. de R-02 (a espera é o prazo da
+ * pausa). Antes de cada rodada roda `naRodada` (a queda, a volta), e a rodada que continuar em curso e sem pausa é
+ * estimulada até o fim pelos comandos de `g`. Devolve o `agora` final.
+ */
+function partidaAteEncerrar(
+  c: Condutor,
+  g: PartidaGravada,
+  agoraInicial: number,
+  draft: readonly Decisao[],
+  falha: (m: string) => void,
+  naRodada: (indice: number, agora: number) => number = (_i, agora) => agora,
+): number {
+  let agora = agoraInicial
+  const prazoR02 = c.sala.config.desconexao.prazoMs
+  for (let volta = 0; c.sala.fase === 'jogando'; volta++) {
+    if (volta > 400) {
+      falha(`a sala não encerrou (fase da partida ${c.sala.partida.fase}, ${c.rotulo})`)
+      break
+    }
+    const p = c.sala.partida
+    if (p.fase === 'rodada') {
+      const r = c.sala.rodada
+      if (r === null) {
+        falha(`fase rodada sem rodada em curso na sala (${c.rotulo})`)
+        break
+      }
+      agora = naRodada(p.rodada, agora)
+      if (c.sala.rodada !== r || c.sala.fase !== 'jogando') continue
+      if (c.sala.pausa !== null) {
+        agora += prazoR02
+        conduzir(c, agora, [])
+        continue
+      }
+      agora = estimularRodada(c, g.rodadas[p.rodada % g.rodadas.length].comandos, agora, null, falha)
+      continue
+    }
+    agora += 100
+    if (p.fase === 'draft') {
+      const d = draft[p.draft.passo]
+      if (d === undefined) {
+        falha(`o draft da guarda acabou no passo ${p.draft.passo} (${c.rotulo})`)
+        break
+      }
+      conduzir(c, agora, pelaFronteira(c, CHAVES_SALA[d.jogador], { t: 'decisao', d }))
+      continue
+    }
+    const faltam = JOGADORES_SALA.filter((j) => c.sala.conectados[j] && !p.prontos[j])
+    if (faltam.length > 0) conduzir(c, agora, faltam.flatMap((j) => pelaFronteira(c, CHAVES_SALA[j], { t: 'decisao', d: { t: 'pronto', jogador: j } })))
+    else {
+      agora += prazoR02
+      conduzir(c, agora, [])
+    }
+  }
+  return agora
+}
+
+/** `montarReplay` → a MESMA serialização do servidor → `lerReplay`, como `npm run replay:check` lê o arquivo. */
+function replayDoCondutor(c: Condutor, falha: (m: string) => void): { lido: Replay; texto: string } | null {
+  try {
+    const texto = serializarReplay(montarReplay(c.gravacao, c.sala))
+    return { lido: lerReplay(texto), texto }
+  } catch (err) {
+    falha(`montarReplay/lerReplay lançou: ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
+/**
+ * `e4.12`, AC 6 e AC 9 — os três cenários da v2 que a Bo5 não exercita, cada um numa sala à parte, pela sala pura e
+ * com a gravação de `conduzir` (a mesma do servidor), serializados e lidos como `npm run replay:check` lê:
+ *  - **W-2 (§7.3):** seed 12345, o jogador 1 cai no tick 60 da RODADA 1 (não a 0), a pausa de R-02 estoura, e ele
+ *    volta na rodada 2. A rodada 1 tem de sair `'wo'`, e o verificador tem de aprovar com a linha de W.O. e o hash
+ *    no tick do corte. Contrafactual obrigatório: o mesmo arquivo com `aoVivo.ticks − 1` reprova. E o mesmo
+ *    arquivo com toda rodada `'natural'` (o que a v1 supunha) reprova: é o sintoma de `E46-ARC-001`;
+ *  - **`'anular'`:** o jogador 0 cai na rodada 1 com a política `'anular'`, e a sala encerra. O replay sai
+ *    `'interrompida'` com a rodada 0 fechada, e verifica com a linha "interrompida". O mesmo arquivo dizendo
+ *    `'fim'` reprova (o sintoma da W-3);
+ *  - **`E46-TST-002`:** o jogador 0 escolhe `vex` no draft, o jogador 1 cai (a sala volta a `aguardando` e recria
+ *    a partida, §6), volta, e a partida vai até o fim com o jogador 0 escolhendo `golem`. O replay tem de começar
+ *    pela escolha nova e verificar: é o ramo de recomeço de `gravarDecisoes`, que o `Q12` desliga.
+ *
+ * Os condutores daqui não entram na soma de cobertura da guarda da sala: aquelas linhas não mudam de texto (AC 10).
+ * `E46-TST-003` (duas salas no mesmo servidor, o `Q8`) NÃO está aqui: o `sim:check` não importa `server/main.ts`, e
+ * duas salas puras exercitariam este driver, e não o servidor (AC 9, v1.1.0). Ela roda contra o servidor real.
+ */
+function guardaReplayV2(g: PartidaGravada, problemas: string[]): string[] {
+  const [K0, K1] = CHAVES_SALA
+  const TICK_DA_QUEDA = 60
+  const SEED_W2 = 12345
+  const nova = (rotulo: string, config: Partial<ConfigDaSala> = {}) =>
+    novoCondutor(criarSala({ id: `guarda-e4.12-${rotulo}`, seed: SEED_W2, pool: POOL_SALA, chars: CHARS, hashDoMundo: hash, config }), `e4.12 ${rotulo}`, problemas)
+  const assentar = (c: Condutor) => {
+    conduzir(c, T0_SALA, [{ assento: K0, conexao: 'assentou' }])
+    conduzir(c, T0_SALA, [{ assento: K1, conexao: 'assentou' }])
+  }
+  const comandosDa = (indice: number) => g.rodadas[indice % g.rodadas.length].comandos
+  const marca = (antes: number) => (problemas.length === antes ? '✓' : '✗')
+
+  // ---- W-2: W.O. na rodada 1
+  const antesWo = problemas.length
+  const falhaWo = (m: string) => anotar(problemas, `  ✗ replay W.O.: ${m}`)
+  const wo = nova('wo')
+  const prazoR02 = wo.sala.config.desconexao.prazoMs
+  assentar(wo)
+  partidaAteEncerrar(wo, g, T0_SALA, DRAFT_E412, falhaWo, (indice, agora) => {
+    if (indice === 1 && wo.sala.conectados[1]) {
+      let a = estimularRodada(wo, comandosDa(1), agora, TICK_DA_QUEDA, falhaWo)
+      conduzir(wo, a, [{ assento: K1, conexao: 'caiu' }])
+      a += prazoR02
+      conduzir(wo, a, [])
+      return a
+    }
+    if (indice === 2 && !wo.sala.conectados[1]) {
+      conduzir(wo, agora + 1_000, [{ assento: K1, conexao: 'assentou' }])
+      return agora + 1_000
+    }
+    return agora
+  })
+  let linhaWo = '  replay W.O.  ✗'
+  const rw = replayDoCondutor(wo, falhaWo)
+  if (wo.sala.fase !== 'encerrada' || wo.sala.partida.fase !== 'fim') falhaWo(`a partida com W.O. não chegou ao fim (sala ${wo.sala.fase}, partida ${wo.sala.partida.fase})`)
+  if (rw !== null) {
+    const { lido, texto } = rw
+    const encs = lido.rodadas.map((x) => x.encerramento)
+    const r1 = lido.rodadas[1]
+    if (lido.encerramento !== 'fim' || r1?.encerramento !== 'wo' || encs.filter((x) => x === 'wo').length !== 1 || r1.aoVivo.ticks !== TICK_DA_QUEDA || r1.aoVivo.vencedor !== 0) {
+      falhaWo(`esperado só a rodada 1 'wo', no tick ${TICK_DA_QUEDA}, vencida pelo jogador 0, e a partida 'fim'; veio [${encs.join(',')}], rodada 1 no tick ${r1?.aoVivo.ticks} vencida por ${r1?.aoVivo.vencedor}, partida ${lido.encerramento} (e4.12 AC 1, AC 6)`)
+    }
+    const v = verificarReplay(lido)
+    for (const x of v.problemas) falhaWo(`verificador: ${x}`)
+    const aviso = v.avisos.find((a) => a.startsWith(`rodada 1: W.O. no tick ${TICK_DA_QUEDA}, hash ✓`))
+    if (aviso === undefined) falhaWo(`sem a linha "rodada 1: W.O. no tick ${TICK_DA_QUEDA}, hash ✓" (avisos: ${v.avisos.join(' | ')}) (e4.12 AC 1)`)
+    const menos1 = lerReplay(texto)
+    menos1.rodadas[1].aoVivo.ticks -= 1
+    const prMenos1 = verificarReplay(menos1).problemas
+    if (!prMenos1.some((x) => x.startsWith('rodada 1 (W.O.): hash '))) falhaWo(`contrafactual: com aoVivo.ticks − 1 = ${TICK_DA_QUEDA - 1} o hash da rodada 1 não divergiu [${prMenos1.join(' | ')}] (e4.12 AC 6)`)
+    const comoV1 = lerReplay(texto)
+    for (const x of comoV1.rodadas) x.encerramento = 'natural'
+    const prV1 = verificarReplay(comoV1).problemas
+    if (prV1.length === 0) falhaWo('o mesmo arquivo com toda rodada natural (o que a v1 supunha) foi aprovado: o W.O. não discrimina (E46-ARC-001)')
+    linhaWo =
+      `  replay W.O.  ${marca(antesWo)} seed ${SEED_W2}: o jogador 1 cai no tick ${TICK_DA_QUEDA} da rodada 1, a pausa de R-02 estoura e ele volta na rodada 2 → ` +
+      `rodadas [${encs.join(',')}], placar ${lido.placar.join('-')}, verificarReplay sem problema, com "${aviso ?? '—'}" (hash ${r1?.aoVivo.hash}) · ` +
+      `contrafactual aoVivo.ticks − 1 → hash da rodada 1 diverge, reprovado · o mesmo arquivo com toda rodada natural (a v1) → ${prV1.length} problema(s), o sintoma de E46-ARC-001 (e4.12 AC 1, AC 6)`
+  }
+
+  // ---- 'anular': a partida interrompida na rodada 1
+  const antesAn = problemas.length
+  const falhaAn = (m: string) => anotar(problemas, `  ✗ replay interrompida: ${m}`)
+  const an = nova('anular', { desconexao: { ...CONFIG_PADRAO_DA_SALA.desconexao, noEstouro: 'anular' } })
+  assentar(an)
+  partidaAteEncerrar(an, g, T0_SALA, DRAFT_E412, falhaAn, (indice, agora) => {
+    if (indice !== 1) return agora
+    let a = estimularRodada(an, comandosDa(1), agora, TICK_DA_QUEDA, falhaAn)
+    conduzir(an, a, [{ assento: K0, conexao: 'caiu' }])
+    a += an.sala.config.desconexao.prazoMs
+    conduzir(an, a, [])
+    return a
+  })
+  let linhaAn = '  replay anul. ✗'
+  const ra = replayDoCondutor(an, falhaAn)
+  if (an.sala.fase !== 'encerrada' || an.sala.partida.fase !== 'rodada' || an.sala.partida.historico.length !== 1) {
+    falhaAn(`esperado a sala encerrada na rodada 1 com 1 rodada fechada; veio sala ${an.sala.fase}, partida ${an.sala.partida.fase}, ${an.sala.partida.historico.length} rodada(s)`)
+  }
+  if (ra !== null) {
+    const { lido, texto } = ra
+    if (lido.encerramento !== 'interrompida' || lido.rodadas.length !== 1 || lido.rodadas[0].encerramento !== 'natural') {
+      falhaAn(`esperado 'interrompida' com 1 rodada natural; veio ${lido.encerramento} com [${lido.rodadas.map((x) => x.encerramento).join(',')}] (e4.12 AC 2)`)
+    }
+    const v = verificarReplay(lido)
+    for (const x of v.problemas) falhaAn(`verificador: ${x}`)
+    const aviso = v.avisos.find((a) => a === 'partida interrompida antes do fim: 1 rodada(s) verificada(s)')
+    if (aviso === undefined) falhaAn(`sem a linha "partida interrompida antes do fim: 1 rodada(s) verificada(s)" (avisos: ${v.avisos.join(' | ')}) (e4.12 AC 2)`)
+    const comoFim = lerReplay(texto)
+    comoFim.encerramento = 'fim'
+    const prFim = verificarReplay(comoFim).problemas
+    if (prFim.length === 0) falhaAn("o mesmo arquivo dizendo 'fim' foi aprovado: a partida interrompida não discrimina (W-3)")
+    linhaAn =
+      `  replay anul. ${marca(antesAn)} R-02 'anular': o jogador 0 cai no tick ${TICK_DA_QUEDA} da rodada 1 e a sala encerra → 'interrompida', ${lido.rodadas.length} rodada fechada ` +
+      `(${lido.rodadas.map((x) => x.encerramento).join(',')}), ${lido.decisoes.length} decisões, verificarReplay sem problema, com "${aviso ?? '—'}" · ` +
+      `o mesmo arquivo dizendo 'fim' → reprovado, o sintoma da W-3 (e4.12 AC 2, AC 6)`
+  }
+
+  // ---- E46-TST-002: a queda no draft, e a partida até o fim com outra escolha
+  const antesDq = problemas.length
+  const falhaDq = (m: string) => anotar(problemas, `  ✗ replay queda no draft: ${m}`)
+  const dq = nova('draft')
+  assentar(dq)
+  const antiga: Decisao = { t: 'draft', jogador: 0, charId: 'vex' }
+  conduzir(dq, T0_SALA + 100, pelaFronteira(dq, K0, { t: 'decisao', d: antiga }))
+  const gravadasAntes = dq.gravacao.decisoes.length
+  conduzir(dq, T0_SALA + 200, [{ assento: K1, conexao: 'caiu' }])
+  const recomecou = dq.sala.fase === 'aguardando' && dq.sala.partida.draft.passo === 0 && dq.gravacao.decisoes.length === 0
+  conduzir(dq, T0_SALA + 300, [{ assento: K1, conexao: 'assentou' }])
+  if (gravadasAntes !== 1 || !recomecou || dq.sala.fase !== 'jogando') {
+    falhaDq(`antes da queda ${gravadasAntes} decisão(ões) gravada(s) (esperado 1), recomeço ${recomecou}, sala ${dq.sala.fase} depois da volta (§6)`)
+  }
+  partidaAteEncerrar(dq, g, T0_SALA + 300, DRAFT_E412, falhaDq)
+  let linhaDq = '  replay queda ✗'
+  const rq = replayDoCondutor(dq, falhaDq)
+  if (dq.sala.fase !== 'encerrada' || dq.sala.partida.fase !== 'fim') falhaDq(`a partida não chegou ao fim (sala ${dq.sala.fase}, partida ${dq.sala.partida.fase})`)
+  if (rq !== null) {
+    const { lido } = rq
+    const primeira = lido.decisoes[0]
+    if (!profundamenteIgual(primeira, DRAFT_E412[0]) || profundamenteIgual(primeira, antiga)) {
+      falhaDq(`o replay começa por ${JSON.stringify(primeira)}; esperado a escolha de depois da queda, ${JSON.stringify(DRAFT_E412[0])}, e não a de antes, ${JSON.stringify(antiga)} (E46-TST-002)`)
+    }
+    const v = verificarReplay(lido)
+    for (const x of v.problemas) falhaDq(`verificador: ${x}`)
+    linhaDq =
+      `  replay queda ${marca(antesDq)} o jogador 0 escolhe ${antiga.t === 'draft' ? antiga.charId : '?'}, o 1 cai no draft (a sala recria a partida, §6) e volta; a partida vai ao fim com ` +
+      `${DRAFT_E412[0].t === 'draft' ? DRAFT_E412[0].charId : '?'} → o replay começa pela escolha nova, ${lido.rodadas.length} rodada(s), placar ${lido.placar.join('-')}, ` +
+      `verificarReplay sem problema (E46-TST-002)`
+  }
+  return [linhaWo, linhaAn, linhaDq]
+}
+
 function guardaSala(): { linhas: string[]; problemas: string[] } {
   const problemas: string[] = []
   const linhas: string[] = []
@@ -2722,6 +3123,7 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
   const b = bo5PelaSala(gravada, problemas)
   const nProblemasBo5 = problemas.length
   const linhaReplay = guardaReplay(b, gravada, problemas)
+  const linhasReplayV2 = guardaReplayV2(gravada, problemas)
   const neg = salaNegativos(problemas)
   const vb = salaVariantesEBordas(problemas)
   const confs = [b.conf, ...neg.conf, ...vb.conf]
@@ -2742,6 +3144,7 @@ function guardaSala(): { linhas: string[]; problemas: string[] } {
       `hash/ticks/lado iguais ao arnês em ${b.hashesIguais}/${b.rodadas} · ${b.casts} cast(s) submetidos em T−${ATRASO_ALVO_TICKS} e carimbados em T (0 com tick < ${ATRASO_ALVO_TICKS}) · ` +
       `${b.rejeitadas} decisão(ões) ilegal(is) → {t:'erro'} ao remetente, estado intacto · buildPadrao pelo prazo de RF-04 · controle [humano,humano]`,
     linhaReplay,
+    ...linhasReplayV2,
     `  flush       ${ok(nProblemasBo5)} ${b.rodadas}/${b.rodadas} rodadas: último snap com over:true e roundEnd antes de rodadaFim · events de ${b.snaps} snaps = world.events (${b.eventos} eventos, em ordem) · ` +
       `${b.foraDaCadencia} rodada(s) terminam fora da cadência de ${TICK_HZ / SNAPSHOT_HZ} ticks`,
     `  assentos     ${ok(nProblemasBo5)} ${soma('salas')} {t:'sala'} por assento, cada um com o segredo e o jogador do próprio destinatário, v${VERSAO_DO_FIO} e o snapshotHz da configuração · ` +
