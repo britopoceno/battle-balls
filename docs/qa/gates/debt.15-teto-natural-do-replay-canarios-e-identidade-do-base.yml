@@ -1,0 +1,189 @@
+schema: 1
+story: 'debt.15'
+story_title: 'Teto natural do replay, 8 canários na guarda da v2, identidade do base do personagem e sujo do carimbo ancorado na raiz'
+gate: CONCERNS
+story_status_after_gate: Done
+status_reason: >-
+  Os 9 ACs estão MET, e os quatro achados de origem estão fechados: E412-REL-001, E412-TST-001,
+  E411-TST-001 e E412-ARC-001. Refiz as verificações do zero em cópias descartáveis de fc21c3b e do pai
+  2ce07e8 (git archive, node_modules por junção), sem confiar no Dev Agent Record. check, sim:check e
+  build deram rc=0. O golden hash é o mesmo do pai. O diff da saída do sim:check contra o pai tem só as
+  três linhas permitidas: `bordas` (sufixo R1), `replay teto` e `replay canár`, ambas novas. O escopo
+  são 4 dos 5 arquivos permitidos, e em net/replay.ts só muda comentário. No servidor real, com o
+  roteiro spam do gate da e4.12 (30 cliques por jogador), o código com o teto antigo deu replay:check
+  rc=1 ("não terminou (fase builds)"), e o código corrigido deu rc=0. O arquivo do teto antigo,
+  verificado pelo código corrigido, deu rc=0, e 200 cliques por jogador (424 passos) também deram rc=0.
+  As 10 mutações do AC 8, as 8 sobreviventes do gate da e4.12 (na minha formulação de lá) e a QM-B2
+  reprovam todas, cada uma pela mensagem da própria guarda. A matriz do sujo (AC 9) bate com a emenda
+  nas 5 variantes × 5 cenários, e mais 6 cenários meus. O veredito é CONCERNS, e não PASS, por 2 LOW
+  de teste: (1) a guarda `replay teto` só prova que o teto passou de 65 passos, e um teto fixo de 128
+  passa verde (DEBT15-TST-001); (2) três mutações de campos vizinhos passam verdes (DEBT15-TST-002).
+  Nenhum dos dois bloqueia a coleta da e4.7.
+reviewer: 'Quinn (@qa)'
+reviewed_revision: >-
+  commit:fc21c3b (implementação). O pai é 2ce07e8. 2f5a2d6 é o registro do @dev e toca só a story.
+  `git diff fc21c3b HEAD -- src package.json` sai vazio. fc21c3b NÃO está em origin/master
+  (merge-base --is-ancestor rc=1): é commit local.
+
+verificacao_independente:
+  - id: 'check + sim:check + build, golden hash contra o pai (ACs 1, 2)'
+    verdict: PASS
+    evidence: >-
+      Cópias por git archive de fc21c3b e 2ce07e8, Node v24.13.1. `npm run check` deu rc=0 nas duas, e
+      `npm run sim:check` também. As duas imprimem "golden hash ✓ ok — 6 seeds batem o baseline".
+      `diff sim-pai sim-impl`: +`replay teto` (76 passos = 72 decisões + 4 rodadas, placar 3-1, carimbo
+      sentinela volta intacto), +`replay canár` (R4, R3, R6, R6b, R6c, R6d) e `bordas`, que ganha só
+      o sufixo "; replay da rodada 0 'natural' (R1)". Nenhuma outra linha muda, nem `guarda BOT-001` no
+      caso verde. `vite build` na cópia deu rc=0 (index 66,08 kB). `npm run lint` não existe no projeto.
+  - id: 'Escopo (ACs 6, 7)'
+    verdict: PASS
+    evidence: >-
+      `git show --stat fc21c3b`: net/replay.ts 8, server/main.ts 18, tools/determinism.ts 96 e
+      tools/partida.ts 2, somando 109/15. replay-check.ts não foi tocado (o AC 7 só o permite se
+      necessário). Em net/replay.ts, só as 4 linhas do doc de CodigoDoReplay. Em server/main.ts, a
+      linha de `sujo` e o comentário acima de lerCodigo(): cwd, rev-parse, try/catch e
+      CODIGO_DO_SERVIDOR não mudam. Em partida.ts, só a linha do teto de reproduzirPartida. MAX_PASSOS
+      continua em jogarPartida (:323) e na partida por política (:512). determinism.ts tem o import, 2
+      linhas do AC 5, o canário R1 (4 linhas) e o bloco de guardaReplayV2. Nenhum arquivo proibido.
+  - id: 'Servidor real, roteiro spam do gate da e4.12 (AC 3, verificação adicional)'
+    verdict: PASS
+    evidence: >-
+      qa-d15-real.mjs é cópia sem mudança do qa-e412-real.mjs, modo spam. Uma cópia de fc21c3b por porta,
+      com PORTA_DO_SERVIDOR trocada na cópia: 5381, 5382 e 5383. Não usei 5179 nem 5341-5345. ANTES
+      (fc21c3b com MUT-REL-001, porta 5381): 3 rodadas, 76 decisões {draft 4, build 64, pronto 6,
+      compra 2}, 79 passos, replay:check rc=1 com "a reprodução não chegou ao fim da partida: replay de
+      2166279235 não terminou (fase builds)". É o sintoma que medi no gate da e4.12. DEPOIS (fc21c3b,
+      porta 5382): 4 rodadas, 80 decisões, 84 passos, rc=0 com "reproduzido com hashes, ticks e
+      vencedores idênticos". O arquivo do ANTES, verificado pela cópia corrigida, deu rc=0. Com 200
+      cliques por jogador (porta 5383): 404 builds, 424 passos, rc=0. Nos três casos aoVivo é igual
+      aos rodadaFim recebidos. Os servidores foram mortos no finally. Depois disso, nenhuma porta
+      5381-5383 escutando, nenhum node.exe com main.ts/qa-d15 na linha de comando, e cópias e junções
+      apagadas.
+  - id: 'Contrafactual do AC 8 (10 mutações), uma cópia por mutação'
+    verdict: PASS
+    evidence: >-
+      qa-d15-mut.mjs: padrão casando exatamente 1 vez, EOL normalizado, tsc e sim:check em cada cópia.
+      CTRL deu tsc 0, sim 0 e 0 linhas ✗. Todas deram tsc 0, sim rc=1 e golden ✓, pela mensagem da
+      guarda nova. MUT-REL-001: "✗ replay teto: verificador: … não terminou (fase builds)". MUT-R1:
+      "✗ sala debt.14: a rodada 0, fechada no teto de 30 ticks com over:false, saiu 'wo'". MUT-R4 e
+      MUT-R3: a mensagem exata esperada ausente, e mais a tripwire "5/6 canários". MUT-R6, MUT-R6b,
+      MUT-R6c (só o termo `length === 0`) e MUT-R6d (só o termo do commit): "(não lançou); esperado
+      lançar com …". MUT-R13: o carimbo sentinela volta {null, null}. QM-B2 (Map por def): as duas
+      linhas ✗ E411-TST-001.
+  - id: 'As 8 sobreviventes do gate da e4.12 (E412-TST-001) e QM-B2 (E411-TST-001)'
+    verdict: PASS
+    evidence: >-
+      Rodei R1, R3, R4, R6, R6b, R6c, R6d e R13 com as MINHAS substituições de qa-e412-mut.mjs, que são
+      mais largas que as do AC 8 (R6c deixa só Array.isArray, R6d tira a checagem inteira). No gate da
+      e4.12, todas davam sim rc=0. Agora todas dão sim rc=1, cada uma pelo canário correspondente. A
+      QM-B2 do gate da e4.11 dá rc=1 pelas duas linhas de identidade.
+  - id: 'Matriz do sujo (AC 9), cópia com git fora da árvore'
+    verdict: PASS
+    evidence: >-
+      qa-d15-sujo.mjs: git archive de fc21c3b (src, package.json, package-lock.json, tsconfig.json,
+      .gitignore), git init, core.autocrlf=false e junção de node_modules. A sonda lê o valor real
+      (`console.log(JSON.stringify(CODIGO_DO_SERVIDOR)); process.exit(0)` logo depois de lerCodigo()) e
+      sai antes de escutar. A sonda e CADA variante foram COMMITADAS antes dos cenários. O script
+      confere porcelain vazio antes de cada cenário, e cada um é desfeito. `:(top)` dá (0) false, (i)
+      false, (ii) true, (iii) true e (iv) true. O relativo dá false em (ii), (iii) e (iv).
+      `--untracked-files=no` + `:(top)` dá (iii) false. `--untracked-files=no` sozinho dá (iii) false.
+      A árvore inteira dá (i) true. Só `:(top)src/` dá (iv) false. Cada mutação reprova no cenário que
+      o AC indica. Cenários meus com `:(top)`: tsconfig.json modificado dá false (fora, pela emenda); um
+      arquivo de src/ APAGADO dá true; uma mudança em src/ só STAGED dá true; package.json modificado
+      dá true (só `:(top)src/` dá false); src/ modificado com o servidor iniciado de OUTRO cwd dá true
+      (o cwd do git é a pasta do arquivo); um arquivo em src/server/src/ dá true no relativo e também em
+      `:(top)`. Esse último confirma, por execução, o porquê do `:(top)` que o comentário descreve.
+  - id: 'Mutações próprias (13) e runaway com replay malicioso'
+    verdict: CONCERNS
+    evidence: >-
+      PEGAS (sim rc=1): X2 `passo >= D+R` (a interrompida reprova), X4 `passo > D+1` (sem as rodadas,
+      a Regra 3 lança), X5 `R+MAX_PASSOS` (pega pelo replay teto), X9 base compartilhada por def em
+      createWorld (pega só pela 2ª linha de identidade), X10 montarReplay perdendo só o `sujo` (R13
+      compara os dois campos), X11 guarda com 10 builds (a tripwire "só discrimina acima de 65"), X12
+      R3 com folga de 1 decisão, e X13 R1 com `>` no termo do teto. SOBREVIVENTES (sim rc=0): X1 (sem o
+      +1) é EQUIVALENTE, ver observações. X3 (teto fixo 2×MAX_PASSOS = 128) passa verde, mas reprova o
+      arquivo real de 424 passos com "não terminou (fase builds)" (DEBT15-TST-001). X6 (R6d sem o termo
+      do `sujo`), X7 (pool sem o `every` string) e X8 (cache por def para todo personagem MENOS golem)
+      passam verdes (DEBT15-TST-002). RUNAWAY: a partir do replay real de 424 passos, montei três
+      arquivos maliciosos com +200 000 decisões (cerca de 14 MB cada). Com 200 000 builds redundantes a
+      mais antes do pronto, deu rc=0 em cerca de 0,9 s. Com 200 000 compras ilegais, deu rc=1 (recusas)
+      em cerca de 1,1 s. Numa 'interrompida' com 200 000 decisões depois da última rodada, deu rc=1
+      ("consumiu 412 de 200420") em cerca de 0,7 s. O laço é linear no tamanho do arquivo e sempre
+      termina.
+  - id: 'Desvios do @dev'
+    verdict: PASS
+    evidence: >-
+      (1) A identidade dentro de guardaBot001: ACEITO. O AC 5 deixa o ponto ao @dev e sugere justamente
+      a vizinhança de createWorld(CHARS, setup(SEED_GUARDA)). As linhas ✗ saem com o prefixo
+      E411-TST-001 e o rc é 1 (QM-B2 e X9 medidos). O custo é cosmético: o resumo diz "guarda BOT-001 ✗
+      2 problema(s)", e o throw final diz "guarda de BOT-001 falhou … O limiar de …", o que aponta para
+      o lugar errado. Fica como observação. (2) O R13 divide a sala do AC 3: ACEITO. As falhas são
+      separáveis por mensagem. MUT-REL-001 reprova só por "não terminou", MUT-R13 só pelo carimbo, e X10
+      (só o `sujo` perdido) só pelo carimbo. Uma falha do teto não esconde o R13, porque o arquivo é
+      lido e o carimbo é conferido mesmo quando o verificador reprova. (3) 60 builds, e não o limiar
+      mínimo: ACEITO, porque o teto antigo estoura ainda em builds e reproduz a mensagem do gate. Mas é
+      a origem de DEBT15-TST-001.
+
+top_issues:
+  - id: 'DEBT15-TST-001'
+    severity: low
+    category: tests
+    owner: '@po (roteia; próxima story que abrir src/tools/determinism.ts)'
+    finding: >-
+      A guarda `replay teto` tem 76 passos. Ela prova "o teto não é 64", e não "não há teto fixo". A
+      mutação X3 (`passo > 2 * MAX_PASSOS`, teto fixo 128) passa verde no sim:check (rc=0, golden ✓).
+      O mesmo código reprova, com "não terminou (fase builds)", o replay honesto de 424 passos que
+      gravei no servidor real com 200 cliques por jogador. Ou seja: uma regressão para qualquer teto
+      fixo entre 77 e o tamanho da gravação reintroduz o E412-REL-001 sem acusar. O limite natural não
+      corre esse risco hoje, mas a guarda não o protege.
+    suggested_action: >-
+      Um caso puro, sem sala, em guardaReplayV2 ou vizinho: pegar uma PartidaGravada já existente e
+      inserir antes do primeiro pronto milhares de cópias do primeiro build (por exemplo 5 000).
+      Afirmar que reproduzirPartida chega ao fim com placar e vencedor iguais. Medido: 200 000 builds
+      redundantes verificam em cerca de 0,9 s pelo replay:check, então 5 000 custam pouco. Contrafactual
+      de dente: X3 (teto fixo 128) tem de reprovar.
+  - id: 'DEBT15-TST-002'
+    severity: low
+    category: tests
+    owner: '@po (roteia; mesma story de DEBT15-TST-001)'
+    finding: >-
+      Três mutações num campo ou variante VIZINHO ao que o canário cobre passam verdes (sim rc=0). X6:
+      lerReplay sem o termo do `sujo` na forma do codigo, porque o R6d só testa `commit: 5`. X7: sem o
+      `every(string)` do pool, porque o R6c só testa `[]`. X8: cache por def para todo personagem MENOS
+      golem, porque a identidade chama baseDoPersonagem só com CHARS.golem e só compara bolas golem.
+      Nenhuma delas estava pedida: o AC 4(d) escolhe de propósito um termo por amostra, e o AC 5 pede
+      "um def qualquer". É a lição da e4.8 (guarda por caso ≠ guarda por campo). Impacto baixo: o
+      campo `sujo` só avisa, e um cache seletivo por personagem é artificial.
+    suggested_action: >-
+      Mais três amostras baratas: `codigo: { commit: null, sujo: 'x' }`, `pool: ['golem', 5]` e a
+      identidade num laço sobre `Object.values(CHARS)`, que é uma linha.
+
+observacoes:
+  - >-
+    O limite natural nunca dispara, e X1 (sem o +1) é um mutante EQUIVALENTE. Cada volta do laço consome
+    exatamente uma decisão ou uma rodada. Então, na volta de índice D+R, ou a partida já está no 'fim',
+    ou a interrompida sai pelo break, ou o laço lança "ficou sem decisões" / "sem gravação" antes de o
+    passo passar de D+R. A linha é uma segunda proteção inofensiva. O +1 descrito como "folga para o
+    passo de saída" (Dev Notes e AC 3) não é o que a torna segura: segura já é a própria estrutura do
+    laço. O mesmo argumento responde à pergunta de runaway: um replay malicioso com um array de
+    decisões enorme roda em tempo linear no tamanho do arquivo e sempre termina (medido com 200 000
+    decisões extras, abaixo de 1,1 s, nos três formatos de ataque).
+  - >-
+    Na falha das linhas de identidade (AC 5), o resumo e o throw final falam em BOT-001 ("O limiar de …").
+    As linhas ✗ E411-TST-001 aparecem logo acima, então o diagnóstico não se perde. Se uma story futura
+    abrir esse trecho, uma guarda própria com uma mensagem própria é mais honesta. Não é achado.
+  - >-
+    fc21c3b é commit local (fora de origin/master). A e4.7 põe esta story Done como pré-condição de
+    COLETA. O servidor da coleta tem de rodar código que contenha fc21c3b. Com `sujo` agora
+    significativo, `codigo.commit` + `sujo: false` no replay prova isso por arquivo.
+  - >-
+    CodeRabbit não roda nesta máquina (sem WSL/CLI). A cobertura veio de: check, sim:check e build em
+    dois commits; leitura linha a linha do diff dos 4 arquivos; 3 partidas no servidor real com o
+    roteiro do gate da e4.12; 31 mutações de sim:check (10 do AC 8, QM-B2 incluída, 8 da e4.12 e 13 minhas);
+    3 replays maliciosos; e a matriz do sujo com 6 variantes × 11 cenários. As cópias e as junções
+    foram removidas, e o node_modules do repositório está intacto. A árvore compartilhada nunca foi
+    mutada (`git status --short src package.json` vazio). Nenhum processo do gate ficou de pé. Os
+    roteiros estão no scratchpad, em qa-d15/.
+
+waiver: { active: false }
+updated: '2026-09-22T09:30:00Z'

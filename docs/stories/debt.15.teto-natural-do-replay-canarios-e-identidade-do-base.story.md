@@ -2,7 +2,7 @@
 
 ## Status
 
-InReview
+Done
 
 ## Executor Assignment
 
@@ -382,6 +382,7 @@ O comentário já promete "objeto novo a cada chamada"; o AC 5 só acrescenta a 
 | 2026-09-22 | 1.2 | **Validação @po (`*validate-story-draft`, 10 pontos): GO 9/10. Status: Draft → Ready.** Ponto perdido: item 3 (ACs testáveis), por dois defeitos da v1.0, os dois corrigidos aqui. **(a) AC 8 sem dente em 6 das 10 mutações:** MUT-R3, MUT-R4 e MUT-R6/R6b/R6c/R6d eram "verificação de fixture" (confirmar que o canário dispara no código de hoje), que é só o controle positivo. No gate de `e4.12` elas são mutações de código de `replay-check.ts` (tirar a conferência de `:183`, de `:184-186`, e cada validação de `:74-76`, `:85`, `:87`, `:90`). Agora são 10 mutações de código, e o controle positivo continua registrado. O AC 4(d) ganhou a regra "uma amostra, um campo, um termo" (`pool: []`, `codigo.commit: 5`). **(b) AC 4(a) citava a função errada:** o cenário do teto (`v = nova('variantes', { tetoDeTicks: TETO })`, `:2429`) está em `salaVariantesEBordas` (`:2371`), e não em `salaNegativos` (`:2236`). Corrigidos o AC 4 (intro e (a)) e a Task 2(a); o AC 2 passa a admitir a linha de `bordas` (`:2557`) se o canário acrescentar texto ao `tetoTxt`. **Itens:** 1 título ✓ · 2 descrição ✓ · 3 ACs testáveis ✗→corrigido · 4 escopo ✓ (5 arquivos, `net/replay.ts` só comentário) · 5 dependências ✓ (`e4.12`/`e4.11` Done, emenda `3b6891c`, ordem em `server/main.ts`) · 6 complexidade ✓ (Medium) · 7 valor ✓ (falso negativo antes da coleta da `e4.7`; `sujo` passa a informar) · 8 riscos ✓ (escala ao @po se o código de hoje divergir; armadilhas do pathspec e da sonda não commitada) · 9 DoD ✓ (Tasks 4-5, AC 1/2/8/9) · 10 alinhamento ✓ (gate de `e4.12`/`e4.11` e §7.3). **Fatos conferidos em `2e7dd25`:** `partida.ts:130` `MAX_PASSOS = 64`, `:360` `reproduzirPartida`, `:371` o teto do replay, `:323-324` e `:512-513` os outros dois usos; `redutor.ts:262-277` `aplicarBuild` aceita build repetido até o `pronto`; `net/replay.ts:209` `classificarEncerramento`, `:217` o termo do teto, `:257` `montarReplay` (monta a qualquer momento, `:252-256`), `:266` o carimbo; `replay-check.ts:50` `lerReplay`, `:74`, `:85`, `:87`, `:90` as quatro validações, `:166` a regra do W.O. com vencedor −1, `:174` `pararDepoisDeRodadas`, `:183`/`:184` as duas conferências da interrompida; `determinism.ts:1672-1677` `novoCondutor` com `CODIGO_DESCONHECIDO`, `:2451` `!snapFinal.s.over`, `:2937` `replayDoCondutor`, `:2965` `guardaReplayV2`, `:2999`/`:3040` `rw`/`ra` (`{lido, texto} | null`), `:3146-3147` a saída; `stats.ts:166` `baseDoPersonagem`; `world.ts:137` `base: baseDoPersonagem(def)`. **AC 9 medido pelo @po numa cópia descartável** (`git archive` de `2e7dd25` + `git init` + junção de `node_modules` + sonda commitada): a matriz de variantes × cenários do AC 9 bate com a emenda do @architect, e a sonda não commitada dá `sujo: true` no cenário (i). A cópia foi apagada; nenhum processo ficou escutando. **Decisões do @po:** ordem em `server/main.ts` (esta antes da `e4.7`), pré-condição de COLETA da `e4.7` (Status Done), e o `codigo.sujo === false` aceito como equivalente à conferência manual do AC 8 da `e4.7` (registrado na `e4.7` v1.14.0). | Pax (@po) |
 | 2026-09-22 | 1.2.1 | Development started (YOLO mode) — Status: Ready → InProgress. Pré-condição de início conferida: `git status --short` dos 5 arquivos vazio em `2ce07e8`. | Dex (@dev) |
 | 2026-09-22 | 1.3.0 | Development complete — Status: InProgress → InReview. Implementação em `fc21c3b` (4 arquivos; `replay-check.ts` não foi tocado). ACs 1-9 com evidência no Dev Agent Record. | Dex (@dev) |
+| 2026-09-22 | 1.4.0 | QA gate CONCERNS — Status: InReview → Done. Gate em `docs/qa/gates/debt.15-teto-natural-do-replay-canarios-e-identidade-do-base.yml` (revisão `fc21c3b`). ACs 1-9 MET; `E412-REL-001`, `E412-TST-001`, `E411-TST-001` e `E412-ARC-001` fechados. 2 LOW de teste para o @po rotear: `DEBT15-TST-001` e `DEBT15-TST-002`. | Quinn (@qa) |
 
 ## Dev Agent Record
 
@@ -487,3 +488,28 @@ Cada mutação reprova no cenário que o AC 9 indica. A cópia foi apagada (a ju
 | `src/server/main.ts` | `lerCodigo()`: o pathspec `:(top)` e o comentário acima da função |
 | `src/net/replay.ts` | só o comentário de `CodigoDoReplay` |
 | `docs/stories/debt.15.teto-natural-do-replay-canarios-e-identidade-do-base.story.md` | Status, checkboxes, Change Log e Dev Agent Record |
+
+## QA Results
+
+**Gate: CONCERNS. Status: InReview → Done.** Revisado por Quinn (@qa) em 2026-09-22, revisão `fc21c3b`. Arquivo do gate: `docs/qa/gates/debt.15-teto-natural-do-replay-canarios-e-identidade-do-base.yml`.
+
+Refiz tudo do zero em cópias descartáveis de `fc21c3b` e do pai `2ce07e8` (git archive, `node_modules` por junção), sem confiar no Dev Agent Record. A árvore compartilhada não foi mutada.
+
+| Verificação | Resultado |
+|---|---|
+| `check` / `sim:check` / `build` (AC 1, 2) | rc=0 nos três. O golden hash é idêntico ao do pai. O diff da saída tem só `+replay teto`, `+replay canár` e o sufixo R1 em `bordas` |
+| Escopo (AC 6, 7) | 4 arquivos (109/15). `replay-check.ts` não foi tocado. `net/replay.ts` muda só no comentário. `MAX_PASSOS` segue em `jogarPartida` e na partida por política |
+| Servidor real, spam de 30 cliques por jogador (AC 3) | Teto antigo (porta 5381): 79 passos, rc=1 "não terminou (fase builds)". Com o fix (5382): 84 passos, rc=0. O arquivo do antes lido pelo fix: rc=0. 200 cliques por jogador (5383): 424 passos, rc=0 |
+| AC 8, 10 mutações | As 10 dão rc=1, cada uma pela mensagem da guarda nova |
+| 8 sobreviventes da e4.12 + QM-B2 | As 9 agora dão rc=1 |
+| Matriz do `sujo` (AC 9) | Sonda e variantes commitadas. `:(top)` dá 0/i/ii/iii/iv = F/F/T/T/T. Relativo, `--untracked-files=no`, árvore inteira e só `src/` reprovam nos cenários do AC. Mais 6 cenários meus: tsconfig F, apagado T, staged T, package.json T, outro cwd T, e um arquivo em `src/server/src/` que confirma o porquê do `:(top)` |
+| Minhas 13 mutações | 8 pegas, 1 equivalente (X1, sem o +1) e 4 sobreviventes (X3, X6, X7, X8) |
+| Runaway | Três replays com 200 000 decisões a mais terminam em ≤ 1,1 s: builds redundantes dão rc=0; compras ilegais e uma interrompida com a cauda extra dão rc=1 |
+
+**Desvios do @dev: os três foram aceitos.** A identidade ficou dentro de `guardaBot001`, e o resumo e o throw final dizem "BOT-001". Isso é cosmético, porque as linhas ✗ E411-TST-001 aparecem logo acima. O R13 divide a sala do AC 3, e as falhas são separáveis por mensagem (MUT-REL-001, MUT-R13 e X10). A guarda usa 60 builds.
+
+**Achados (2 LOW, para o @po rotear):**
+- **DEBT15-TST-001** (low, tests). A guarda `replay teto`, de 76 passos, só prova que o teto não é 64. Um teto fixo de 128 (X3) passa verde no `sim:check`, mas reprova o replay honesto de 424 passos do servidor real. Sugestão: um caso puro com cerca de 5 000 builds redundantes numa `PartidaGravada` existente, e X3 como contrafactual.
+- **DEBT15-TST-002** (low, tests). Três mutações vizinhas passam verdes. `codigo.sujo` fora de forma (X6), porque o R6d só testa o `commit`. `pool` com um elemento não string (X7), porque o R6c só testa `[]`. Cache por def para todo personagem menos golem (X8), porque a identidade só olha golem.
+
+**Observação.** O limite natural nunca dispara. Cada volta consome uma decisão ou uma rodada, então a reprodução lança "ficou sem decisões" / "sem gravação" antes de o passo passar de D+R, e X1 é equivalente. A linha é uma proteção redundante e inofensiva, e o laço é linear no tamanho do arquivo. `fc21c3b` é commit local, fora de `origin/master`: o servidor da coleta da `e4.7` tem de rodar código que o contenha.
